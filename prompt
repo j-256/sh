@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+#! tested in: GNU bash, version 5.2.15(1)-release (x86_64-apple-darwin22.1.0) | older versions and other shells will work but not guaranteed
+# Considered supporting POSIX sh, but reading a single character for the fancy placeholder functionality
+#  introduces a level of complexity which isn't worth it unless the extra compatibility is actually needed
+#shellcheck disable=SC2034
+
+########################################################################################################
+# Prompt the user for input and save it to a variable, with an optional default value and placeholder. #
+# If placeholder is not provided, default value is used.                                               #
+# Any occurrences of "%DEFAULT%" in the placeholder are replaced by the provided default value.        #
+# Due to the nature of the script, it can only be source'd into the current environment, not executed. #
+# Usage:                                                                                               #
+#   . prompt <variable> [default] [placeholder]                                                        #
+#   source prompt <variable> [default] [placeholder]                                                   #
+########################################################################################################
+
+# $0 will be this file's path if it is executed, otherwise it will be the name of the shell
+# Bash's $0 is "-bash" for some reason, so remove hyphens
+if [ "${0//-}" != "$(basename "$SHELL")" ]; then
+    echo "This script must be sourced to work correctly."
+    exit 1
+fi
+
+_prompt() {
+    local VARNAME="$1"
+    local PROMPT="$2"
+    local DEFAULT="$3"
+    local PLACEHOLDER=""
+    # if provided, set placeholder to the 4th parameter, substituting the special string "%DEFAULT%" with $DEFAULT 
+    if [ -n "$4" ]; then
+        PLACEHOLDER="${4//"%DEFAULT%"/"$DEFAULT"}"
+    # ... otherwise, set placeholder to default value
+    else
+        PLACEHOLDER="$DEFAULT"
+    fi
+    
+    # Display prompt in default color and placeholder in gray
+    printf "%s\e[90m%s\e[0m" "$PROMPT" "$PLACEHOLDER"
+    # Move the cursor back to the end of the prompt
+    # `tput cub 0` still moves the cursor back one, so only run if necessary
+    if [ ${#PLACEHOLDER} -ne 0 ]; then
+        tput cub ${#PLACEHOLDER}
+    fi
+
+    # Read the first character to detect when the user starts typing
+    local first_char; IFS= read -r -N 1 first_char
+    # Assign an empty string in case a non-local variable with this name exists when we run our null/empty check later
+    local input
+    # If the input character is not empty or just a newline, read the entire line
+    if [ -n "$first_char" ] && [ "$first_char" != $'\n' ]; then
+        # Clear the rest of the line, read a line of input, and prepend the initial character
+        tput el
+        local line; IFS= read -r line
+        input="$first_char$line"
+    fi
+
+    # Store the line input by the user, or the default value if none was provided, to the provided variable name
+    eval "$VARNAME"'="${input:-"$DEFAULT"}"'
+}
+
+_prompt "$@"
