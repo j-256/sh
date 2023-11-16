@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+#! tested in: GNU bash, version 5.2.15(1)-release (x86_64-apple-darwin22.1.0) | older versions and other shells will work but not guaranteed
+
+##################################################################################################
+# Page through GET /zones/info until a zone is found whose name contains the provided substring. #
+##################################################################################################
+# Usage:                                                                                         #
+#     find-zone-by-name [options]                                                                #
+#       Options:                                                                                 #
+#         -j, --jwt       JWT bearer token (required*)                                           #
+#         -s, --shortcode SCAPI shortcode (required*)                                            #
+#         -r, --realm     Realm ID (required*)                                                   #
+#         -i, --instance  Instance (required*)                                                   #
+#         -n, --name      Target zone name (required*)                                           #
+#           * not required if corresponding environment variable is set                          #
+# Environment:                                                                                   #
+#     J_JWT:       eyJ...                                                                        #
+#     J_SHORTCODE: kv7kzm78                                                                      #
+#     J_REALM:     xxxx                                                                          #
+#     J_INSTANCE:  stg                                                                           #
+#     J_TARGET:    stg-xxxx-example-com.cc-ecdn.net                                              #
+##################################################################################################
+
+_find_zone_by_name() {
+    local -r MAX_RESULTS_PER_REQUEST=50 # Limit determined by the API
+    local -r COUNT_HEADER_NAME="sfdc-pagination-result-count"
+    local -r TOTAL_HEADER_NAME="sfdc-pagination-total-count"
+
+    # Initialize local variables with default values from environment variables
+    local jwt="$J_JWT"
+    local shortcode="$J_SHORTCODE"
+    local realm="$J_REALM"
+    local instance="$J_INSTANCE"
+    local target="$J_TARGET"
+
+    # Parse command-line options
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -j|--jwt|--token) jwt="$2"; shift 2;;
+            -s|--shortcode) shortcode="$2"; shift 2;;
+            -r|--realm) realm="$2"; shift 2;;
+            -i|--instance) instance="$2"; shift 2;;
+            -n|--name|-t|--target) target="$2"; shift 2;;
+            -h|--help)
+                echo "Usage: find-zone-by-name [OPTIONS]"
+                echo "Options:"
+                echo "  -j, --jwt       JWT bearer token (required)"
+                echo "  -s, --shortcode SCAPI shortcode (required)"
+                echo "  -r, --realm     Realm ID (required)"
+                echo "  -i, --instance  Instance (required)"
+                echo "  -n, --name      Target zone name (required)"
+                return 0;;
+            *) echo "Invalid option"; return 1;;
+        esac
+    done
+
+    # Check each parameter and assign to missingParam if empty
+    local missingParam=''
+    [ "$jwt" ] || missingParam='jwt: -j ([A-Za-z0-9]+\.[A-Za-z0-9]+\.[A-Za-z0-9]+)'
+    [ "$shortcode" ] || missingParam='shortcode: -s ([a-z0-9]{8})'
+    [ "$realm" ] || missingParam='realm ID: -r ([a-z]{4})'
+    [ "$instance" ] || missingParam='instance name: -i (prd|dev|stg|s01-s99|001-999)'
+    [ "$target" ] || missingParam='zone name: -n (.*)'
+
+    # Check if any parameter is missing
+    if [ "$missingParam" ]; then
+        echo "Error: Missing required option: $missingParam"
+        echo "Use 'find-zone-by-name --help' for usage information."
+        return 1
+    fi
+
+    # Derive other variables
+    local tenant="${realm}_$instance"
+    local organization="f_ecom_$tenant"
+    local path="/cdn/zones/v1/organizations/$organization/zones/info"
+    local hostname="$shortcode.api.commercecloud.salesforce.com"
+    local baseUrl="https://$hostname$path"
+    
+    local -r limit="$MAX_RESULTS_PER_REQUEST"
+    local offset=0
+
+    while true; do
+        # Call GET /zones/info
+        response="$(curl -si -H 'User-Agent: sfcc-getzone' -H "Authorization: Bearer $jwt" --location "$baseUrl?offset=$offset&limit=$limit" | tr -d '\r')"
+
+        # Extract response headers
+        responseHeaders="$(echo "$response" | sed -n '/^HTTP\//,/^$/p' | sed '1d;$d')"
+        
+        # Extract pagination header values using awk
+        paginationResultCount="$(echo "$responseHeaders" | grep -i "$COUNT_HEADER_NAME" | awk -F': ' '{print $2}')" # Alternatively: cut -d ': ' -f 2
+        paginationTotalCount="$(echo "$responseHeaders" | grep -i "$TOTAL_HEADER_NAME" | awk -F': ' '{print $2}')" # Alternatively: cut -d ': ' -f 2
+        
+        # Extract response body
+        responseBody="$(echo "$response" | sed -n '/^$/,$p' | sed '1d')"
+
+        # Use jq to search for the target JSON object
+        targetObject="$(echo "$responseBody" | jq --arg target "$target" '.data[] | select(.name | contains($target))')"
+
+        # Check if the target object was found
+        if [ "$targetObject" ]; then
+            echo "Found the target JSON object:"
+            echo "$targetObject"
+            return 0
+        fi
+
+        # Check if there are more pages to fetch
+        if [ "$paginationResultCount" -lt "$paginationTotalCount" ]; then
+            # Calculate the next offset
+            offset=$((offset + limit))
+        else
+            echo "Reached the end of pagination without finding the requested zone."
+            echo "Searched for: $target"
+            return 1
+        fi
+    done
+}
+
+_find_zone_by_name "$@"
