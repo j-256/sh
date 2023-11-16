@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+#! tested in: GNU bash, version 5.2.15(1)-release (x86_64-apple-darwin22.1.0) | older versions and other shells will work but not guaranteed
+
+###################################################
+# Display progress bar with completion percentage #
+###################################################
+
+_progress() {
+    local current
+    local max
+    local bar_width=50
+    local progress_char="#" # Filled columns of the loading bar
+    local remaining_char=" " # Unfilled columns of the loading bar
+
+    # Parse options
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -c|--continue)
+                # If -c|--continue was provided, we need to overwrite the previous invocation by moving the cursor up one line
+                tput cuu1 && shift
+            ;;
+            -w|--width)
+                [ "$2" ] || { echo "Error: Missing value for width option." >&2; return 1; }
+                bar_width="$2" && shift 2
+            ;;
+            -p|--progress-char)
+                [ "$2" ] || { echo "Error: Missing value for progress character option." >&2; return 1; }
+                progress_char="$2" && shift 2
+            ;;
+            -r|--remaining-char|-n|--non-progress-char)
+                [ "$2" ] || { echo "Error: Missing value for non-progress character option." >&2; return 1; }
+                remaining_char="$2" && shift 2
+            ;;
+            *)
+                if [ -z "$current" ]; then current="$1"
+                elif [ -z "$max" ]; then max="$1"
+                else echo "Error: Too many positional arguments." >&2; return 1; fi
+                shift
+            ;;
+        esac
+    done
+
+    # Ensure required positional parameters are set
+    if [ -z "$current" ] || [ -z "$max" ]; then
+        echo "Error: Missing required positional parameter(s)." >&2; return 1
+    fi
+
+    # Calculate the progress percentage
+    local progress=$((current * 100 / max))
+    # Calculate the number of progress and non-progress characters for the progress bar
+    local progress_count=$((progress * bar_width / 100))
+    local remaining_count=$((bar_width - progress_count))
+    # Build the progress bar string
+    local progress_bar; progress_bar="$(printf "%${progress_count}s" | sed "s/ /$progress_char/g")$(printf "%${remaining_count}s" | sed "s/ /$remaining_char/g")"
+    # Print the progress bar
+    printf "Progress: [%s] %d%%   \n" "$progress_bar" "$progress"
+    : <<'/example'
+    tput civis
+    progress 0 10
+    for i in {1..10}; do
+        sleep 1
+        progress -c "$i" 10
+    done
+    tput cnorm
+/example
+}
+
+_progress "$@"
