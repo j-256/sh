@@ -239,21 +239,25 @@ _tsd() {
         if [ $hours -gt 0 ]; then
             duration="${hours}h"
         fi
-        if [ $minutes -gt 0 ] || { [ $hours -gt 0 ] && { [ $seconds -gt 0 ] || [ $milliseconds -gt 0 ] || [ $microseconds -gt 0 ] || [ $nanoseconds -gt 0 ]; } }; then
+        if [ $minutes -gt 0 ] || { { [ $hours -gt 0 ]; } && { [ $seconds -gt 0 ] || [ $milliseconds -gt 0 ] || [ $microseconds -gt 0 ] || [ $nanoseconds -gt 0 ]; } }; then
             [ "$duration" ] && duration="$duration "
             duration="${duration}${minutes}m"
         fi
-        if [ $seconds -gt 0 ] || { [ $hours -gt 0 ] || [ $minutes -gt 0 ] && { [ $milliseconds -gt 0 ] || [ $microseconds -gt 0 ] || [ $nanoseconds -gt 0 ]; } }; then
+        if [ $seconds -gt 0 ] || { { [ $hours -gt 0 ] || [ $minutes -gt 0 ]; } && { [ $milliseconds -gt 0 ] || [ $microseconds -gt 0 ] || [ $nanoseconds -gt 0 ]; } }; then
             [ "$duration" ] && duration="$duration "
             duration="${duration}${seconds}s"
         fi
-        if [ $milliseconds -gt 0 ] || { [ $hours -gt 0 ] || [ $minutes -gt 0 ] || [ $seconds -gt 0 ] && { [ $microseconds -gt 0 ] || [ $nanoseconds -gt 0 ]; } }; then
+        if [ $milliseconds -gt 0 ] || { { [ $hours -gt 0 ] || [ $minutes -gt 0 ] || [ $seconds -gt 0 ]; } && { [ $microseconds -gt 0 ] || [ $nanoseconds -gt 0 ]; } }; then
             [ "$duration" ] && duration="$duration "
             duration="${duration}${milliseconds}ms"
         fi
+        if [ $microseconds -gt 0 ] || { { [ $hours -gt 0 ] || [ $minutes -gt 0 ] || [ $seconds -gt 0 ] || [ $milliseconds -gt 0 ]; } && { [ $nanoseconds -gt 0 ]; } }; then
+            [ "$duration" ] && duration="$duration "
+            duration="${duration}${microseconds}us"
+        fi
         if [ $nanoseconds -gt 0 ]; then
             [ "$duration" ] && duration="$duration "
-            duration="${duration}${nanoseconds}us"
+            duration="${duration}${nanoseconds}ns"
         fi
 
         echo "$duration"
