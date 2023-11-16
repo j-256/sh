@@ -1,0 +1,248 @@
+#!/usr/bin/env bash
+#! bash ^4.0 required (https://brew.sh -> brew install bash)
+#! tested in: GNU bash, version 5.2.15(1)-release (x86_64-apple-darwin22.1.0) | older versions and other shells will work but not guaranteed
+
+###########################################################################################
+# Send GET requests to URLs and capture statistics in files, for performance measurement. #
+# Modify the req() function if you need anything more than a simple GET.                  #
+# (Currently input is provided directly in this file, see CONFIGURATION section below.)   #
+###########################################################################################
+# Environment:                                                                            #
+#     c_USER_AGENT: The User-Agent header used for test requests.                         #
+#     c_DEBUG: If set, some additional info is printed to the screen.                     #
+#              Really only useful for development, but feel free.                         #
+###########################################################################################
+# To extract specific stats after running, just grep:                                     #
+# $> grep -i average *stats* | sed 's/_stats\.txt:/\n/; s/$/\n/'                          #
+###########################################################################################
+
+######### CONFIGURATION #########
+# Number of requests to send to each URL (first parameter, default 0 which just prints the URLs and exits)
+declare -ix num_requests="${1:-0}"
+
+# Helper variables
+pid="78916783M"
+base_url="https://zzcu-010.dx.commercecloud.salesforce.com/s/RefArch/dw/shop/v23_2/products/$pid?client_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+no_expands=""
+# %2C = comma
+some_expands="expand=availability%2Cvariations%2Cprices%2Cimages%2Cpromotions"
+all_expands="expand=availability%2Cbundled_products%2Clinks%2Cpromotions%2Coptions%2Cimages%2Cprices%2Cvariations%2Cset_products%2Crecommendations"
+
+# URLs to query
+mapfile -t urls <<EOF
+http://example.com/
+$base_url$no_expands
+$base_url&$some_expands
+$base_url&$all_expands
+EOF
+# Corresponding log file names (absolute or relative path)
+# Response times will be stored in ${file}_${numRequests}.txt
+# Stats will be stored in ${file}_${numRequests}_stats.txt, if enabled
+mapfile -t files <<EOF
+example.com
+no-expands
+${some_expands//%2C/-}
+${all_expands//%2C/-}
+EOF
+
+# Run results through `stats` and print to stdout
+print_stats=true # empty for false, NOT "false"
+# Run results through `stats` and save to a new file
+save_stats=true # empty for false, NOT "false"
+
+# Define the User-Agent header used for test requests
+export c_USER_AGENT="curl-perf-test"
+# Debug flag for verbose output, mostly used for development
+export c_DEBUG= #true
+######### /CONFIGURATION #########
+
+dbg() { [ "$c_DEBUG" ]; return $?; }
+
+dbg && echo "${#urls[@]} URLs and ${#files[@]} filenames" && echo
+
+# Ensure each URL has a matching log file
+[ ${#urls[@]} -eq ${#files[@]} ] || { echo "Uh oh, those arrays (\$urls and \$files) don't match up!" >&2; return 1; }
+
+# Append number of requests and file extension to log filenames
+export file_ext="txt"
+mapfile -t files < <(printf "%s_$num_requests.$file_ext\n" "${files[@]}")
+dbg && echo "${files[*]}" | sed 's/ /\n/g' && echo
+
+req() {
+    curl -sS -w '%{time_total}\n' -H "User-Agent: $c_USER_AGENT" -o /dev/null "$1" \
+      | sed '# Seconds to milliseconds
+        s/[0-9]\{3\}$//; # Remove last 3 digits as we get more precision than we need
+        s/\.//;          # Remove decimal point
+        s/0\{1,\}//;     # Remove leading zeroes'
+}
+stats() {
+    # Read a list of newline-delimited integers from stdin
+    local -a numbers
+    mapfile -t numbers < <(cat)
+
+    # Check for any non-digits (which would most likely be a decimal point) - allow spaces as the numbers are concatenated with spaces
+    grep -q '[^0-9 ]' <<<"${numbers[*]}" && { echo "Error: Integers only." >&2; return 1; }
+    # If -n is provided, list the dataset first
+    [ "$1" = "-n" ] && printf '%s, ' "${numbers[@]}" | sed 's/, $/\n/'
+
+    # Sort the numbers in ascending order (for outlier calculation, but it gets us min and max too)
+    local -a sorted
+    mapfile -t sorted < <(printf '%s\n' "${numbers[@]}" | sort -n)
+    #mapfile -t sorted <<< "$(printf '%s\n' "${numbers[@]}" | sort -n)"
+    #sorted=($(printf '%s\n' "${numbers[@]}" | sort -n))
+
+    # Find outliers via Interquartile Range (IQR)
+    # Calculate quartiles
+    local -i n=${#sorted[@]}
+    local -i Q1="${sorted[$((n / 4))]}"
+    local -i Q3="${sorted[$((n * 3 / 4))]}"
+    # Calculate the IQR
+    local -i IQR=$((Q3 - Q1))
+    # Define lower and upper bounds for outliers
+    local -i lower_bound; lower_bound="$(printf '%.0f' "$(bc <<< "$Q1 - 1.5 * $IQR")")"
+    local -i upper_bound; upper_bound="$(printf '%.0f' "$(bc <<< "$Q3 + 1.5 * $IQR")")"
+    # Find the position of the first and last data points within the bounds
+    local -i lower_index=0
+    local -i upper_index=$((n - 1))
+    while ((sorted[lower_index] < lower_bound)); do
+        ((lower_index++))
+    done
+    while ((sorted[upper_index] > upper_bound)); do
+        ((upper_index--))
+    done
+    # Collect lower and upper outliers
+    local -a outliers=("${sorted[@]:0:$lower_index}" "${sorted[@]:$((upper_index + 1))}")
+    local percent_outliers; percent_outliers=$(printf '%.1f%%' "$(bc <<< "scale=4; ${#outliers[@]} / ${#numbers[@]} * 100")")
+
+    # Get total, min, and max
+    local -i total; total=$(printf '%s+' "${sorted[@]}" | sed 's/+$//' | bc)
+    local -i min="${sorted[0]}"
+    local -i max="${sorted[-1]}"
+
+    # Print results
+    echo "Count: ${#numbers[@]}"
+    echo "Total: $total"
+    echo "Average: $(bc <<< "$total / ${#numbers[@]}")"
+    echo "Variance: $((max - min)) (min $min, max $max)"
+    echo "Outliers: ${outliers[*]}"
+    echo "          ${#outliers[@]} of ${#numbers[@]} ($percent_outliers)"
+}
+colorize_url() {
+    local url="$1"
+
+    color() {
+        local -A map=( [black]=0 [red]=1 [green]=2 [yellow]=3 [blue]=4 [magenta]=5 [cyan]=6 [white]=7 )
+        local base=30
+        local bright_base=90
+        if [ "$1" = 'bright' ]; then
+            local code=$bright_base && shift
+        else
+            local code=$base
+        fi
+        local adj=${map["$1"]}
+        code=$((code + adj))
+        printf '\033[%sm' "$code"
+    }
+
+    local c_protocol; c_protocol="$(color bright black)"
+    local c_hostname; c_hostname="$(color bright white)"
+    local c_path;         c_path="$(color bright cyan)"
+    local c_key;           c_key="$(color bright yellow)"
+    local c_value;       c_value="$(color green)"
+    local c_slash;       c_slash="$(color white)"
+    local c_question; c_question="$(color black)"
+    local c_equals;     c_equals="$(color white)"
+    local c_and;           c_and="$(color black)"
+    local c_reset;       c_reset="$(tput sgr0)"
+
+    # Split the URL into parts: protocol, hostname, path, and query
+    local protocol="${url%%://*}"
+    local url_no_protocol="${url#*://}"
+    local hostname="${url_no_protocol%%/*}"
+    local path_and_query="${url_no_protocol#*/}"
+    local path="${path_and_query%%\?*}"
+    local query=""
+
+    if [ "$path_and_query" != "$path" ]; then
+        query="${path_and_query#*\?}" # No leading '?'
+
+        # Colorize query string keys and values
+        IFS='&' read -r -a query_params <<<"${query}"
+        local colorized_query=""
+        for param in "${query_params[@]}"; do
+            IFS='=' read -r -a param_parts <<<"$param"
+            local key="${param_parts[0]}"
+            local value="${param_parts[1]}"
+            colorized_query+="$c_and&$c_key${key}$c_equals=$c_value${value}$c_reset"
+        done
+        query="${colorized_query/#$c_and&/$c_question?}"
+    fi
+
+    # Colorize and reassemble the URL
+    colorized_path="$c_slash/$c_path${path//\//$c_slash/$c_path}" # Colorize slashes
+    local colorized_url="$c_protocol${protocol}://$c_hostname${hostname}${colorized_path}$c_question${query}$c_reset"
+    printf '%s\n' "$colorized_url"
+
+    unset -f color # Internal function
+}
+range() { # cat file | range 500 1000 # Get lines 500-1000
+    sed -n "$1,$2"P
+}
+clear_logs() {
+    echo "Deleting ${#files[@]} response time logs"
+    # Unique variable name: if name is not unique and has already been exported, it will stay exported (see `declare -p var_name`) - unnecessary precaution, realistically
+    local -i cl_count=0
+    while (( cl_count < ${#files[@]} )); do
+        #printf '' > "${files[$cl_count]}"
+        rm -v "${files[$cl_count]}"
+        ((cl_count++)) # Putting this in the `while` condition is not equivalent
+    done
+}
+
+# Summarize URLs
+echo "Sending $num_requests requests to ${#urls[@]} URLs:"
+declare -i i=0 # The following ++ happens before the first loop invocation, so we really start at 1
+while (( i++ < ${#urls[@]} )); do # $urls and $files will be the same length
+    echo "[$i]: $(colorize_url "${urls[$((i-1))]}")"
+done
+# If 0 requests was specified, just print URLs and exit
+[ $num_requests -eq 0 ] && exit 0
+
+echo
+# Loop through each URL/file pair and time $num_requests requests
+i=0
+while (( i++ < ${#files[@]} )); do
+    file="${files[$((i-1))]}"
+    url="${urls[$((i-1))]}"
+    px="[$i/${#files[@]}]" # prefix with current/total URLs
+    # Start by printing colorized URL
+    colorize_url "$url"
+    # If a results file already exists, back it up: file.txt -> file.txt.bak
+    [ -f "$file" ] && mv -v "$file" "$file.bak"
+    printf '' > "$file"
+    echo "$px Sending $num_requests requests to URL $i of ${#urls[@]}..."
+    echo "$px Time logged to: $(realpath "$file")"
+    echo
+    # Send and time requests, logging millisecond response times to $file
+    declare -i count=0
+    while ((count++ < num_requests)); do
+        echo "$px $(req "$url" | tee -a "$file")ms - $count / $num_requests"
+    done; count=0
+    # Run `stats` if needed and save output to a variable
+    if [ -n "$print_stats" ] || [ -n "$save_stats" ]; then
+        stats_output="$(stats -n < "$file")"
+    fi
+    # If "save" flag is set, save `stats` analysis: file.txt -> file_stats.txt
+    if [ -n "$save_stats" ]; then
+        stats_file="${file//\.$file_ext/"_stats.$file_ext"}"
+        # If a stats file already exists, back it up: file_stats.txt -> file_stats.txt.bak
+        [ -f "$stats_file" ] && mv -v "$stats_file" "$stats_file.bak"
+        echo "$stats_output" > "$stats_file"
+        echo "Statistics saved to: $(realpath "$stats_file")"
+    fi
+    # If "print" flag is set, print `stats` output with an empty line on each end
+    if [ -n "$print_stats" ]; then
+        printf '\n%s\n\n' "$stats_output"
+    fi
+    echo # newline in between test cases (URLs)
+done
