@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+#! tested in: GNU bash, version 5.2.15(1)-release (x86_64-apple-darwin22.1.0) | older versions and other shells will work but not guaranteed
+
+#################################################################################
+# Apply different colors to portions of provided URL, for increased readability #
+#################################################################################
+
+_colorize_url() {
+    local url="$1"
+
+    # Inner function prefixed with an underscore just in case `color` has already been defined globally
+    _color() {
+        local -A map=( [black]=0 [red]=1 [green]=2 [yellow]=3 [blue]=4 [magenta]=5 [cyan]=6 [white]=7 )
+        local base=30
+        local bright_base=90
+        if [ "$1" = 'bright' ]; then
+            local code=$bright_base && shift
+        else
+            local code=$base
+        fi
+        local adj=${map["$1"]}
+        code=$((code + adj))
+        printf '\033[%sm' "$code"
+    }
+
+    local c_protocol; c_protocol="$(_color bright black)"
+    local c_hostname; c_hostname="$(_color bright white)"
+    local c_path;         c_path="$(_color bright cyan)"
+    local c_key;           c_key="$(_color bright yellow)"
+    local c_value;       c_value="$(_color green)"
+    local c_slash;       c_slash="$(_color white)"
+    local c_question; c_question="$(_color black)"
+    local c_equals;     c_equals="$(_color white)"
+    local c_and;           c_and="$(_color black)"
+    local c_reset;       c_reset="$(tput sgr0)"
+
+    # Split the URL into parts: protocol, hostname, path, and query
+    local protocol="${url%%://*}"
+    local url_no_protocol="${url#*://}"
+    local hostname="${url_no_protocol%%/*}"
+    local path_and_query="${url_no_protocol#*/}"
+    local path="${path_and_query%%\?*}"
+    local query=""
+
+    if [ "$path_and_query" != "$path" ]; then
+        query="${path_and_query#*\?}" # No leading '?'
+
+        # Colorize query string keys and values
+        IFS='&' read -r -a query_params <<<"${query}"
+        local colorized_query=""
+        for param in "${query_params[@]}"; do
+            IFS='=' read -r -a param_parts <<<"$param"
+            local key="${param_parts[0]}"
+            local value="${param_parts[1]}"
+            colorized_query+="$c_and&$c_key${key}$c_equals=$c_value${value}$c_reset"
+        done
+        query="${colorized_query/#$c_and&/$c_question?}"
+    fi
+
+    # Colorize and reassemble the URL
+    colorized_path="$c_slash/$c_path${path//\//$c_slash/$c_path}" # Colorize slashes
+    local colorized_url="$c_protocol${protocol}://$c_hostname${hostname}${colorized_path}$c_question${query}$c_reset"
+    printf '%s\n' "$colorized_url"
+
+    # Avoid internal function leaking into global scope (best to avoid side effects when we can)
+    unset -f _color
+}
+
+_colorize_url "$@"
