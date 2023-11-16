@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+#! tested in: GNU bash, version 5.2.15(1)-release (x86_64-apple-darwin22.1.0) | older versions and other shells will work but not guaranteed
+
+################################################################################
+# Given a newline-delimited list of integers, calculate:                       #
+#  count, total, average, max, min, variance (max-min), and outliers (1.5*IQR) #
+################################################################################
+
+_stats() {
+    # Read a list of newline-delimited integers from stdin
+    local -a numbers
+    mapfile -t numbers < <(cat)
+
+    # Check for any non-digits (which would most likely be a decimal point) - allow spaces as the numbers are concatenated with spaces
+    grep -q '[^0-9 ]' <<<"${numbers[*]}" && { echo "Error: Integers only." >&2; return 1; }
+    # If -n is provided, list the dataset first
+    [ "$1" = "-n" ] && printf '%s, ' "${numbers[@]}" | sed 's/, $/\n/'
+
+    # Sort the numbers in ascending order (for outlier calculation, but it gets us min and max too)
+    local -a sorted
+    mapfile -t sorted < <(printf '%s\n' "${numbers[@]}" | sort -n)
+    #mapfile -t sorted <<< "$(printf '%s\n' "${numbers[@]}" | sort -n)"
+    #sorted=($(printf '%s\n' "${numbers[@]}" | sort -n))
+
+    # Find outliers via Interquartile Range (IQR)
+    # Calculate quartiles
+    local -i n=${#sorted[@]}
+    local -i Q1="${sorted[$((n / 4))]}"
+    local -i Q3="${sorted[$((n * 3 / 4))]}"
+    # Calculate the IQR
+    local -i IQR=$((Q3 - Q1))
+    # Define lower and upper bounds for outliers
+    local -i lower_bound; lower_bound="$(printf '%.0f' "$(bc <<< "$Q1 - 1.5 * $IQR")")"
+    local -i upper_bound; upper_bound="$(printf '%.0f' "$(bc <<< "$Q3 + 1.5 * $IQR")")"
+    # Find the position of the first and last data points within the bounds
+    local -i lower_index=0
+    local -i upper_index=$((n - 1))
+    while ((sorted[lower_index] < lower_bound)); do
+        ((lower_index++))
+    done
+    while ((sorted[upper_index] > upper_bound)); do
+        ((upper_index--))
+    done
+    # Collect lower and upper outliers
+    local -a outliers=("${sorted[@]:0:$lower_index}" "${sorted[@]:$((upper_index + 1))}")
+    local percent_outliers; percent_outliers=$(printf '%.1f%%' "$(bc <<< "scale=4; ${#outliers[@]} / ${#numbers[@]} * 100")")
+
+    # Get total, min, and max
+    local -i total; total=$(printf '%s+' "${sorted[@]}" | sed 's/+$//' | bc)
+    local -i min="${sorted[0]}"
+    local -i max="${sorted[-1]}"
+
+    # Print results
+    echo "Count: ${#numbers[@]}"
+    echo "Total: $total"
+    echo "Average: $(bc <<< "$total / ${#numbers[@]}")"
+    echo "Variance: $((max - min)) (min $min, max $max)"
+    echo "Outliers: ${outliers[*]}"
+    echo "          ${#outliers[@]} of ${#numbers[@]} ($percent_outliers)"
+}
+
+_stats "$@"
