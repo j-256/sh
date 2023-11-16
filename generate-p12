@@ -1,0 +1,154 @@
+#!/usr/bin/env bash
+#! tested in: GNU bash, version 5.2.15(1)-release (x86_64-apple-darwin22.1.0) | older versions and other shells will work but not guaranteed
+#shellcheck disable=SC2034 # "foo appears unused. Verify it or export it."
+#shellcheck disable=SC2154 # "foo is referenced but not assigned."
+
+#######################################################################################################
+# Generate a .p12 client certificate for stg code upload MFA.                                         #
+# Either run from the directory the cert bundle was unzipped to, or provide that path as an argument. #
+#######################################################################################################
+
+# Wrapping in a function like this doesn't do a whole lot unless the file is sourced...
+# If it's sure to be executed, that will be a new process so scope isn't generally an issue
+# But this lets the script be more easily copied into another file without worries of variable collisions
+# You also have to juggle `return` vs `exit` depending on how the script is run, but return is always valid for functions
+_generate_p12() {
+    local -r default_hostname="cert.staging.support01.dw.demandware.net"
+    _prompt() {
+        local VARNAME="$1"
+        local PROMPT="$2"
+        local DEFAULT="$3"
+        local PLACEHOLDER=""
+        # if provided, set placeholder to the 4th parameter, substituting the special string "%DEFAULT%" with $DEFAULT
+        if [ -n "$4" ]; then
+            PLACEHOLDER="${4//"%DEFAULT%"/"$DEFAULT"}"
+        # ... otherwise, set placeholder to default value
+        else
+            PLACEHOLDER="$DEFAULT"
+        fi
+
+        # Display prompt in default color and placeholder in gray
+        printf "$PROMPT\e[90m%s\e[0m" "$PLACEHOLDER"
+        # Move the cursor back to the end of the prompt
+        tput cub ${#PLACEHOLDER}
+
+        # Read the first character to detect when the user starts typing
+        local first_char; IFS= read -r -N 1 first_char
+        # Assign an empty string in case a non-local variable with this name exists when we run our null/empty check later
+        local input
+        # If the input character is not empty or just a newline, read the entire line
+        if [ -n "$first_char" ] && [ "$first_char" != $'\n' ]; then
+            # Clear the rest of the line, read a line of input, and prepend the initial character
+            tput el
+            local line; IFS= read -r line
+            input="$first_char$line"
+        fi
+
+        # Store the line input by the user, or the default value if none was provided, to the provided variable name
+        eval "$VARNAME"'="${input:-"$DEFAULT"}"'
+    }
+    _file_exists() {
+        [ -f "$1" ] || { echo "File not found: $1" >&2 && return 1; }
+        return 0
+    }
+    _bold() {
+        echo "$(tput bold)$*$(tput sgr0)"
+    }
+
+    # TODO: We should just include the path in the filenames rather than changing to the directory and back
+    local wd="$1" # working directory
+    # Save old dir to `cd` back to
+    local old_dir="$PWD"
+    # `cd` to working directory (or current if not provided, which will be a no-op)
+    cd "${wd:-"$PWD"}" || { echo "Error: Failed to change to specified directory" >&2 && return 1; }
+
+    # local -r PLACEHOLDER="(<ENTER> for %DEFAULT%)"
+    local hostname
+    _prompt hostname "Hostname (cert.staging.***): " "$default_hostname" #"$PLACEHOLDER"
+    echo
+    # Make sure we end up with a good hostname no matter what form it's provided in
+    # Any instance's BM hostname will end up in the "cert.staging" form, including providing as little as "production-customer-realm"
+    hostname="$(printf %s "$hostname" | sed 's/_/./g; s/-/./g;
+                                             s/^production//; s/^development//; s/^staging//; s/^cert\.staging//;
+                                             s/^/cert.staging/;
+                                             s/\.demandware\.net$//;
+                                             s/$/.demandware.net/'
+    )"
+
+    # Assemble cert bundle filenames and check that they all exist before proceeding
+    local ca_cert_filename="${hostname}_01.crt"
+    local ca_key_filename="${hostname}_01.key"
+    local ca_pass_filename="${hostname}_01.txt"
+    local ca_serial_filename="${hostname}.srl" # CA serial is the only one which doesn't end in _01
+    local any_missing
+    _file_exists "$ca_cert_filename" || any_missing=true
+    _file_exists "$ca_key_filename" || any_missing=true
+    _file_exists "$ca_pass_filename" || any_missing=true
+    _file_exists "$ca_serial_filename" || any_missing=true
+    [ "$any_missing" ] && echo "Necessary file(s) missing, aborting p12 generation" >&2 && return 1
+
+    # Define output file names
+    local user="$USER"
+    local req_filename="$user-$hostname.req"
+    local key_filename="$user-$hostname.key"
+    local pem_filename="$user-$hostname.pem"
+    local p12_filename="$user-$hostname.p12"
+
+    # Print the filenames which will be used
+    cat <<EOF
+$(tput smul)Using these filenames:$(tput rmul)
+  $ca_cert_filename
+  $ca_key_filename
+  $ca_pass_filename
+  $ca_serial_filename
+  $req_filename
+  $key_filename
+  $pem_filename
+  $p12_filename
+EOF
+    echo
+
+    # Prompt for desired cert expiration, in years
+    local -i years
+    _prompt years "Years until expiration: " 10 #"$PLACEHOLDER"
+    local -i days=$((years*365))
+    echo
+
+    if ! openssl req -new -sha256 -newkey rsa:2048 -nodes -out "$req_filename" -keyout "$key_filename"; then
+        _bold "\`openssl req\` (step 1/3) failed - .req and .key files not generated" >&2 && return 1
+    fi
+    echo
+    echo "$(_bold "Created CSR:") $req_filename"
+    echo "$(_bold "Created private key:") $key_filename"
+    echo
+
+    # Back up existing clipboard contents
+    local clipboard; clipboard="$(pbpaste)"
+    # Copy password from text file to clipboard and print
+    local pass; pass="$(head -n 1 < "$ca_pass_filename")"
+    printf %s "$pass" | pbcopy \
+    && echo -e "\E[1;91m--------\nPass phrase for \E[93m$ca_key_filename\E[91m: \E[92m$pass\n\E[0;91m(already copied to clipboard, just use Cmd+V/Ctrl+V to paste and hit Enter)\n\E[1m--------$(tput sgr0)"
+
+    if openssl x509 -req -in "$req_filename" -out "$pem_filename" -days "$days" -CA "$ca_cert_filename" -CAkey "$ca_key_filename" -CAserial "$ca_serial_filename"; then
+        # Restore clipboard
+        printf %s "$clipboard" | pbcopy
+        printf '\n%s\n\n' "$(_bold "Created X.509 intermediate certificate:") $pem_filename"
+        # "OPTIONAL" line is printed right before the "Enter Export Password" prompt from the pkcs12 command
+        if { echo "$(tput smul)OPTIONAL$(tput rmul) (press enter for blank password)"; openssl pkcs12 -export -in "$pem_filename" -inkey "$key_filename" -certfile "$ca_cert_filename" -name "$user-$hostname" -out "$p12_filename"; }; then
+            printf '\n%s\n\n' "$(_bold "Created PKCS12 client certificate:") $p12_filename"
+        else
+            _bold "\`openssl pkcs12\` (step 2/3) failed - .p12 file not generated" >&2 && return 1
+        fi
+    else
+        # Restore clipboard
+        printf %s "$clipboard" | pbcopy
+        _bold "\`openssl x509\` (step 3/3) failed - .pem file not generated" >&2 && return 1
+    fi
+
+    unset -f _prompt
+    unset -f _file_exists
+    unset -f _bold
+    cd "$old_dir" || { echo "Error: Failed to revert to original directory" >&2 && return 1; }
+}
+
+_generate_p12 "$@"
