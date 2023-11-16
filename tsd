@@ -1,0 +1,264 @@
+#!/usr/bin/env bash
+#! tested in: GNU bash, version 5.2.15(1)-release (x86_64-apple-darwin22.1.0) | older versions and other shells will work but not guaranteed
+
+################################################################################################################
+# "timestamp or duration" -> "ts d" -> "tsd"                                                                   #
+# Provide a duration (e.g. 7238) or unix epoch timestamp (e.g. 1609477200) to get a human-readable             #
+#  duration (e.g. 2h 0m 38s) or datetime (e.g. 2021-01-01T05:00:00Z), respectively.                            #
+# Datetimes are printed in both UTC (GMT) and the user's local time.                                           #
+# Unit defaults to seconds, but can go up to nanoseconds (for e.g. CF WAF logs). See `tsd --help` for details. #
+# If the duration happens to be long enough to be misinterpreted as a timestamp, the -d,--duration option      #
+#  will override the pattern recognition. That would require a massive duration, but is accounted for anyway.  #
+################################################################################################################
+# A neat but contrived example which copies the UTC ISO8601 datetime (line 1) to the clipboard,                #
+#  while also printing both lines to the terminal:                                                             #
+# $ tsd "$(date -u +%s)" | tee /dev/stderr | head -n 1 | pbcopy                                                #
+# > 2023-11-11T11:11:11Z                                                                                       #
+# > 2023-11-11 06:11:11 -05:00 (EST)                                                                           #
+# $ pbpaste                                                                                                    #
+# > 2023-11-11T11:11:11Z                                                                                       #
+#                                                                                                              #
+# You might paste in a timestamp from a log file or pass it from a script:                                     #
+# $ tsd 1609477200                                                                                             #
+# > 2021-01-01T05:00:00Z                                                                                       #
+# > 2021-01-01 00:00:00 -05:00 (EST)                                                                           #
+#                                                                                                              #
+# If you forgot how long a 1800-second access token lasts, quickly check:                                      #
+# $ tsd 1800                                                                                                   #
+# > 30m                                                                                                        #
+# Or have 1800 milliseconds explained to you like you're five:                                                 #
+# $ tsd 1800 -m  # or `tsd -m 1800`                                                                            #
+# > 1s 800ms                                                                                                   #
+################################################################################################################
+
+_tsd() {
+    # Microseconds (the 3 places following milliseconds) is abbreviated μs, as in the Greek letter mu
+    # In this script we use `us` to get close enough, as ms is obviously taken by milliseconds
+
+    local input
+    local -r DEFAULT_UNIT='s'
+    local unit # Set to default value later, if still unset after processing arguments
+    local digits
+    local duration_explicit
+    local is_timestamp
+
+    #region parameter processing
+    # Handle parameters
+    while [ $# -gt 0 ]; do
+        case "$1" in
+        # -t|--timestamp)
+        #     [ "$duration_explicit" ] && { echo "Error: Both -d and -t cannot be specified." >&2; return 1; }
+        #     is_timestamp=true
+        #     ;;
+        -d|--duration)
+            # [ "$is_timestamp" ] && { echo "Error: Both -t and -d cannot be specified." >&2; return 1; }
+            duration_explicit=true
+            ;;
+        -s|--sec|--seconds)
+            [ "$unit" ] && { echo "Error: Unit is already set to $unit. Cannot specify multiple units." >&2; return 1; }
+            unit="s"
+            ;;
+        -m|--milli|--milliseconds)
+            [ "$unit" ] && { echo "Error: Unit is already set to $unit. Cannot specify multiple units." >&2; return 1; }
+            unit="ms"
+            ;;
+        -u|--micro|--microseconds)
+            [ "$unit" ] && { echo "Error: Unit is already set to $unit. Cannot specify multiple units." >&2; return 1; }
+            unit="us"
+            ;;
+        -n|--nano|--nanoseconds)
+            [ "$unit" ] && { echo "Error: Unit is already set to $unit. Cannot specify multiple units." >&2; return 1; }
+            unit="ns"
+            ;;
+        #region help
+        -h|--help)
+            echo "Usage:"
+            printf '\t%s\n' "tsd [options] timestamp_or_duration"
+            echo
+            printf '\t%s\n' "Provide a duration (e.g. 7238) or unix epoch timestamp (e.g. 1609477200) to get a human-readable"
+            printf '\t%s\n' "duration (e.g. 2h 0m 38s) or datetime (e.g. 2021-01-01T05:00:00Z), respectively."
+            echo
+            echo "Options:"
+            printf '\t%s\t\t%s\n' "-s, --sec, --seconds" "Set unit to seconds (default)"
+            printf '\t%s\t%s\n' "-m, --milli, --milliseconds" "Set unit to milliseconds"
+            printf '\t%s\t%s\n' "-u, --micro, --microseconds" "Set unit to microseconds"
+            printf '\t%s\t%s\n' "-n, --nano, --nanoseconds" "Set unit to nanoseconds"
+            # printf '\t%s\t\t\t%s\n' "-t, --timestamp" "Interpret the input as a timestamp"
+            printf '\t%s\t\t\t%s\n' "-d, --duration" "Override timestamp detection"
+            printf '\t%s\t\t\t%s\n' "-h, --help" "Display this help message"
+            echo
+            echo "Examples:"
+            printf '\t%s\n' "Parse a Unix epoch timestamp:"
+            printf '\t%s\n' "$ tsd 1609477200"
+            printf '\t%s\n' "> 2021-01-01T05:00:00Z"
+            printf '\t%s\n' "> 2021-01-01 00:00:00 -05:00 (EST)"
+            echo
+            printf '\t%s\n' "Check the duration of a 1800-second access token:"
+            printf '\t%s\n' "$ tsd 1800"
+            printf '\t%s\n' "> 30m"
+            echo
+            printf '\t%s\n' "Explain 1800 milliseconds like you're five:"
+            printf '\t%s\n' "$ tsd 1800 -m  # or tsd -m 1800"
+            printf '\t%s\n' "> 1s 800ms"
+            return 0
+            ;;
+        #endregion
+        *)
+            if [ -z "$input" ]; then # Handle the first positional argument
+                input="$1"
+                digits=${#input}
+            else
+                echo "Unknown option or multiple positional arguments: $1" >&2 && return 1
+            fi
+            ;;
+        esac
+        shift
+    done
+    #endregion
+
+    # If no timestamp/duration was provided, return an error
+    if [ -z "$input" ]; then
+        echo "Error: No input provided." >&2
+        return 1
+    fi
+
+    # Set unit to default if still unset
+    if [ -z "$unit" ]; then
+        unit="$DEFAULT_UNIT"
+    fi
+
+    # "Unset" timestamp flag if input was explicitly specified to represent a duration
+    if [ "$duration_explicit" ]; then
+        is_timestamp=''
+    # If provided number is the right length, detect it as a timestamp
+    else
+        local -i len
+        case "$unit" in s) len=10;; ms) len=13;; us) len=16;; ns) len=19;; esac
+        if [ $digits -eq $len ]; then
+            is_timestamp=true
+        else
+            is_timestamp=''
+        fi
+    fi
+
+    #region timestamp logic
+    if [ "$is_timestamp" ]; then
+        # macOS `date` can only handle unix timestamps in seconds, so we need to truncate the input down to 10 digits
+        # We'll inject ms/us/ns back into the timestamp after running `date` to avoid losing precision
+        # ISO8601 doesn't specify a max precision for the fractional seconds, so we'll still be in spec
+        local s ms us ns
+        case "$unit" in
+            s)
+                # Input should already be in the form we need (10 digits)
+                s="$input"
+                ;;
+            ms)
+                # Extract milliseconds
+                ms="${input:10:3}"
+                s="${input:0:10}"
+                ;;
+            us)
+                # Extract milliseconds and microseconds
+                us="${input:13:3}"
+                ms="${input:10:3}"
+                s="${input:0:10}"
+                ;;
+            ns)
+                # Extract milliseconds, microseconds, and nanoseconds
+                ns="${input:16:3}"
+                us="${input:13:3}"
+                ms="${input:10:3}"
+                s="${input:0:10}"
+                ;;
+        esac
+        local times="$ms$us$ns"
+
+        # Try converting timestamp in UTC (ISO8601) and local time (custom format)
+        # Replace "+00:00" offset with "Z", which is infinitely more common
+        local utc_date; utc_date=$(TZ=UTC date -r "$s" -Iseconds | sed 's/+00:00$/Z/')
+        # Get local timezone, e.g. "EDT"
+        local tz; tz="$(zdump /etc/localtime | sed 's/.* //g')"
+        local local_date; local_date="$(TZ=/etc/localtime date -r "$s" -Iseconds)"
+        # Inject ms, us, ns back into timestamp
+        if [ "$ms" ] || [ "$us" ] || [ "$ns" ]; then
+            # Replace the trailing Z
+            utc_date="${utc_date%Z}.${times}Z"
+            # Put the fractional seconds before the timezone offset, which will start at the third hyphen or only plus
+            local_date="$(printf %s "$local_date" | sed "s/-/.$times-/3; s/+/.$times+/")"
+        fi
+        # Add spaces to timestamp for legibility and append abbreviated timezone name:
+        # "2023-11-06T18:46:28.123456-05:00" -> "2023-11-06 19:03:58.123456 -05:00 (EST)"
+        # Put a space between the third hyphen or only plus, which should always precede the offset
+        local_date="$(printf %s "$local_date" | sed "s/T/ /; s/-/ -/3; s/+/ +/; s/$/ ($tz)/")"
+
+        # If generating either datetime failed entirely (empty string), fall back to duration logic
+        # Above command appends " ($tz)" to the local datetime, but if it was blank originally that will not happen, so we can check for empty
+        if [ -z "$utc_date" ] || [ -z "$local_date" ]; then
+            is_timestamp=''
+        else
+            echo "$utc_date"
+            echo "$local_date"
+            return 0
+        fi
+    fi
+    #endregion
+
+    #region duration logic
+    # If it's not a timestamp, convert it to a human-readable duration format
+    if [ -z "$is_timestamp" ]; then # Not using an `else` because the previous `if` block could modify this variable
+        local duration=''
+        local -i hours=0 minutes=0 seconds=0 milliseconds=0 microseconds=0 nanoseconds=0
+
+        # Calculate each portion
+        # 64-bit signed integers, so max value is (2^63)-1 == 9,223,372,036,854,775,807 (19 digits)
+        if [ "$unit" = "s" ]; then
+            hours=$((input / 3600))
+            minutes=$((input % 3600 / 60))
+            seconds=$((input % 60))
+        elif [ "$unit" = "ms" ]; then
+            hours=$((input / 3600000))
+            minutes=$((input % 3600000 / 60000))
+            seconds=$((input % 60000 / 1000))
+            milliseconds=$((input % 1000))
+        elif [ "$unit" = "us" ]; then
+            hours=$((input / 3600000000))
+            minutes=$((input % 3600000000 / 60000000))
+            seconds=$((input % 60000000 / 1000000))
+            milliseconds=$((input % 1000000 / 1000))
+            microseconds=$((input % 1000))
+        elif [ "$unit" = "ns" ]; then
+            hours=$((input / 3600000000000)) # "Only" 10 digits
+            minutes=$((input % 3600000000000 / 60000000000))
+            seconds=$((input % 60000000000 / 1000000000))
+            milliseconds=$((input % 1000000000 / 1000000))
+            microseconds=$((input % 1000000 / 1000))
+            nanoseconds=$((input % 1000))
+        fi
+        
+        # Only display zeroes if they're in the middle: e.g. "2h 0m 5s" for 7205 but "2h" for 7200
+        if [ $hours -gt 0 ]; then
+            duration="${hours}h"
+        fi
+        if [ $minutes -gt 0 ] || { [ $hours -gt 0 ] && { [ $seconds -gt 0 ] || [ $milliseconds -gt 0 ] || [ $microseconds -gt 0 ] || [ $nanoseconds -gt 0 ]; } }; then
+            [ "$duration" ] && duration="$duration "
+            duration="${duration}${minutes}m"
+        fi
+        if [ $seconds -gt 0 ] || { [ $hours -gt 0 ] || [ $minutes -gt 0 ] && { [ $milliseconds -gt 0 ] || [ $microseconds -gt 0 ] || [ $nanoseconds -gt 0 ]; } }; then
+            [ "$duration" ] && duration="$duration "
+            duration="${duration}${seconds}s"
+        fi
+        if [ $milliseconds -gt 0 ] || { [ $hours -gt 0 ] || [ $minutes -gt 0 ] || [ $seconds -gt 0 ] && { [ $microseconds -gt 0 ] || [ $nanoseconds -gt 0 ]; } }; then
+            [ "$duration" ] && duration="$duration "
+            duration="${duration}${milliseconds}ms"
+        fi
+        if [ $nanoseconds -gt 0 ]; then
+            [ "$duration" ] && duration="$duration "
+            duration="${duration}${nanoseconds}us"
+        fi
+
+        echo "$duration"
+    fi
+    #endregion
+}
+
+_tsd "$@"
