@@ -23,3 +23,15 @@ This may not be a viable option in the future, so using an executable is preferr
 $ . /my/special/path/utility
 Utility output!
 ```
+
+## Notes
+macOS ships with an ancient (2007) version of Bash, so in order for these scripts to work you might need to get the latest from [Homebrew](https://brew.sh), change the [shebang](https://en.wikipedia.org/wiki/Shebang_(Unix)) to zsh, or run it in the current shell with `source <file>`.  
+
+Recent versions of macOS have `zsh` as the default interpreter/shell because Bash changed from GPLv2 to an even more open license – _"GPLv3 is to Silicon Valley as garlic is to vampires"_. Without opening up their own software, Apple cannot distribute Bash 4.0+ with their OS.  
+
+Fun fact: `/bin/sh` is effectively a symlink to run `/bin/bash --posix` – it doesn't actually run the [Bourne shell](https://en.wikipedia.org/wiki/Bourne_shell).  
+```sh
+$ /bin/sh --version
+GNU bash, version 3.2.57(1)-release (x86_64-apple-darwin23)
+Copyright (C) 2007 Free Software Foundation, Inc.
+```
