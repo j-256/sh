@@ -98,7 +98,7 @@ _find_zone_by_name() {
 
         # Check if the target object was found
         if [ "$targetObject" ]; then
-            echo "Found the target JSON object:"
+            #echo "Found the target JSON object:"
             echo "$targetObject"
             return 0
         fi
