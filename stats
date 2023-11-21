@@ -43,7 +43,7 @@ _stats() {
     done
     # Collect lower and upper outliers
     local -a outliers=("${sorted[@]:0:$lower_index}" "${sorted[@]:$((upper_index + 1))}")
-    local percent_outliers; percent_outliers=$(printf '%.1f%%' "$(bc <<< "scale=4; ${#outliers[@]} / ${#numbers[@]} * 100")")
+    local percent_outliers; percent_outliers="$(printf '%.1f%%' "$(bc <<< "scale=4; ${#outliers[@]} / ${#numbers[@]} * 100")")"
 
     # Get total, min, and max
     local -i total; total=$(printf '%s+' "${sorted[@]}" | sed 's/+$//' | bc)
