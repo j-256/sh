@@ -18,14 +18,9 @@ _generate_p12() {
         local VARNAME="$1"
         local PROMPT="$2"
         local DEFAULT="$3"
-        local PLACEHOLDER=""
+        local PLACEHOLDER="$DEFAULT"
         # if provided, set placeholder to the 4th parameter, substituting the special string "%DEFAULT%" with $DEFAULT
-        if [ -n "$4" ]; then
-            PLACEHOLDER="${4//"%DEFAULT%"/"$DEFAULT"}"
-        # ... otherwise, set placeholder to default value
-        else
-            PLACEHOLDER="$DEFAULT"
-        fi
+        [ -n "$4" ] && PLACEHOLDER="${4//"%DEFAULT%"/"$DEFAULT"}"
 
         # Display prompt in default color and placeholder in gray
         printf "$PROMPT\e[90m%s\e[0m" "$PLACEHOLDER"
@@ -67,7 +62,7 @@ _generate_p12() {
     _prompt hostname "Hostname (cert.staging.***): " "$default_hostname" #"$PLACEHOLDER"
     echo
     # Make sure we end up with a good hostname no matter what form it's provided in
-    # Any instance's BM hostname will end up in the "cert.staging" form, including providing as little as "production-customer-realm"
+    # Any PIG instance's BM hostname will end up in the "cert.staging" form, including providing as little as "production-customer-realm"
     hostname="$(printf %s "$hostname" | sed 's/_/./g; s/-/./g;
                                              s/^production//; s/^development//; s/^staging//; s/^cert\.staging//;
                                              s/^/cert.staging/;
@@ -137,12 +132,12 @@ EOF
         if { echo "$(tput smul)OPTIONAL$(tput rmul) (press enter for blank password)"; openssl pkcs12 -export -in "$pem_filename" -inkey "$key_filename" -certfile "$ca_cert_filename" -name "$user-$hostname" -out "$p12_filename"; }; then
             printf '\n%s\n\n' "$(_bold "Created PKCS12 client certificate:") $p12_filename"
         else
-            _bold "\`openssl pkcs12\` (step 2/3) failed - .p12 file not generated" >&2 && return 1
+            _bold "\`openssl pkcs12\` (step 3/3) failed - .p12 file not generated" >&2 && return 1
         fi
     else
         # Restore clipboard
         printf %s "$clipboard" | pbcopy
-        _bold "\`openssl x509\` (step 3/3) failed - .pem file not generated" >&2 && return 1
+        _bold "\`openssl x509\` (step 2/3) failed - .pem file not generated" >&2 && return 1
     fi
 
     unset -f _prompt
