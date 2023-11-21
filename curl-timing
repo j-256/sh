@@ -2,19 +2,19 @@
 #! bash ^4.0 required (https://brew.sh -> brew install bash)
 #! tested in: GNU bash, version 5.2.15(1)-release (x86_64-apple-darwin22.1.0) | older versions and other shells will work but not guaranteed
 
-###########################################################################################
-# Send GET requests to URLs and capture statistics in files, for performance measurement. #
-# Modify the req() function if you need anything more than a simple GET.                  #
-# (Currently input is provided directly in this file, see CONFIGURATION section below.)   #
-###########################################################################################
-# Environment:                                                                            #
-#     c_USER_AGENT: The User-Agent header used for test requests.                         #
-#     c_DEBUG: If set, some additional info is printed to the screen.                     #
-#              Really only useful for development, but feel free.                         #
-###########################################################################################
-# To extract specific stats after running, just grep:                                     #
-# $> grep -i average *stats* | sed 's/_stats\.txt:/\n/; s/$/\n/'                          #
-###########################################################################################
+############################################################################################
+# Send GET requests to URLs and capture statistics in files, for performance measurement.  #
+# Modify the req() function for anything more than a simple GET.                           #
+# Currently most input is provided directly in this file, see CONFIGURATION section below. #
+############################################################################################
+# Environment:                                                                             #
+#     c_USER_AGENT: The User-Agent header used for test requests.                          #
+#     c_DEBUG: If set, some additional info is printed to the screen.                      #
+#              Really only useful for development, but feel free.                          #
+############################################################################################
+# To extract specific stats after running, just grep:                                      #
+# $ grep -i average *stats* | sed 's/_stats\.txt:/\n/; s/$/\n/'                            #
+############################################################################################
 
 ######### CONFIGURATION #########
 # Number of requests to send to each URL (first parameter, default 0 which just prints the URLs and exits)
