@@ -204,7 +204,7 @@ _tsd() {
         # Adjust formatting for legibility and insert abbreviated timezone name:
         # "2023-11-06T18:46:28.123456-05:00" -> "2023-11-06 19:03:58.123456 EST (GMT-5)"
         # Utilize the third hyphen or only plus, which should always immediately precede the offset
-        local_date="$(printf %s "$local_date" | sed "s/T/ /; s/-0\{0,1\}/ $tz (GMT-/3; s/+0\{0,1\}/ $tz (+/; s/:00$//; s/$/)/")"
+        local_date="$(printf %s "$local_date" | sed "s/T/ /; s/-0\{0,1\}/ $tz (GMT-/3; s/+0\{0,1\}/ $tz (GMT+/; s/:00$//; s/$/)/")"
         # If generating either datetime failed entirely (empty string), fall back to duration logic
         # Above command appends a string to the local datetime using $, but if it was empty originally 
         #  nothing will be appended, so we can still check for that
