@@ -24,9 +24,8 @@ declare -ix num_requests="${1:-0}"
 pid="78916783M"
 base_url="https://zzcu-010.dx.commercecloud.salesforce.com/s/RefArch/dw/shop/v23_2/products/$pid?client_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 no_expands=""
-# %2C = comma
-some_expands="expand=availability%2Cvariations%2Cprices%2Cimages%2Cpromotions"
-all_expands="expand=availability%2Cbundled_products%2Clinks%2Cpromotions%2Coptions%2Cimages%2Cprices%2Cvariations%2Cset_products%2Crecommendations"
+some_expands="expand=availability,variations,prices,images,promotions"
+all_expands="expand=availability,bundled_products,links,promotions,options,images,prices,variations,set_products,recommendations"
 
 # URLs to query
 mapfile -t urls <<EOF
@@ -41,8 +40,8 @@ EOF
 mapfile -t files <<EOF
 example.com
 no-expands
-${some_expands//%2C/-}
-${all_expands//%2C/-}
+${some_expands//,/-}
+${all_expands//,/-}
 EOF
 
 # Run results through `stats` and print to stdout
@@ -70,10 +69,10 @@ dbg && echo "${files[*]}" | sed 's/ /\n/g' && echo
 
 req() {
     curl -sS -w '%{time_total}\n' -H "User-Agent: $c_USER_AGENT" -o /dev/null "$1" \
-      | sed '# Seconds to milliseconds
-        s/[0-9]\{3\}$//; # Remove last 3 digits as we get more precision than we need
+      | sed '# Convert fractional seconds to milliseconds (0.136015 -> 136, 31.734642 -> 31734)
+        s/[0-9]\{3\}$//; # Remove last 3 digits as we get microsecond precision (6 decimal places)
         s/\.//;          # Remove decimal point
-        s/0\{1,\}//;     # Remove leading zeroes'
+        s/^0\{1,\}//;    # Remove leading zeroes'
 }
 stats() {
     # Read a list of newline-delimited integers from stdin
@@ -195,14 +194,14 @@ clear_logs() {
     while (( cl_count < ${#files[@]} )); do
         #printf '' > "${files[$cl_count]}"
         rm -v "${files[$cl_count]}"
-        ((cl_count++)) # Putting this in the `while` condition is not equivalent
+        ((cl_count++)) # Incrementing in the `while` condition is not equivalent
     done
 }
 
 # Summarize URLs
 echo "Sending $num_requests requests to ${#urls[@]} URLs:"
 declare -i i=0 # The following ++ happens before the first loop invocation, so we really start at 1
-while (( i++ < ${#urls[@]} )); do # $urls and $files will be the same length
+while (( i++ < ${#urls[@]} )); do
     echo "[$i]: $(colorize_url "${urls[$((i-1))]}")"
 done
 # If 0 requests was specified, just print URLs and exit
@@ -211,23 +210,29 @@ done
 echo
 # Loop through each URL/file pair and time $num_requests requests
 i=0
-while (( i++ < ${#files[@]} )); do
+while (( i++ < ${#files[@]} )); do # $urls and $files will be the same length
     file="${files[$((i-1))]}"
     url="${urls[$((i-1))]}"
-    px="[$i/${#files[@]}]" # prefix with current/total URLs
-    # Start by printing colorized URL
-    colorize_url "$url"
+    px="[$i/${#files[@]}]" # prefix each message with current/total URLs
+
     # If a results file already exists, back it up: file.txt -> file.txt.bak
     [ -f "$file" ] && mv -v "$file" "$file.bak"
+    # Clear or create results file to store response times
     printf '' > "$file"
+
     echo "$px Sending $num_requests requests to URL $i of ${#urls[@]}..."
+    colorize_url "$url"
     echo "$px Time logged to: $(realpath "$file")"
     echo
+
     # Send and time requests, logging millisecond response times to $file
     declare -i count=0
     while ((count++ < num_requests)); do
-        echo "$px $(req "$url" | tee -a "$file")ms - $count / $num_requests"
+        # Append `(current/total)` requests to existing prefix, left-zero-padded: `[2/4](057/200)`
+        px2="$px$(printf "(%0${#num_requests}d/$num_requests)" "$count")"
+        echo "$px2 $(req "$url" | tee -a "$file")ms"
     done; count=0
+
     # Run `stats` if needed and save output to a variable
     if [ -n "$print_stats" ] || [ -n "$save_stats" ]; then
         stats_output="$(stats -n < "$file")"
