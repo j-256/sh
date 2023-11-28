@@ -249,7 +249,7 @@ _tsd() {
             microseconds=$((input % 1000000 / 1000))
             nanoseconds=$((input % 1000))
         fi
-        
+
         # Only display zeroes if they're in the middle: e.g. "2h 0m 5s" for 7205 but "2h" for 7200
         if [ $hours -gt 0 ]; then
             duration="${hours}h"
