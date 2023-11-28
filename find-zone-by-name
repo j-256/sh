@@ -75,7 +75,7 @@ _find_zone_by_name() {
     local path="/cdn/zones/v1/organizations/$organization/zones/info"
     local hostname="$shortcode.api.commercecloud.salesforce.com"
     local baseUrl="https://$hostname$path"
-    
+
     local -r limit="$MAX_RESULTS_PER_REQUEST"
     local offset=0
 
@@ -85,11 +85,11 @@ _find_zone_by_name() {
 
         # Extract response headers
         responseHeaders="$(echo "$response" | sed -n '/^HTTP\//,/^$/p' | sed '1d;$d')"
-        
+
         # Extract pagination header values using awk
         paginationResultCount="$(echo "$responseHeaders" | grep -i "$COUNT_HEADER_NAME" | awk -F': ' '{print $2}')" # Alternatively: cut -d ': ' -f 2
         paginationTotalCount="$(echo "$responseHeaders" | grep -i "$TOTAL_HEADER_NAME" | awk -F': ' '{print $2}')" # Alternatively: cut -d ': ' -f 2
-        
+
         # Extract response body
         responseBody="$(echo "$response" | sed -n '/^$/,$p' | sed '1d')"
 

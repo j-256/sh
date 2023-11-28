@@ -33,7 +33,7 @@ _prompt() {
     else
         PLACEHOLDER="$DEFAULT"
     fi
-    
+
     # Display prompt in default color and placeholder in gray
     printf "%s\e[90m%s\e[0m" "$PROMPT" "$PLACEHOLDER"
     # Move the cursor back to the end of the prompt
