@@ -45,7 +45,7 @@ _prompt() {
     # Read the first character to detect when the user starts typing
     local first_char; IFS= read -r -N 1 first_char
     # Assign an empty string in case a non-local variable with this name exists when we run our null/empty check later
-    local input
+    local input=''
     # If the input character is not empty or just a newline, read the entire line
     if [ -n "$first_char" ] && [ "$first_char" != $'\n' ]; then
         # Clear the rest of the line, read a line of input, and prepend the initial character
