@@ -8,10 +8,6 @@
 # Either run from the directory the cert bundle was unzipped to, or provide that path as an argument. #
 #######################################################################################################
 
-# Wrapping in a function like this doesn't do a whole lot unless the file is sourced...
-# If it's sure to be executed, that will be a new process so scope isn't generally an issue
-# But this lets the script be more easily copied into another file without worries of variable collisions
-# You also have to juggle `return` vs `exit` depending on how the script is run, but return is always valid for functions
 _generate_p12() {
     local -r default_hostname="cert.staging.support01.dw.demandware.net"
     _prompt() {
@@ -146,4 +142,8 @@ EOF
     cd "$old_dir" || { echo "Error: Failed to revert to original directory" >&2 && return 1; }
 }
 
+# Wrapping in a function like this doesn't do a whole lot unless the file is sourced...
+# If it's sure to be executed, that will be a new process so scope isn't generally an issue
+# But this lets the script be more easily copied into another file without worries of variable collisions
+# You also have to juggle `return` vs `exit` depending on how the script is run, while return is always valid for functions
 _generate_p12 "$@"
