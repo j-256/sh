@@ -53,9 +53,8 @@ _generate_p12() {
     # `cd` to working directory (or current if not provided, which will be a no-op)
     cd "${wd:-"$PWD"}" || { echo "Error: Failed to change to specified directory" >&2 && return 1; }
 
-    # local -r PLACEHOLDER="(<ENTER> for %DEFAULT%)"
     local hostname
-    _prompt hostname "Hostname (cert.staging.***): " "$default_hostname" #"$PLACEHOLDER"
+    read -r -p "Hostname (cert.staging.***): " hostname
     echo
     # Make sure we end up with a good hostname no matter what form it's provided in
     # Any PIG instance's BM hostname will end up in the "cert.staging" form, including providing as little as "production-customer-realm"
@@ -99,6 +98,7 @@ $(tput smul)Using these filenames:$(tput rmul)
 EOF
     echo
 
+    # local -r PLACEHOLDER="(<ENTER> for %DEFAULT%)"
     # Prompt for desired cert expiration, in years
     local -i years
     _prompt years "Years until expiration: " 10 #"$PLACEHOLDER"
