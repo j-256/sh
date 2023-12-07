@@ -6,7 +6,7 @@
 ##########################################################
 
 
-#region Bash bitmap/bitmask - return multiples values in one integer
+#region Bash bitmap/bitmask - multiple values in one integer
 # There should be 64 bits to work with, which is:
 # 8 numbers in [0,255] (8 bits each)
 # 4 numbers in [0,65535] (16 bits each)
