@@ -146,10 +146,10 @@ _tsd() {
         is_timestamp=''
     else
         # If provided number is the right length, detect it as a timestamp
-        if [ "$unit" = "s" ]  && [ $digits -eq 10 ] || \
-           [ "$unit" = "ms" ] && [ $digits -eq 13 ] || \
-           [ "$unit" = "us" ] && [ $digits -eq 16 ] || \
-           [ "$unit" = "ns" ] && [ $digits -eq 19 ]; then
+        if { [ "$unit" = "s" ]  && [ $digits -eq 10 ]; } || \
+           { [ "$unit" = "ms" ] && [ $digits -eq 13 ]; } || \
+           { [ "$unit" = "us" ] && [ $digits -eq 16 ]; } || \
+           { [ "$unit" = "ns" ] && [ $digits -eq 19 ]; }; then
             is_timestamp=true
         else
             is_timestamp=''
