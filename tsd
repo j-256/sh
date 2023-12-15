@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#! tested in: GNU bash, version 5.2.15(1)-release (x86_64-apple-darwin22.1.0) | older versions and other shells will work but not guaranteed
+#! tested in: GNU bash, version 5.2.21(1)-release (x86_64-apple-darwin23.0.0) | older versions and other shells will work but not guaranteed
 
 ################################################################################################################
 # "timestamp or duration" -> "ts d" -> "tsd"                                                                   #
@@ -10,6 +10,11 @@
 # If the duration happens to be long enough to be misinterpreted as a timestamp, the -d,--duration option      #
 #  will override the pattern recognition. That would require a massive duration, but is accounted for anyway.  #
 ################################################################################################################
+# You might paste in a timestamp from a log file or pass it from a script:                                     #
+# $ tsd 1609477200                                                                                             #
+# > 2021-01-01T05:00:00Z                                                                                       #
+# > 2021-01-01 00:00:00 EST (GMT-5)                                                                            #
+#                                                                                                              #
 # A neat but contrived example which copies the UTC ISO8601 datetime (line 1) to the clipboard,                #
 #  while also printing both lines to the terminal:                                                             #
 # $ tsd "$(date -u +%s)" | tee /dev/stderr | head -n 1 | pbcopy                                                #
@@ -17,11 +22,6 @@
 # > 2023-11-11 06:11:11 EST (GMT-5)                                                                            #
 # $ pbpaste                                                                                                    #
 # > 2023-11-11T11:11:11Z                                                                                       #
-#                                                                                                              #
-# You might paste in a timestamp from a log file or pass it from a script:                                     #
-# $ tsd 1609477200                                                                                             #
-# > 2021-01-01T05:00:00Z                                                                                       #
-# > 2021-01-01 00:00:00 EST (GMT-5)                                                                            #
 #                                                                                                              #
 # If you forgot how long a 1800-second access token lasts, quickly check:                                      #
 # $ tsd 1800                                                                                                   #
@@ -40,6 +40,9 @@ _tsd() {
     local digits
     local duration_explicit
     local is_timestamp
+
+    # Allow local timezone to be overriden, for testing
+    local -r LOCALTIME="${TSD_LOCALTIME:-"/etc/localtime"}"
 
     #region parameter processing
     # Handle parameters
@@ -90,7 +93,7 @@ _tsd() {
             printf '\t%s\n' "Parse a Unix epoch timestamp:"
             printf '\t%s\n' "$ tsd 1609477200"
             printf '\t%s\n' "> 2021-01-01T05:00:00Z"
-            printf '\t%s\n' "> 2021-01-01 00:00:00 -05:00 (EST)"
+            printf '\t%s\n' "> 2021-01-01 00:00:00 EST (GMT-5)"
             echo
             printf '\t%s\n' "Check how long a B2C sandbox took to start:"
             printf '\t%s\n' "$ s start zzzu-010"
@@ -110,7 +113,7 @@ _tsd() {
             ;;
         #endregion
         *)
-            if [ -z "$input" ]; then # Handle the first positional argument
+            if [ -z "$input" ]; then # Handle the positional argument
                 input="$1"
                 digits=${#input}
             else
@@ -189,25 +192,26 @@ _tsd() {
         local times="$ms$us$ns"
 
         # Convert timestamp to datetime in UTC (ISO8601) and local time (custom format)
-        # Replace "+00:00" offset with "Z", which is infinitely more common
-        local utc_date; utc_date=$(TZ=UTC date -r "$s" -Iseconds | sed 's/+00:00$/Z/')
-        # Get local timezone abbreviation, e.g. "EDT"
-        local tz; tz="$(zdump /etc/localtime | sed 's/.* //g')"
-        local local_date; local_date="$(TZ=/etc/localtime date -r "$s" -Iseconds)"
+        # Use "Z" instead of "+00:00" offset
+        local utc_date; utc_date=$(TZ=UTC date -r "$s" "+%Y-%m-%dT%H:%M:%SZ")
+        local local_date; local_date="$(TZ="$LOCALTIME" date -r "$s" "+%Y-%m-%d %H:%M:%S %Z (%z)")"
         # Inject ms, us, ns back into timestamp
         if [ "$ms" ] || [ "$us" ] || [ "$ns" ]; then
-            # Replace the trailing Z
+            # Insert fractional seconds before the trailing Z
             utc_date="${utc_date%Z}.${times}Z"
-            # Put the fractional seconds before the timezone offset, which will start at the third hyphen or only plus
-            local_date="$(printf %s "$local_date" | sed "s/-/.$times-/3; s/+/.$times+/")"
+            # Put the fractional seconds before the second space, which comes after seconds
+            local_date="$(printf %s "$local_date" | sed "s/ /.$times /2")"
         fi
-        # Adjust formatting for legibility and insert abbreviated timezone name:
-        # "2023-11-06T18:46:28.123456-05:00" -> "2023-11-06 19:03:58.123456 EST (GMT-5)"
-        # Utilize the third hyphen or only plus, which should always immediately precede the offset
-        local_date="$(printf %s "$local_date" | sed "s/T/ /; s/-0\{0,1\}/ $tz (GMT-/3; s/+0\{0,1\}/ $tz (GMT+/; s/:00$//; s/$/)/")"
+        # Edit GMT/UTC offset for legibility ("-0500" -> "GMT-5", "+1245" -> "GMT+12:45")
+        # "2023-11-06 18:46:28.123456 EST (-0500)" -> "2023-11-06 18:46:28.123456 EST (GMT-5)"
+        local_date="$(printf %s "$local_date" | sed "
+            s/(-0\{0,1\}/(GMT-/; # (-0400) -> (GMT-400), (-1000) -> (GMT-1000)
+            s/(+0\{0,1\}/(GMT+/; # (+0400) -> (GMT+400), (+1000) -> (GMT+1000)
+            s/00)/)/;            # (GMT-400) -> (GMT-4)
+            s/30)/:30)/;         # (GMT+1230) -> (GMT+12:30)
+            s/45)/:45)/;         # (GMT+1245) -> (GMT+12:45)
+        ")"
         # If generating either datetime failed entirely (empty string), fall back to duration logic
-        # Above command appends a string to the local datetime using $, but if it was empty originally 
-        #  nothing will be appended, so we can still check for that
         if [ -z "$utc_date" ] || [ -z "$local_date" ]; then
             is_timestamp=''
         else
