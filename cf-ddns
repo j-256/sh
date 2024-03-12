@@ -1,0 +1,201 @@
+#!/usr/bin/env bash
+#! tested in: GNU bash, version 5.2.26(1)-release (x86_64-apple-darwin23.2.0) | older versions and other shells will work but not guaranteed
+
+############################################################################
+# Updates Cloudflare DNS to use the current machine's outbound IP address. #
+# Run periodically from host to achieve basic Dynamic DNS capabilities.    #
+# Usage: cf-ddns api_token domain_name                                     #
+# Required API token permissions: Zone.Zone, Zone.DNS                      #
+############################################################################
+
+_cf_ddns() {
+    local -r API_VERSION="v4"
+    local -r API_BASE="https://api.cloudflare.com/client/$API_VERSION"
+    local -r A_RECORD_TTL=60
+    local -r CURL_LOG_FILE="/tmp/curl.$$.log"
+
+    #/# Script Parameters #\#
+    local api_token="${1:?"must provide an API bearer token"}" && shift
+    local domain="${1:?"must provide a domain name"}" && shift
+    #local ip_addresses=("$@")
+    #\# #/#
+
+    # Check for jq dependency
+    if ! command -v jq >/dev/null 2>&1; then
+        echo "ERROR: \`jq\` is required" >&2
+        return 1
+    fi
+
+    ###/### Local Functions ###\###
+    #/# Formatted echoes #\#
+    # for i in {0..15}; do tput setaf "$i"; echo "[WAR] This is a test string $i"; done; tput sgr0;
+    _msg() {
+        local color_index="${1:?}" && shift
+        local prefix="${1:?}" && shift
+        tput setaf "$color_index" \
+        && echo "$prefix$*" \
+        && tput sgr0
+    }
+    _info() {
+        _msg 7 "[INF] " "$*" # 7 = white, 8 = gray (bright black)
+    }
+    _warn() {
+        _msg 3 "[WAR] " "$*" >&2 # 3 = yellow
+    }
+    _error() {
+        _msg 9 "[ERR] " "$*" >&2 # 9 = bright red
+    }
+    _dbg() {
+        [ "$DDNS_DEBUG" ] && \
+        _msg 14 "[DBG] " "$@" >&2 # 14 = bright cyan
+    }
+    _exception() {
+        local error_message="${1:?}"
+        local log_file="${2:?}"
+        _error "$error_message"
+        _error "[START INTERNAL ERROR]"
+        cat "$log_file" >&2
+        _error "[END INTERNAL ERROR]"
+    }
+    #\# #/#
+
+    # curl wrapper for API calls: sets URL and auth, logs stderr+stdout to file
+    _curl() {
+        local method="${1:?}" && shift
+        local path="${1:?}" && shift
+        curl -v -sSf -X "$method" \
+            --url "$API_BASE/${path#/}" \
+            -H "Authorization: Bearer $api_token" \
+            "$@" \
+            2>>"$CURL_LOG_FILE" \
+        | tee -a "$CURL_LOG_FILE"
+    }
+
+    #/# API calls #\#
+    _get_zones() {
+        _dbg "GET /zones"
+        _curl GET "/zones"
+    }
+    _get_dns_records() {
+        local zone_id="${1:?"zone ID is required"}"
+        _dbg "GET /zones/$zone_id/dns_records"
+        _curl GET "/zones/$zone_id/dns_records"
+    }
+    _delete_dns_record() {
+        local zone_id="${1:?"zone ID is required"}"
+        local record_id="${2:?"DNS record ID is required"}"
+        _dbg "DELETE /zones/$zone_id/dns_records/$record_id"
+        _curl DELETE "/zones/$zone_id/dns_records/$record_id"
+    }
+    _create_dns_record() {
+        local zone_id="${1:?"zone ID is required"}"
+        local domain="${2:?"domain name is required"}"
+        local type="${3:?"DNS record type is required"}"
+        local content="${4:?"DNS record content is required"}"
+        _dbg "POST /zones/$zone_id/dns_records"
+        _curl POST "/zones/$zone_id/dns_records" \
+            -H "Content-Type: application/json" \
+            --data '{
+                "name": "'"$domain"'",
+                "type": "'"$type"'",
+                "content": "'"$content"'",
+                "ttl": '$A_RECORD_TTL'
+            }'
+    }
+    #\# #/#
+
+    # Gets the current system's outbound IP address
+    _outgoing_ip() {
+        curl -s 'https://api.ipify.org'
+    }
+
+    # Returns success (0) status code if success property of JSON object is true
+    _api_success() {
+        [ "$(echo "$1" | jq '.success')" = "true" ]
+    }
+    ###\### ###/###
+
+    ###/### Main ###\###
+    # Print log file name so user can tail if desired
+    _dbg "curl output logged to: $CURL_LOG_FILE"
+
+    # Get current outbound (inbound) IP
+    local outgoing_ip; outgoing_ip="$(_outgoing_ip)"
+    _info "Device's IP: $outgoing_ip"
+
+    # Get current domain IP from Google DNS (primary) - adding TCP flag because some networks block UDP traffic
+    local current_ip; current_ip="$(dig @8.8.8.8 +tcp +short "$domain")"
+    _info "Domain's IP: ${current_ip:-"NONE"} ($domain)"
+
+    # Check whether DNS needs to be updated
+    if [ "$outgoing_ip" = "$current_ip" ]; then
+        _info "DNS IP address already up-to-date"
+        return 0
+    else
+        _info "IP addresses do not match, updating DNS..."
+    fi
+
+    # Get zone ID from domain name
+    local zone_id
+    if ! zone_id="$(_get_zones | jq -r '.result[] | select(.name=="'"$domain"'") | .id' 2>"/tmp/get_zones.$$.err")"; then
+        _exception "Unexpected error while retrieving zone ID for domain \"$domain\":" "/tmp/get_zones.$$.err"
+        return 1
+    fi
+    if [ -z "$zone_id" ]; then
+        _error "No zone found for domain \"$domain\""
+        return 1
+    fi
+
+    # Get all A records for zone
+    local a_records
+    if ! a_records="$(_get_dns_records "$zone_id" | jq -r '.result[] | select(.type=="A") | "\(.content)=\(.id)"' 2>"/tmp/get_dns_records.$$.err")"; then
+        _exception "Unexpected error while retrieving DNS records from zone \"$zone_id\" ($domain):" "/tmp/get_dns_records.$$.err"
+        return 1
+    fi
+    if [ -z "$a_records" ]; then
+        _info "No existing A records in zone \"$zone_id\" ($domain)" >&2
+    fi
+
+    # Delete all found A records - this is why we are not using PUT
+    for record in $a_records; do
+        local record_ip="${record%=*}"
+        local record_id="${record#*=}"
+        _info "Deleting A record for $record_ip ($record_id)"
+        local delete_response; delete_response="$(_delete_dns_record "$zone_id" "$record_id")"
+        if _api_success "$delete_response"; then
+            : #_info "Successfully deleted A record for $record_ip ($record_id)"
+        else
+            _error "Delete DNS Record request failed, printing raw response:"
+            echo "$delete_response" >&2
+        fi
+    done
+
+    # Create a new A record with the system's current outbound IP
+    _info "Creating A record for $outgoing_ip"
+    local create_response; create_response="$(_create_dns_record "$zone_id" "$domain" "A" "$outgoing_ip")"
+    if _api_success "$create_response"; then
+        : #_info "Successfully created A record for $outgoing_ip"
+    else
+        _error "Create DNS Record request failed, printing raw response:"
+        echo "$create_response" >&2
+    fi
+    ###\### ###/###
+
+    # Unset local functions to avoid bleeding into global scope (not relevant if run as executable) #\
+    unset -f _msg
+    unset -f _info
+    unset -f _warn
+    unset -f _error
+    unset -f _dbg
+    unset -f _exception
+    unset -f _curl
+    unset -f _get_zones
+    unset -f _get_dns_records
+    unset -f _delete_dns_record
+    unset -f _create_dns_record
+    unset -f _outgoing_ip
+    unset -f _api_success #/
+}
+
+# Call main function, passing script arguments
+_cf_ddns "$@"
