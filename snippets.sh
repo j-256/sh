@@ -5,6 +5,14 @@
 # Snippets which may or may not be useful at some point. #
 ##########################################################
 
+#region string.contains(substr)
+# Returns 0 if $1 contains $2, otherwise returns 1
+contains() {
+    # If $1 contains $2, everything up to and including $2 will be removed and it will therefore no longer equal $1
+    [ "${1#*"$2"}" != "$1" ] && return 0 || return 1
+}
+#endregion
+
 
 #region Bash bitmap/bitmask - multiple values in one integer
 # There should be 64 bits to work with, which is:
