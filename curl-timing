@@ -8,11 +8,11 @@
 # Currently most input is provided directly in this file, see CONFIGURATION section below. #
 ############################################################################################
 # Environment:                                                                             #
-#     c_USER_AGENT: The User-Agent header used for test requests.                          #
+#     c_USER_AGENT: The User-Agent header used for HTTP requests.                          #
 #     c_DEBUG: If set, some additional info is printed to the screen.                      #
 #              Really only useful for development, but feel free.                          #
 ############################################################################################
-# To extract specific stats after running, just grep:                                      #
+# To extract specific stats after running, just grep (sed used here to format output):     #
 # $ grep -i average *stats* | sed 's/_stats\.txt:/\n/; s/$/\n/'                            #
 ############################################################################################
 
@@ -49,13 +49,13 @@ print_stats=true # empty for false, NOT "false"
 # Run results through `stats` and save to a new file
 save_stats=true # empty for false, NOT "false"
 
-# Define the User-Agent header used for test requests
-export c_USER_AGENT="curl-perf-test"
+# Define the User-Agent header used for requests
+[ "$c_USER_AGENT" ] || export c_USER_AGENT="curl-perf-test"
 # Debug flag for verbose output, mostly used for development
-export c_DEBUG= #true
+[ "$c_DEBUG" ] || export c_DEBUG= #true
 ######### /CONFIGURATION #########
 
-dbg() { [ "$c_DEBUG" ]; return $?; }
+dbg() { [ "$c_DEBUG" ]; }
 
 dbg && echo "${#urls[@]} URLs and ${#files[@]} filenames" && echo
 
@@ -111,25 +111,26 @@ stats() {
     done
     # Collect lower and upper outliers
     local -a outliers=("${sorted[@]:0:$lower_index}" "${sorted[@]:$((upper_index + 1))}")
-    local percent_outliers; percent_outliers=$(printf '%.1f%%' "$(bc <<< "scale=4; ${#outliers[@]} / ${#numbers[@]} * 100")")
+    local percent_outliers; percent_outliers="$(printf '%.1f%%' "$(bc <<< "scale=4; ${#outliers[@]} / ${#numbers[@]} * 100")")"
 
     # Get total, min, and max
     local -i total; total=$(printf '%s+' "${sorted[@]}" | sed 's/+$//' | bc)
     local -i min="${sorted[0]}"
     local -i max="${sorted[-1]}"
+    local -i range=$((max - min))
 
     # Print results
     echo "Count: ${#numbers[@]}"
     echo "Total: $total"
     echo "Average: $(bc <<< "$total / ${#numbers[@]}")"
-    echo "Variance: $((max - min)) (min $min, max $max)"
+    echo "Range: $range ($min to $max)"
     echo "Outliers: ${outliers[*]}"
     echo "          ${#outliers[@]} of ${#numbers[@]} ($percent_outliers)"
 }
 colorize_url() {
     local url="$1"
 
-    color() {
+    color() { # TODO: Should probably be using `tput setaf` rather than ESC sequences
         local -A map=( [black]=0 [red]=1 [green]=2 [yellow]=3 [blue]=4 [magenta]=5 [cyan]=6 [white]=7 )
         local base=30
         local bright_base=90
