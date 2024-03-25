@@ -3,7 +3,7 @@
 
 ################################################################################
 # Given a newline-delimited list of integers, calculate:                       #
-#  count, total, average, max, min, variance (max-min), and outliers (1.5*IQR) #
+#  count, total, average, max, min, range (max-min), and outliers (1.5*IQR)    #
 ################################################################################
 
 _stats() {
@@ -49,12 +49,13 @@ _stats() {
     local -i total; total=$(printf '%s+' "${sorted[@]}" | sed 's/+$//' | bc)
     local -i min="${sorted[0]}"
     local -i max="${sorted[-1]}"
+    local -i range=$((max - min))
 
     # Print results
     echo "Count: ${#numbers[@]}"
     echo "Total: $total"
     echo "Average: $(bc <<< "$total / ${#numbers[@]}")"
-    echo "Variance: $((max - min)) (min $min, max $max)"
+    echo "Range: $range ($min to $max)"
     echo "Outliers: ${outliers[*]}"
     echo "          ${#outliers[@]} of ${#numbers[@]} ($percent_outliers)"
 }
