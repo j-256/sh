@@ -14,6 +14,7 @@ contains() {
 #endregion
 
 
+
 #region Bash bitmap/bitmask - multiple values in one integer
 # There should be 64 bits to work with, which is:
 # 8 numbers in [0,255] (8 bits each)
@@ -136,6 +137,17 @@ while IFS= read -r line; do
     fi
 done < "/etc/shells"
 [ $SOURCED = true ] || echo "This script has been executed."
+
+# 3 (best for now?)
+# Works on bash and zsh
+# Process is "-bash" if sourced from bash, and $ZSH_EVAL_CONTEXT will contain "file" if sourced from zsh
+proc_name="$(ps -p $$ -ocomm=)"
+if [ "$proc_name" = "bash" ] || { [ "$proc_name" = "zsh" ] && [ "${ZSH_EVAL_CONTEXT#*"file"}" = "$ZSH_EVAL_CONTEXT" ]; }; then
+    echo "Executed"
+else
+    echo "Sourced"
+fi
+unset proc_name # cleanup
 #endregion
 
 
