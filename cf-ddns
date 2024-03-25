@@ -4,7 +4,7 @@
 ############################################################################
 # Updates Cloudflare DNS to use the current machine's outbound IP address. #
 # Run periodically from host to achieve basic Dynamic DNS capabilities.    #
-# Usage: cf-ddns api_token domain_name                                     #
+# Usage: cf-ddns <api_token> <domain_name>                                 #
 # Required API token permissions: Zone.Zone, Zone.DNS                      #
 ############################################################################
 
@@ -14,17 +14,17 @@ _cf_ddns() {
     local -r A_RECORD_TTL=60
     local -r CURL_LOG_FILE="/tmp/curl.$$.log"
 
-    #/# Script Parameters #\#
-    local api_token="${1:?"must provide an API bearer token"}" && shift
-    local domain="${1:?"must provide a domain name"}" && shift
-    #local ip_addresses=("$@")
-    #\# #/#
-
     # Check for jq dependency
     if ! command -v jq >/dev/null 2>&1; then
         echo "ERROR: \`jq\` is required" >&2
         return 1
     fi
+
+    #/# Script Parameters #\#
+    local api_token="${1:?"must provide an API bearer token"}" && shift
+    local domain="${1:?"must provide a domain name"}" && shift
+    #local ip_addresses=("$@")
+    #\# #/#
 
     ###/### Local Functions ###\###
     #/# Formatted echoes #\#
