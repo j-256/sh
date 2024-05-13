@@ -30,8 +30,8 @@ _cf_ddns() {
     #/# Formatted echoes #\#
     # for i in {0..15}; do tput setaf "$i"; echo "[WAR] This is a test string $i"; done; tput sgr0;
     _msg() {
-        local color_index="${1:?}" && shift
-        local prefix="${1:?}" && shift
+        local color_index="${1:?"ANSI color code is required [0..15]"}" && shift
+        local prefix="${1:?"log prefix is required"}" && shift
         tput setaf "$color_index" \
         && echo "$prefix$*" \
         && tput sgr0
@@ -47,11 +47,11 @@ _cf_ddns() {
     }
     _dbg() {
         [ "$DDNS_DEBUG" ] && \
-        _msg 14 "[DBG] " "$@" >&2 # 14 = bright cyan
+        _msg 14 "[DBG] " "$*" >&2 # 14 = bright cyan
     }
     _exception() {
-        local error_message="${1:?}"
-        local log_file="${2:?}"
+        local error_message="${1:?"error message is required"}"
+        local log_file="${2:?"log file is required"}"
         _error "$error_message"
         _error "[START INTERNAL ERROR]"
         cat "$log_file" >&2
@@ -61,8 +61,8 @@ _cf_ddns() {
 
     # curl wrapper for API calls: sets URL and auth, logs stderr+stdout to file
     _curl() {
-        local method="${1:?}" && shift
-        local path="${1:?}" && shift
+        local method="${1:?"HTTP method is required"}" && shift
+        local path="${1:?"API path is required"}" && shift
         curl -v -sSf -X "$method" \
             --url "$API_BASE/${path#/}" \
             -H "Authorization: Bearer $api_token" \
@@ -120,7 +120,11 @@ _cf_ddns() {
     _dbg "curl output logged to: $CURL_LOG_FILE"
 
     # Get current outbound (inbound) IP
-    local outgoing_ip; outgoing_ip="$(_outgoing_ip)"
+    local outgoing_ip
+    if ! outgoing_ip="$(_outgoing_ip)"; then
+        _error "Failed to get device's IP!"
+        return 1
+    fi
     _info "Device's IP: $outgoing_ip"
 
     # Get current domain IP from Google DNS (primary) - adding TCP flag because some networks block UDP traffic
@@ -157,6 +161,7 @@ _cf_ddns() {
     fi
 
     # Delete all found A records - this is why we are not using PUT
+    local record
     for record in $a_records; do
         local record_ip="${record%=*}"
         local record_id="${record#*=}"
