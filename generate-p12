@@ -11,21 +11,35 @@
 _generate_p12() {
     local -r default_hostname="cert.staging.support01.dw.demandware.net"
     _prompt() {
-        local VARNAME="$1"
+        local -r zsh="$ZSH_VERSION" # truthy if shell is zsh, falsy otherwise - we essentially assume bash
+        local VARNAME="${1:?"variable name is required"}"
         local PROMPT="$2"
         local DEFAULT="$3"
-        local PLACEHOLDER="$DEFAULT"
-        # if provided, set placeholder to the 4th parameter, substituting the special string "%DEFAULT%" with $DEFAULT
-        [ -n "$4" ] && PLACEHOLDER="${4//"%DEFAULT%"/"$DEFAULT"}"
+        local PLACEHOLDER=""
+        # if provided, set placeholder to the 4th parameter, substituting the special string "%DEFAULT%" with $DEFAULT 
+        if [ -n "$4" ]; then
+            PLACEHOLDER="${4//"%DEFAULT%"/"$DEFAULT"}"
+        # ... otherwise, set placeholder to default value
+        else
+            PLACEHOLDER="$DEFAULT"
+        fi
 
         # Display prompt in default color and placeholder in gray
-        printf "$PROMPT\e[90m%s\e[0m" "$PLACEHOLDER"
+        printf "%s\e[90m%s\e[0m" "$PROMPT" "$PLACEHOLDER"
         # Move the cursor back to the end of the prompt
-        tput cub ${#PLACEHOLDER}
+        # `tput cub 0` still moves the cursor back one, so only run if necessary
+        if [ ${#PLACEHOLDER} -ne 0 ]; then
+            tput cub ${#PLACEHOLDER}
+        fi
 
         # Read the first character to detect when the user starts typing
-        local first_char; IFS= read -r -N 1 first_char
-        # Assign an empty string in case a non-local variable with this name exists when we run our null/empty check later
+        local first_char
+        if [ "$zsh" ]; then
+            IFS= read -r -k1 first_char
+        else
+            IFS= read -r -N 1 first_char
+        fi
+
         local input
         # If the input character is not empty or just a newline, read the entire line
         if [ -n "$first_char" ] && [ "$first_char" != $'\n' ]; then
@@ -36,7 +50,7 @@ _generate_p12() {
         fi
 
         # Store the line input by the user, or the default value if none was provided, to the provided variable name
-        eval "$VARNAME"'="${input:-"$DEFAULT"}"'
+        declare -g "$VARNAME"="${input:-"$DEFAULT"}"
     }
     _file_exists() {
         [ -f "$1" ] || { echo "File not found: $1" >&2 && return 1; }
