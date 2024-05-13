@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
-#! tested in: GNU bash, version 5.2.15(1)-release (x86_64-apple-darwin22.1.0) | older versions and other shells will work but not guaranteed
-# Considered supporting POSIX sh, but reading a single character for the fancy placeholder functionality
-#  introduces a level of complexity which isn't worth it unless the extra compatibility is actually needed
-#shellcheck disable=SC2034
+#! tested in: GNU bash, version 5.2.26(1)-release (x86_64-apple-darwin23.2.0) | older versions and other shells will work but not guaranteed
+# Major caveat: Because of the placeholder logic, the first character entered cannot be backspaced
 
 ########################################################################################################
 # Prompt the user for input and save it to a variable, with an optional default value and placeholder. #
@@ -13,16 +11,21 @@
 #   . prompt <variable> [default] [placeholder]                                                        #
 #   source prompt <variable> [default] [placeholder]                                                   #
 ########################################################################################################
+# Considered supporting POSIX sh, but reading a single character for the fancy placeholder functionality
+#  introduces a level of complexity which isn't worth it unless the extra compatibility is actually needed
 
-# $0 will be this file's path if it is executed, otherwise it will be the name of the shell
-# Bash's $0 is "-bash" for some reason, so remove hyphens
-if [ "${0//-}" != "$(basename "$SHELL")" ]; then
+# Do nothing if the script was executed instead of sourced
+# Process is "-bash" if sourced from bash, and $ZSH_EVAL_CONTEXT will contain "file" if sourced from zsh
+_proc_name="$(ps -p $$ -ocomm=)"
+if [ "$_proc_name" = "bash" ] || { [ "$_proc_name" = "zsh" ] && [ "${ZSH_EVAL_CONTEXT#*"file"}" = "$ZSH_EVAL_CONTEXT" ]; }; then
     echo "This script must be sourced to work correctly."
     exit 1
 fi
+unset _proc_name # cleanup
 
 _prompt() {
-    local VARNAME="$1"
+    local -r zsh="$ZSH_VERSION" # truthy if shell is zsh, falsy otherwise - we essentially assume bash
+    local VARNAME="${1:?"variable name is required"}"
     local PROMPT="$2"
     local DEFAULT="$3"
     local PLACEHOLDER=""
@@ -43,9 +46,14 @@ _prompt() {
     fi
 
     # Read the first character to detect when the user starts typing
-    local first_char; IFS= read -r -N 1 first_char
-    # Assign an empty string in case a non-local variable with this name exists when we run our null/empty check later
-    local input=''
+    local first_char
+    if [ "$zsh" ]; then
+        IFS= read -r -k1 first_char
+    else
+        IFS= read -r -N 1 first_char
+    fi
+
+    local input
     # If the input character is not empty or just a newline, read the entire line
     if [ -n "$first_char" ] && [ "$first_char" != $'\n' ]; then
         # Clear the rest of the line, read a line of input, and prepend the initial character
@@ -55,7 +63,7 @@ _prompt() {
     fi
 
     # Store the line input by the user, or the default value if none was provided, to the provided variable name
-    eval "$VARNAME"'="${input:-"$DEFAULT"}"'
+    declare -g "$VARNAME"="${input:-"$DEFAULT"}"
 }
 
 _prompt "$@"
