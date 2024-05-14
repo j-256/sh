@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 #! tested in: GNU bash, version 5.2.15(1)-release (x86_64-apple-darwin22.1.0) | older versions and other shells will work but not guaranteed
-#shellcheck disable=SC2034 # "foo appears unused. Verify it or export it."
 #shellcheck disable=SC2154 # "foo is referenced but not assigned."
 
 #######################################################################################################
@@ -9,9 +8,21 @@
 #######################################################################################################
 
 _generate_p12() {
-    local -r default_hostname="cert.staging.support01.dw.demandware.net"
+    # Example hostname: "cert.staging.customer.realm.demandware.net"
+
+    # Text colors for later use - by convention wrapped in {} when used below, for legibility
+    local red;       red="$(tput setaf 9)"  # 9  == bright red (8+1)
+    local green;   green="$(tput setaf 10)" # 10 == bright green (8+2)
+    local yellow; yellow="$(tput setaf 11)" # 11 == bright yellow (8+3)
+    local bold;     bold="$(tput bold)" # start bolding text
+    local smul;     smul="$(tput smul)" # start underlining text
+    local rmul;     rmul="$(tput rmul)" # stop underlining text
+    local reset;   reset="$(tput sgr0)" # reset all formatting to terminal default
+    # Note: There is no `tput unbold`. `tput bold` is $'\E[1m', which you would generally undo with
+    #  \E[0m or \E[m, but those essentially match `tput reset`, clearing all formatting
+
     _prompt() {
-        local -r zsh="$ZSH_VERSION" # truthy if shell is zsh, falsy otherwise - we essentially assume bash
+        local -r zsh="$ZSH_VERSION" # truthy if shell is zsh, falsy otherwise - in which case we assume bash
         local VARNAME="${1:?"variable name is required"}"
         local PROMPT="$2"
         local DEFAULT="$3"
@@ -56,8 +67,11 @@ _generate_p12() {
         [ -f "$1" ] || { echo "File not found: $1" >&2 && return 1; }
         return 0
     }
+    _repeat() { # repeats a string n times
+        printf "%$2s" | sed "s/ /$1/g"
+    }
     _bold() {
-        echo "$(tput bold)$*$(tput sgr0)"
+        echo "$bold$*$reset"
     }
 
     # TODO: We should just include the path in the filenames rather than changing to the directory and back
@@ -68,7 +82,8 @@ _generate_p12() {
     cd "${wd:-"$PWD"}" || { echo "Error: Failed to change to specified directory" >&2 && return 1; }
 
     local hostname
-    read -r -p "Hostname (cert.staging.***): " hostname
+    printf %s "Hostname (cert.staging.***): "
+    read -r hostname
     echo
     # Make sure we end up with a good hostname no matter what form it's provided in
     # Any PIG instance's BM hostname will end up in the "cert.staging" form, including providing as little as "production-customer-realm"
@@ -100,7 +115,7 @@ _generate_p12() {
 
     # Print the filenames which will be used
     cat <<EOF
-$(tput smul)Using these filenames:$(tput rmul)
+${smul}Using these filenames:${rmul}
   $ca_cert_filename
   $ca_key_filename
   $ca_pass_filename
@@ -122,42 +137,48 @@ EOF
     if ! openssl req -new -sha256 -newkey rsa:2048 -nodes -out "$req_filename" -keyout "$key_filename"; then
         _bold "\`openssl req\` (step 1/3) failed - .req and .key files not generated" >&2 && return 1
     fi
-    echo
-    echo "$(_bold "Created CSR:") $req_filename"
-    echo "$(_bold "Created private key:") $key_filename"
-    echo
+    printf '%s\n' '' "$(_bold "Created CSR:")" "$req_filename"
+    printf '%s\n' "$(_bold "Created private key:")" "$key_filename" ''
 
     # Back up existing clipboard contents
     local clipboard; clipboard="$(pbpaste)"
     # Copy password from text file to clipboard and print
-    local pass; pass="$(head -n 1 < "$ca_pass_filename")"
-    printf %s "$pass" | pbcopy \
-    && echo -e "\E[1;91m--------\nPass phrase for \E[93m$ca_key_filename\E[91m: \E[92m$pass\n\E[0;91m(already copied to clipboard, just use Cmd+V/Ctrl+V to paste and hit Enter)\n\E[1m--------$(tput sgr0)"
+    local pass; pass="$(cat "$ca_pass_filename")"
+    if printf %s "$pass" | pbcopy; then
+        # Print hyphens all the way across for a horizontal rule
+        local term_width; term_width="$(tput cols)"
+        echo "${red}$(_repeat '-' "$term_width")${reset}"
+        echo "${red}${bold}Pass phrase for ${yellow}$ca_key_filename${red}: ${green}$pass${reset}"
+        echo "${red}(already copied to clipboard, just use ${yellow}Cmd+V${red}/${yellow}Ctrl+V${red} to paste and hit Enter)${reset}"
+        echo "${red}(no text will appear because it is a secure prompt)${reset}"
+        echo "${red}$(_repeat '-' "$term_width")${reset}"
+    fi
 
     if openssl x509 -req -in "$req_filename" -out "$pem_filename" -days "$days" -CA "$ca_cert_filename" -CAkey "$ca_key_filename" -CAserial "$ca_serial_filename"; then
-        # Restore clipboard
-        printf %s "$clipboard" | pbcopy
-        printf '\n%s\n\n' "$(_bold "Created X.509 intermediate certificate:") $pem_filename"
+        printf '%s\n' '' "$(_bold "Created X.509 intermediate certificate:")" "$pem_filename" ''
+        # Restore clipboard if needed
+        [ "$clipboard" ] && printf %s "$clipboard" | pbcopy
         # "OPTIONAL" line is printed right before the "Enter Export Password" prompt from the pkcs12 command
-        if { echo "$(tput smul)OPTIONAL$(tput rmul) (press enter for blank password)"; openssl pkcs12 -export -in "$pem_filename" -inkey "$key_filename" -certfile "$ca_cert_filename" -name "$user-$hostname" -out "$p12_filename"; }; then
-            printf '\n%s\n\n' "$(_bold "Created PKCS12 client certificate:") $p12_filename"
+        echo "${smul}OPTIONAL${rmul} (press enter for blank password)"
+        if openssl pkcs12 -export -in "$pem_filename" -inkey "$key_filename" -certfile "$ca_cert_filename" -name "$user-$hostname" -out "$p12_filename"; then
+            printf '%s\n' '' "$(_bold "Created PKCS12 client certificate:")" "$p12_filename" ''
+            _bold "Full path to p12:"
+            realpath "$p12_filename"
         else
             _bold "\`openssl pkcs12\` (step 3/3) failed - .p12 file not generated" >&2 && return 1
         fi
     else
-        # Restore clipboard
-        printf %s "$clipboard" | pbcopy
+        # Restore clipboard if needed
+        [ "$clipboard" ] && printf %s "$clipboard" | pbcopy
         _bold "\`openssl x509\` (step 2/3) failed - .pem file not generated" >&2 && return 1
     fi
 
+    # Clean up internal functions to avoid polluting global namespace
     unset -f _prompt
     unset -f _file_exists
+    unset -f _repeat
     unset -f _bold
     cd "$old_dir" || { echo "Error: Failed to revert to original directory" >&2 && return 1; }
 }
 
-# Wrapping in a function like this doesn't do a whole lot unless the file is sourced...
-# If it's sure to be executed, that will be a new process so scope isn't generally an issue
-# But this lets the script be more easily copied into another file without worries of variable collisions
-# You also have to juggle `return` vs `exit` depending on how the script is run, while return is always valid for functions
 _generate_p12 "$@"
