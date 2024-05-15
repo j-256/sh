@@ -19,7 +19,7 @@ _generate_p12() {
     local rmul;     rmul="$(tput rmul)" # stop underlining text
     local reset;   reset="$(tput sgr0)" # reset all formatting to terminal default
     # Note: There is no `tput unbold`. `tput bold` is $'\E[1m', which you would generally undo with
-    #  \E[0m or \E[m, but those essentially match `tput reset`, clearing all formatting
+    #  $'\E[0m' or $'\E[m', but those essentially match `tput sgr0`, clearing all formatting
 
     _prompt() {
         local -r zsh="$ZSH_VERSION" # truthy if shell is zsh, falsy otherwise - in which case we assume bash
