@@ -61,7 +61,7 @@ _generate_p12() {
         fi
 
         # Store the line input by the user, or the default value if none was provided, to the provided variable name
-        declare -g "$VARNAME"="${input:-"$DEFAULT"}"
+        eval "$VARNAME"'="${input:-"$DEFAULT"}"'
     }
     _file_exists() {
         [ -f "$1" ] || { echo "File not found: $1" >&2 && return 1; }
