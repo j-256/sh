@@ -31,18 +31,24 @@ _ods_usage() {
     # Helper will use input if arguments are provided, otherwise it will pull from the clipboard
     if [ $# -gt 0 ]; then
         local json="$*"
-        _jq() {
-            echo "$json" | jq -r "$@"
-        }
+        _jq() { echo "$json" | jq -r "$@"; }
     else
-        _jq() {
-            pbpaste | jq -r "$@"
-        }
+        _jq() { pbpaste | jq -r "$@"; }
     fi
 
-    # Save the control characters to start and stop underlining text
-    local smul; smul="$(tput smul)"
-    local rmul; rmul="$(tput rmul)"
+    # If output is being piped or redirected, do not print control characters for text formatting
+    local format_text=true
+    if [ -p /dev/stdout ] || [ ! -t 1 ]; then # output is being piped || stdout (fd1) is not a terminal
+        format_text=''
+    fi
+
+    # Print the control characters to start and stop underlining text only if output is going to a terminal
+    _smul() {
+        [ "$format_text" ] && tput smul
+    }
+    _rmul() {
+        [ "$format_text" ] && tput rmul
+    }
 
     # Define credit cost per minute for each ODS resource profile (all profiles are 0.3 credits per minute down)
     local credit_multi_medium=1
@@ -51,7 +57,7 @@ _ods_usage() {
     local credit_multi_stopped="3 / 10" # injected into $(()) later, because $((3 / 10)) == 0
 
     # Print the number of sandboxes created, active, and deleted during the timeframe
-    echo "${smul}Sandbox Counts${rmul}"
+    echo "$(_smul)Sandbox Counts$(_rmul)"
     local sbx_count_created; sbx_count_created="$(_jq '.data.createdSandboxes')"
     local sbx_count_active;   sbx_count_active="$(_jq '.data.activeSandboxes')"
     local sbx_count_deleted; sbx_count_deleted="$(_jq '.data.deletedSandboxes')"
@@ -60,7 +66,7 @@ _ods_usage() {
     echo "deleted: $sbx_count_deleted"
 
     # Print minutes up and down (per resource for uptime only, as it does not apply to downtime)
-    echo "${smul}Uptime & Downtime${rmul}"
+    echo "$(_smul)Uptime & Downtime$(_rmul)"
     local min_down; min_down="$(_jq '.data.minutesDown')"
     local min_up;     min_up="$(_jq '.data.minutesUp')"
     local min_up_medium; min_up_medium="$(_jq '.data.minutesUpByProfile[] | select(.profile=="medium") | .minutes')"
@@ -73,7 +79,7 @@ _ods_usage() {
     echo "min down: $min_down"
 
     # Print credits used by uptime, downtime, and in total
-    echo "${smul}Credits Used${rmul}"
+    echo "$(_smul)Credits Used$(_rmul)"
     local credits_used_up=$((min_up_medium*credit_multi_medium + min_up_large*credit_multi_large + min_up_xlarge*credit_multi_xlarge))
     local credits_used_down; credits_used_down="$(eval 'echo $((min_down * '"$credit_multi_stopped"'))')"
     local credits_used_total=$((credits_used_up + credits_used_down))
@@ -81,8 +87,10 @@ _ods_usage() {
     echo "down:  $credits_used_down"
     echo "total: $credits_used_total"
 
-    # Clean up inner function to avoid bleeding into outer scope
+    # Clean up inner functions to avoid bleeding into outer scope
     unset -f _jq
+    unset -f _smul
+    unset -f _rmul
 }
 
 _ods_usage "$@"
