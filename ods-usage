@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+#! tested in: GNU bash, version 5.2.26(1)-release (x86_64-apple-darwin23.2.0) | older versions and other shells will work but not guaranteed
+
+######################################################################################################################
+# Calculates On-Demand Sandbox credits used and summarizes usage, provided a getRealmUsage response from the ODS API #
+######################################################################################################################
+# Usage:                                                                                                             #
+#   ods-usage [api_response]                                                                                         #
+# Provide JSON response from getRealmUsage as the argument, or run with no arguments to pull from clipboard          #
+######################################################################################################################
+# Example Output:                                                                                                    #
+#   Sandbox Counts                                                                                                   #
+#   created: 9                                                                                                       #
+#   active:  8                                                                                                       #
+#   deleted: 0                                                                                                       #
+#   Uptime & Downtime                                                                                                #
+#   min up:   1389                                                                                                   #
+#   > medium: 1389                                                                                                   #
+#   min down: 194006                                                                                                 #
+#   Credits Used                                                                                                     #
+#   up:    1389                                                                                                      #
+#   down:  58201                                                                                                     #
+#   total: 59590                                                                                                     #
+#############################################################################################################################
+# https://admin.dx.commercecloud.salesforce.com/#/Realms/getRealmUsage                                                      #
+# https://admin.dx.commercecloud.salesforce.com/api/v1/realms/xxxx/usage?from=2020-01-01&to=2020-02-01&detailedReport=false #
+#############################################################################################################################
+
+_ods_usage() {
+    # Define one of two versions of a jq helper function, to pipe the input
+    # Helper will use input if arguments are provided, otherwise it will pull from the clipboard
+    if [ $# -gt 0 ]; then
+        local json="$*"
+        _jq() {
+            echo "$json" | jq -r "$@"
+        }
+    else
+        _jq() {
+            pbpaste | jq -r "$@"
+        }
+    fi
+
+    # Save the control characters to start and stop underlining text
+    local smul; smul="$(tput smul)"
+    local rmul; rmul="$(tput rmul)"
+
+    # Define credit cost per minute for each ODS resource profile (all profiles are 0.3 credits per minute down)
+    local credit_multi_medium=1
+    local credit_multi_large=2
+    local credit_multi_xlarge=4
+    local credit_multi_stopped="3 / 10" # injected into $(()) later, because $((3 / 10)) == 0
+
+    # Print the number of sandboxes created, active, and deleted during the timeframe
+    echo "${smul}Sandbox Counts${rmul}"
+    local sbx_count_created; sbx_count_created="$(_jq '.data.createdSandboxes')"
+    local sbx_count_active;   sbx_count_active="$(_jq '.data.activeSandboxes')"
+    local sbx_count_deleted; sbx_count_deleted="$(_jq '.data.deletedSandboxes')"
+    echo "created: $sbx_count_created"
+    echo "active:  $sbx_count_active"
+    echo "deleted: $sbx_count_deleted"
+
+    # Print minutes up and down (per resource for uptime only, as it does not apply to downtime)
+    echo "${smul}Uptime & Downtime${rmul}"
+    local min_down; min_down="$(_jq '.data.minutesDown')"
+    local min_up;     min_up="$(_jq '.data.minutesUp')"
+    local min_up_medium; min_up_medium="$(_jq '.data.minutesUpByProfile[] | select(.profile=="medium") | .minutes')"
+    local min_up_large;   min_up_large="$(_jq '.data.minutesUpByProfile[] | select(.profile=="large")  | .minutes')"
+    local min_up_xlarge; min_up_xlarge="$(_jq '.data.minutesUpByProfile[] | select(.profile=="xlarge") | .minutes')"
+    echo "min up:   $min_up"
+    [ "$min_up_medium" ] && echo "> medium: $min_up_medium"
+    [ "$min_up_large" ]  && echo ">  large: $min_up_large"
+    [ "$min_up_xlarge" ] && echo "> xlarge: $min_up_xlarge"
+    echo "min down: $min_down"
+
+    # Print credits used by uptime, downtime, and in total
+    echo "${smul}Credits Used${rmul}"
+    local credits_used_up=$((min_up_medium*credit_multi_medium + min_up_large*credit_multi_large + min_up_xlarge*credit_multi_xlarge))
+    local credits_used_down; credits_used_down="$(eval 'echo $((min_down * '"$credit_multi_stopped"'))')"
+    local credits_used_total=$((credits_used_up + credits_used_down))
+    echo "up:    $credits_used_up"
+    echo "down:  $credits_used_down"
+    echo "total: $credits_used_total"
+
+    # Clean up inner function to avoid bleeding into outer scope
+    unset -f _jq
+}
+
+_ods_usage "$@"
