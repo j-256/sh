@@ -27,13 +27,26 @@
 #############################################################################################################################
 
 _ods_usage() {
-    # Define one of two versions of a jq helper function, to pipe the input
+    # Define one of two versions of a jq helper function, to pipe the input JSON and specify raw output each time
     # Helper will use input if arguments are provided, otherwise it will pull from the clipboard
     if [ $# -gt 0 ]; then
         local json="$*"
-        _jq() { echo "$json" | jq -r "$@"; }
+        # Define jq helper if input is valid JSON, otherwise exit with error status
+        if echo "$json" | jq empty 2>/dev/null; then
+            _jq() { echo "$json" | jq -r "$@"; }
+        else
+            echo "ERROR: Input is not valid JSON - preview below" >&2
+            echo "$*" | cut -c "1-$(tput cols)" >&2
+            return 1
+        fi
     else
-        _jq() { pbpaste | jq -r "$@"; }
+        # Exit with error status if input is not valid JSON
+        if pbpaste | jq empty 2>/dev/null; then
+            _jq() { pbpaste | jq -r "$@"; }
+        else
+            echo "ERROR: No arguments provided and clipboard does not contain valid JSON" >&2
+            return 1
+        fi
     fi
 
     # If output is being piped or redirected, do not print control characters for text formatting
