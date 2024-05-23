@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+#! tested in: GNU bash, version 5.2.26(1)-release (x86_64-apple-darwin23.2.0) | older versions and other shells will work but not guaranteed
+
+####################################################################################
+# Verifies access to /webdav/Sites/Cartridges with Bearer Authorization using curl #
+# (optionally with a p12 mTLS client certificate for MFA)                          #
+####################################################################################
+# Usage:                                                                           #
+#   verify-p12 <hostname> <token> [p12_password] [p12_file]                        #
+####################################################################################
+
+_verify_p12() {
+    if [ $# -lt 2 ]; then # require 2 arguments
+        echo "ERROR: expected 2 arguments, received $#"
+        echo "Usage: verify-p12 <hostname> <token> [p12_password] [p12_file]"
+        return 1
+    fi
+    local hostname="$1"
+    local -r DEFAULT_P12_FILE="$USER-$hostname.p12"
+    local token="$2"
+    local p12_pass="$3"
+    local p12_args
+    if [ "$p12_pass" ]; then
+        local p12_file="${4:-"$DEFAULT_P12_FILE"}"
+        # -k (--insecure) disables curl's TLS CA check, otherwise we need to pass --cacert "$ca_cert"
+        # This does NOT disable TLS, it simply allows a self-signed certificate without needing to provide the CA cert
+        p12_args="-k --cert-type p12 --cert $p12_file:$p12_pass"
+    fi
+    local url="https://$hostname/on/demandware.servlet/webdav/Sites/Cartridges"
+    # Print request URL to stderr
+    echo "GET $url" >&2
+    # Print the HTTP status line and file URLs
+    # -i == include response headers in output
+    #shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." # Variable is unquoted so it will be treated as arguments
+    curl -si -X GET \
+        --url "$url" \
+        -H "Authorization: Bearer $token" \
+        $p12_args \
+    | tr -d '\r' \
+    | grep -e '^HTTP/[.0-9]\{1,3\} [0-9]\{3\} [ A-Za-z]*$' \
+           -e '<a href="' \
+    | sed 's|^.*<a href="/on/demandware.servlet||; s|">.*$||'
+}
+
+_verify_p12 "$@"
