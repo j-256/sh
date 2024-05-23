@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-#! tested in: GNU bash, version 5.2.15(1)-release (x86_64-apple-darwin22.1.0) | older versions and other shells will work but not guaranteed
-#shellcheck disable=SC2154 # "foo is referenced but not assigned."
+#! tested in: GNU bash, version 5.2.26(1)-release (x86_64-apple-darwin23.2.0) | older versions and other shells will work but not guaranteed
 
-#######################################################################################################
-# Generate a .p12 client certificate for stg code upload MFA.                                         #
-# Either run from the directory the cert bundle was unzipped to, or provide that path as an argument. #
-#######################################################################################################
+##############################################################################################
+# Generates a .p12 client certificate for Salesforce B2C Commerce stg code upload MFA        #
+##############################################################################################
+# Usage:                                                                                     #
+#   generate-p12 [cert_bundle_directory]                                                     #
+# Run from the directory the cert bundle was unzipped to or provide that path as an argument #
+##############################################################################################
 
 _generate_p12() {
     # Example hostname: "cert.staging.customer.realm.demandware.net"
@@ -28,7 +30,7 @@ _generate_p12() {
         local DEFAULT="$3"
         local PLACEHOLDER=""
         # if provided, set placeholder to the 4th parameter, substituting the special string "%DEFAULT%" with $DEFAULT 
-        if [ -n "$4" ]; then
+        if [ "$4" ]; then
             PLACEHOLDER="${4//"%DEFAULT%"/"$DEFAULT"}"
         # ... otherwise, set placeholder to default value
         else
@@ -53,15 +55,17 @@ _generate_p12() {
 
         local input
         # If the input character is not empty or just a newline, read the entire line
-        if [ -n "$first_char" ] && [ "$first_char" != $'\n' ]; then
+        if [ "$first_char" ] && [ "$first_char" != $'\n' ]; then
             # Clear the rest of the line, read a line of input, and prepend the initial character
             tput el
             local line; IFS= read -r line
+            #shellcheck disable=SC2034 # $input is used in eval below
             input="$first_char$line"
         fi
 
         # Store the line input by the user, or the default value if none was provided, to the provided variable name
         eval "$VARNAME"'="${input:-"$DEFAULT"}"'
+        #declare -g "$VARNAME"="${input:-"$DEFAULT"}" # eval version seems to have better compatibility
     }
     _file_exists() {
         [ -f "$1" ] || { echo "File not found: $1" >&2 && return 1; }
@@ -158,8 +162,9 @@ EOF
         printf '%s\n' '' "$(_bold "Created X.509 intermediate certificate:")" "$pem_filename" ''
         # Restore clipboard if needed
         [ "$clipboard" ] && printf %s "$clipboard" | pbcopy
-        # "OPTIONAL" line is printed right before the "Enter Export Password" prompt from the pkcs12 command
-        echo "${smul}OPTIONAL${rmul} (press enter for blank password)"
+        # Below lines are printed right before the "Enter Export Password" prompt from the pkcs12 export command
+        echo "${bold}NOTE:${reset} This encrypts the client certificate itself, so that it cannot be used without this password."
+        echo "${smul}secure prompt: no text will appear as you type${rmul}"
         if openssl pkcs12 -export -in "$pem_filename" -inkey "$key_filename" -certfile "$ca_cert_filename" -name "$user-$hostname" -out "$p12_filename"; then
             printf '%s\n' '' "$(_bold "Created PKCS12 client certificate:")" "$p12_filename" ''
             _bold "Full path to p12:"
