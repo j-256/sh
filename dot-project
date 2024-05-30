@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+#! tested in: GNU bash, version 5.2.26(1)-release (x86_64-apple-darwin23.2.0) | older versions and other shells will work but not guaranteed
+
+################################################################################
+# Creates a .project file in each subfolder of the given or current directory, #
+# allowing them to be recognized as Salesforce B2C Commerce cartridges         #
+################################################################################
+# Usage:                                                                       #
+#   dot-project [code_version_directory]                                       #
+################################################################################
+
+_dot_project() {
+    # Default to current directory
+    local code_version="${1:-"."}"
+    # Create a .project file in each subdirectory (cartridge)
+    local cartridge
+    for cartridge in "${code_version%"/"}"/*; do # remove trailing slash, if present, to avoid doubling
+        if [ -d "$cartridge" ]; then
+            local project_file="$cartridge/.project"
+            if cat <<DOT_PROJECT_TEMPLATE >"$project_file"; then
+<?xml version="1.0" encoding="UTF-8"?>
+<projectDescription>
+    <name>$(basename "$cartridge")</name>
+    <comment></comment>
+    <projects>
+    </projects>
+    <buildSpec>
+        <buildCommand>
+            <name>com.demandware.studio.core.beehiveElementBuilder</name>
+            <arguments>
+            </arguments>
+        </buildCommand>
+    </buildSpec>
+    <natures>
+        <nature>com.demandware.studio.core.beehiveNature</nature>
+    </natures>
+</projectDescription>
+DOT_PROJECT_TEMPLATE
+                echo "Generated $project_file"
+            else
+                echo "ERROR: Failed to create $project_file" >&2
+            fi
+        fi
+    done
+}
+
+_dot_project "$@"
