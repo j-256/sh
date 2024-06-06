@@ -226,27 +226,31 @@ _tsd() {
     # If it's not a timestamp, convert it to a human-readable duration format
     if [ -z "$is_timestamp" ]; then # Not using an `else` because the previous `if` block could modify this variable
         local duration=''
-        local -i hours=0 minutes=0 seconds=0 milliseconds=0 microseconds=0 nanoseconds=0
+        local -i days=0 hours=0 minutes=0 seconds=0 milliseconds=0 microseconds=0 nanoseconds=0
 
         # Calculate each portion
         # 64-bit signed integers, so max value is (2^63)-1 == 9,223,372,036,854,775,807 (19 digits)
         if [ "$unit" = "s" ]; then
-            hours=$((input / 3600))
+            days=$((input / 86400))
+            hours=$((input % 86400 / 3600))
             minutes=$((input % 3600 / 60))
             seconds=$((input % 60))
         elif [ "$unit" = "ms" ]; then
-            hours=$((input / 3600000))
+            days=$((input / 86400000))
+            hours=$((input % 86400000 / 3600000))
             minutes=$((input % 3600000 / 60000))
             seconds=$((input % 60000 / 1000))
             milliseconds=$((input % 1000))
         elif [ "$unit" = "us" ]; then
-            hours=$((input / 3600000000))
+            days=$((input / 86400000000))
+            hours=$((input % 86400000000 / 3600000000))
             minutes=$((input % 3600000000 / 60000000))
             seconds=$((input % 60000000 / 1000000))
             milliseconds=$((input % 1000000 / 1000))
             microseconds=$((input % 1000))
         elif [ "$unit" = "ns" ]; then
-            hours=$((input / 3600000000000)) # "Only" 10 digits
+            days=$((input / 86400000000000)) # "Only" 11 digits - max value is 2^63-1 (9223372036854775808), 19 digits long
+            hours=$((input % 86400000000000 / 3600000000000))
             minutes=$((input % 3600000000000 / 60000000000))
             seconds=$((input % 60000000000 / 1000000000))
             milliseconds=$((input % 1000000000 / 1000000))
@@ -254,23 +258,27 @@ _tsd() {
             nanoseconds=$((input % 1000))
         fi
 
-        # Only display zeroes if they're in the middle: e.g. "2h 0m 5s" for 7205 but "2h" for 7200
-        if [ $hours -gt 0 ]; then
-            duration="${hours}h"
+        # Only display zeroes if they're in the middle: e.g. "2d 0h 0m 5s" for 172805 but "2d" for 172800
+        if [ $days -gt 0 ]; then
+            duration="${days}d"
         fi
-        if [ $minutes -gt 0 ] || { { [ $hours -gt 0 ]; } && { [ $seconds -gt 0 ] || [ $milliseconds -gt 0 ] || [ $microseconds -gt 0 ] || [ $nanoseconds -gt 0 ]; } }; then
+        if [ $hours -gt 0 ] || { [ $days -gt 0 ] && { [ $minutes -gt 0 ] || [ $seconds -gt 0 ] || [ $milliseconds -gt 0 ] || [ $microseconds -gt 0 ] || [ $nanoseconds -gt 0 ]; } }; then
+            [ "$duration" ] && duration="$duration "
+            duration="${duration}${hours}h"
+        fi
+        if [ $minutes -gt 0 ] || { { [ $days -gt 0 ] || [ $hours -gt 0 ]; } && { [ $seconds -gt 0 ] || [ $milliseconds -gt 0 ] || [ $microseconds -gt 0 ] || [ $nanoseconds -gt 0 ]; } }; then
             [ "$duration" ] && duration="$duration "
             duration="${duration}${minutes}m"
         fi
-        if [ $seconds -gt 0 ] || { { [ $hours -gt 0 ] || [ $minutes -gt 0 ]; } && { [ $milliseconds -gt 0 ] || [ $microseconds -gt 0 ] || [ $nanoseconds -gt 0 ]; } }; then
+        if [ $seconds -gt 0 ] || { { [ $days -gt 0 ] || [ $hours -gt 0 ] || [ $minutes -gt 0 ]; } && { [ $milliseconds -gt 0 ] || [ $microseconds -gt 0 ] || [ $nanoseconds -gt 0 ]; } }; then
             [ "$duration" ] && duration="$duration "
             duration="${duration}${seconds}s"
         fi
-        if [ $milliseconds -gt 0 ] || { { [ $hours -gt 0 ] || [ $minutes -gt 0 ] || [ $seconds -gt 0 ]; } && { [ $microseconds -gt 0 ] || [ $nanoseconds -gt 0 ]; } }; then
+        if [ $milliseconds -gt 0 ] || { { [ $days -gt 0 ] || [ $hours -gt 0 ] || [ $minutes -gt 0 ] || [ $seconds -gt 0 ]; } && { [ $microseconds -gt 0 ] || [ $nanoseconds -gt 0 ]; } }; then
             [ "$duration" ] && duration="$duration "
             duration="${duration}${milliseconds}ms"
         fi
-        if [ $microseconds -gt 0 ] || { { [ $hours -gt 0 ] || [ $minutes -gt 0 ] || [ $seconds -gt 0 ] || [ $milliseconds -gt 0 ]; } && { [ $nanoseconds -gt 0 ]; } }; then
+        if [ $microseconds -gt 0 ] || { { [ $days -gt 0 ] || [ $hours -gt 0 ] || [ $minutes -gt 0 ] || [ $seconds -gt 0 ] || [ $milliseconds -gt 0 ]; } && { [ $nanoseconds -gt 0 ]; } }; then
             [ "$duration" ] && duration="$duration "
             duration="${duration}${microseconds}us"
         fi
