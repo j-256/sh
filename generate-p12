@@ -1,5 +1,5 @@
-#!/usr/bin/env bash
-#! tested in: GNU bash, version 5.2.26(1)-release (x86_64-apple-darwin23.2.0) | older versions and other shells will work but not guaranteed
+#!/bin/bash
+# Tested in GNU bash, version 3.2.57(1)-release (2007) (x86_64-apple-darwin23)
 
 ##############################################################################################
 # Generates a .p12 client certificate for Salesforce B2C Commerce stg code upload MFA        #
@@ -11,8 +11,9 @@
 
 _generate_p12() {
     # Example hostname: "cert.staging.customer.realm.demandware.net"
+    # However, any BM hostname or as little as "customer.realm" or "customer-realm" may be provided
 
-    # Text colors for later use - by convention wrapped in {} when used below, for legibility
+    # Text colors and formatting for later use - by convention wrapped in {} when used below, for legibility
     local red;       red="$(tput setaf 9)"  # 9  == bright red (8+1)
     local green;   green="$(tput setaf 10)" # 10 == bright green (8+2)
     local yellow; yellow="$(tput setaf 11)" # 11 == bright yellow (8+3)
@@ -23,52 +24,8 @@ _generate_p12() {
     # Note: There is no `tput unbold`. `tput bold` is $'\E[1m', which you would generally undo with
     #  $'\E[0m' or $'\E[m', but those essentially match `tput sgr0`, clearing all formatting
 
-    _prompt() {
-        local -r zsh="$ZSH_VERSION" # truthy if shell is zsh, falsy otherwise - in which case we assume bash
-        local VARNAME="${1:?"variable name is required"}"
-        local PROMPT="$2"
-        local DEFAULT="$3"
-        local PLACEHOLDER=""
-        # if provided, set placeholder to the 4th parameter, substituting the special string "%DEFAULT%" with $DEFAULT 
-        if [ "$4" ]; then
-            PLACEHOLDER="${4//"%DEFAULT%"/"$DEFAULT"}"
-        # ... otherwise, set placeholder to default value
-        else
-            PLACEHOLDER="$DEFAULT"
-        fi
-
-        # Display prompt in default color and placeholder in gray
-        printf "%s\e[90m%s\e[0m" "$PROMPT" "$PLACEHOLDER"
-        # Move the cursor back to the end of the prompt
-        # `tput cub 0` still moves the cursor back one, so only run if necessary
-        if [ ${#PLACEHOLDER} -ne 0 ]; then
-            tput cub ${#PLACEHOLDER}
-        fi
-
-        # Read the first character to detect when the user starts typing
-        local first_char
-        if [ "$zsh" ]; then
-            IFS= read -r -k1 first_char
-        else
-            IFS= read -r -N 1 first_char
-        fi
-
-        local input
-        # If the input character is not empty or just a newline, read the entire line
-        if [ "$first_char" ] && [ "$first_char" != $'\n' ]; then
-            # Clear the rest of the line, read a line of input, and prepend the initial character
-            tput el
-            local line; IFS= read -r line
-            #shellcheck disable=SC2034 # $input is used in eval below
-            input="$first_char$line"
-        fi
-
-        # Store the line input by the user, or the default value if none was provided, to the provided variable name
-        eval "$VARNAME"'="${input:-"$DEFAULT"}"'
-        #declare -g "$VARNAME"="${input:-"$DEFAULT"}" # eval version seems to have better compatibility
-    }
     _file_exists() {
-        [ -f "$1" ] || { echo "File not found: $1" >&2 && return 1; }
+        [ -f "$1" ] || { echo "File not found: $1" >&2; return 1; }
         return 0
     }
     _repeat() { # repeats a string n times
@@ -83,22 +40,22 @@ _generate_p12() {
     # Save old dir to `cd` back to
     local old_dir="$PWD"
     # `cd` to working directory (or current if not provided, which will be a no-op)
-    cd "${wd:-"$PWD"}" || { echo "Error: Failed to change to specified directory" >&2 && return 1; }
+    cd "${wd:-"$PWD"}" || { echo "[ERR] Failed to change to specified directory" >&2; return 1; }
 
     local hostname
     printf %s "Hostname (cert.staging.***): "
     read -r hostname
-    echo
+    echo #newline
     # Make sure we end up with a good hostname no matter what form it's provided in
     # Any PIG instance's BM hostname will end up in the "cert.staging" form, including providing as little as "production-customer-realm"
     hostname="$(printf %s "$hostname" | sed 's/_/./g; s/-/./g;
-                                             s/^production//; s/^development//; s/^staging//; s/^cert\.staging//;
-                                             s/^/cert.staging/;
+                                             s/^production\.//; s/^development\.//; s/^staging\.//; s/^cert\.staging\.//;
+                                             s/^/cert.staging./;
                                              s/\.demandware\.net$//;
                                              s/$/.demandware.net/'
     )"
 
-    # Assemble cert bundle filenames and check that they all exist before proceeding
+    # Assemble cert bundle filenames and verify that they all exist before proceeding
     local ca_cert_filename="${hostname}_01.crt"
     local ca_key_filename="${hostname}_01.key"
     local ca_pass_filename="${hostname}_01.txt"
@@ -108,7 +65,7 @@ _generate_p12() {
     _file_exists "$ca_key_filename" || any_missing=true
     _file_exists "$ca_pass_filename" || any_missing=true
     _file_exists "$ca_serial_filename" || any_missing=true
-    [ "$any_missing" ] && echo "Necessary file(s) missing, aborting p12 generation" >&2 && return 1
+    [ "$any_missing" ] && { echo "[ERR] Necessary file(s) missing, aborting p12 generation" >&2; return 1; }
 
     # Define output file names
     local user="$USER"
@@ -129,17 +86,18 @@ ${smul}Using these filenames:${rmul}
   $pem_filename
   $p12_filename
 EOF
-    echo
+    echo #newline
 
-    # local -r PLACEHOLDER="(<ENTER> for %DEFAULT%)"
     # Prompt for desired cert expiration, in years
-    local -i years
-    _prompt years "Years until expiration: " 10 #"$PLACEHOLDER"
-    local -i days=$((years*365))
-    echo
+    local years
+    printf %s "Years until expiration: "
+    read -r years
+    local days=$((years*365))
+    echo #newline
 
     if ! openssl req -new -sha256 -newkey rsa:2048 -nodes -out "$req_filename" -keyout "$key_filename"; then
-        _bold "\`openssl req\` (step 1/3) failed - .req and .key files not generated" >&2 && return 1
+        _bold "[ERR] \`openssl req\` (step 1/3) failed - .req and .key files not generated" >&2
+        return 1
     fi
     printf '%s\n' '' "$(_bold "Created CSR:")" "$req_filename"
     printf '%s\n' "$(_bold "Created private key:")" "$key_filename" ''
@@ -154,7 +112,7 @@ EOF
         echo "${red}$(_repeat '-' "$term_width")${reset}"
         echo "${red}${bold}Pass phrase for ${yellow}$ca_key_filename${red}: ${green}$pass${reset}"
         echo "${red}(already copied to clipboard, just use ${yellow}Cmd+V${red}/${yellow}Ctrl+V${red} to paste and hit Enter)${reset}"
-        echo "${red}(no text will appear because it is a secure prompt)${reset}"
+        echo "${red}(${smul}no text will appear${rmul} as you type/paste because it is a secure prompt)${reset}"
         echo "${red}$(_repeat '-' "$term_width")${reset}"
     fi
 
@@ -167,23 +125,24 @@ EOF
         echo "${smul}secure prompt: no text will appear as you type${rmul}"
         if openssl pkcs12 -export -in "$pem_filename" -inkey "$key_filename" -certfile "$ca_cert_filename" -name "$user-$hostname" -out "$p12_filename"; then
             printf '%s\n' '' "$(_bold "Created PKCS12 client certificate:")" "$p12_filename" ''
-            _bold "Full path to p12:"
+            _bold "Finished successfully. Full path to p12:"
             realpath "$p12_filename"
         else
-            _bold "\`openssl pkcs12\` (step 3/3) failed - .p12 file not generated" >&2 && return 1
+            _bold "[ERR] \`openssl pkcs12\` (step 3/3) failed - .p12 file not generated" >&2
+            return 1
         fi
     else
         # Restore clipboard if needed
         [ "$clipboard" ] && printf %s "$clipboard" | pbcopy
-        _bold "\`openssl x509\` (step 2/3) failed - .pem file not generated" >&2 && return 1
+        _bold "[ERR] \`openssl x509\` (step 2/3) failed - .pem file not generated" >&2
+        return 1
     fi
 
     # Clean up internal functions to avoid polluting global namespace
-    unset -f _prompt
     unset -f _file_exists
     unset -f _repeat
     unset -f _bold
-    cd "$old_dir" || { echo "Error: Failed to revert to original directory" >&2 && return 1; }
+    cd "$old_dir" || { echo "[ERR] Failed to revert to original directory" >&2; return 1; }
 }
 
 _generate_p12 "$@"
