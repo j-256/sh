@@ -47,7 +47,7 @@ _generate_p12() {
     read -r hostname
     echo #newline
     # Make sure we end up with a good hostname no matter what form it's provided in
-    # Any PIG instance's BM hostname will end up in the "cert.staging" form, including providing as little as "production-customer-realm"
+    # Any PIG instance's BM hostname will end up in the "cert.staging" form, or even providing as little as "customer-realm"
     hostname="$(printf %s "$hostname" | sed 's/_/./g; s/-/./g;
                                              s/^production\.//; s/^development\.//; s/^staging\.//; s/^cert\.staging\.//;
                                              s/^/cert.staging./;
@@ -95,6 +95,7 @@ EOF
     local days=$((years*365))
     echo #newline
 
+    ### Step 1 of 3: Generate a CSR and private key
     if ! openssl req -new -sha256 -newkey rsa:2048 -nodes -out "$req_filename" -keyout "$key_filename"; then
         _bold "[ERR] \`openssl req\` (step 1/3) failed - .req and .key files not generated" >&2
         return 1
@@ -102,6 +103,7 @@ EOF
     printf '%s\n' '' "$(_bold "Created CSR:")" "$req_filename"
     printf '%s\n' "$(_bold "Created private key:")" "$key_filename" ''
 
+    ### Step 2a of 3: Copy password for CA key
     # Back up existing clipboard contents
     local clipboard; clipboard="$(pbpaste)"
     # Copy password from text file to clipboard and print
@@ -116,27 +118,30 @@ EOF
         echo "${red}$(_repeat '-' "$term_width")${reset}"
     fi
 
-    if openssl x509 -req -in "$req_filename" -out "$pem_filename" -days "$days" -CA "$ca_cert_filename" -CAkey "$ca_key_filename" -CAserial "$ca_serial_filename"; then
-        printf '%s\n' '' "$(_bold "Created X.509 intermediate certificate:")" "$pem_filename" ''
-        # Restore clipboard if needed
-        [ "$clipboard" ] && printf %s "$clipboard" | pbcopy
-        # Below lines are printed right before the "Enter Export Password" prompt from the pkcs12 export command
-        echo "${bold}NOTE:${reset} This encrypts the client certificate itself, so that it cannot be used without this password."
-        echo "${smul}secure prompt: no text will appear as you type${rmul}"
-        if openssl pkcs12 -export -in "$pem_filename" -inkey "$key_filename" -certfile "$ca_cert_filename" -name "$user-$hostname" -out "$p12_filename"; then
-            printf '%s\n' '' "$(_bold "Created PKCS12 client certificate:")" "$p12_filename" ''
-            _bold "Finished successfully. Full path to p12:"
-            realpath "$p12_filename"
-        else
-            _bold "[ERR] \`openssl pkcs12\` (step 3/3) failed - .p12 file not generated" >&2
-            return 1
-        fi
-    else
+    ### Step 2b of 3: Create a certificate from the CSR using the CA files (prompts for password from step 2a)
+    if ! openssl x509 -req -in "$req_filename" -out "$pem_filename" -days "$days" -CA "$ca_cert_filename" -CAkey "$ca_key_filename" -CAserial "$ca_serial_filename"; then
         # Restore clipboard if needed
         [ "$clipboard" ] && printf %s "$clipboard" | pbcopy
         _bold "[ERR] \`openssl x509\` (step 2/3) failed - .pem file not generated" >&2
         return 1
     fi
+    printf '%s\n' '' "$(_bold "Created X.509 intermediate certificate:")" "$pem_filename" ''
+    # Restore clipboard if needed
+    [ "$clipboard" ] && printf %s "$clipboard" | pbcopy
+
+    ### Step 3 of 3: Bundle the CA-signed certificate and the private key from step 1 into a .p12 client certificate
+    # Below lines are printed right before the "Enter Export Password" prompt from the pkcs12 export command
+    echo "${bold}NOTE:${reset} This encrypts the client certificate itself, so that it cannot be used without this password."
+    echo "${smul}secure prompt: no text will appear as you type${rmul}"
+    if ! openssl pkcs12 -export -in "$pem_filename" -inkey "$key_filename" -certfile "$ca_cert_filename" -name "$user-$hostname" -out "$p12_filename"; then
+        _bold "[ERR] \`openssl pkcs12\` (step 3/3) failed - .p12 file not generated" >&2
+        return 1
+    fi
+    printf '%s\n' '' "$(_bold "Created PKCS12 client certificate:")" "$p12_filename" ''
+
+    ### DONE
+    _bold "Finished successfully. Full path to p12:"
+    realpath "$p12_filename"
 
     # Clean up internal functions to avoid polluting global namespace
     unset -f _file_exists
