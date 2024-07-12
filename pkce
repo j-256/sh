@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+
+######################################################################################
+# Generates a 128-character PKCE code verifier and its corresponding code challenge, #
+# separated by a tab (the default `cut` delimiter) or newline                        #
+######################################################################################
+# Usage:                                                                             #
+#   pkce [-n|--newline]                                                              #
+# Dependencies:                                                                      #
+#   openssl                                                                          #
+# Example 1 (using an intermediate variable):                                        #
+#   codes="$(pkce)"                                                                  #
+#   verifier="$(echo "$codes" | cut -f1)" # `awk '{print $1}'` is equivalent         #
+#   challenge="$(echo "$codes" | cut -f2)" # `awk '{print $2}'` is equivalent        #
+# Example 2 (using process substitution with `read` to set variables directly):      #
+#   { read -r verifier; read -r challenge; } < <(pkce -n)                            #
+# Reference:                                                                         #
+#   https://datatracker.ietf.org/doc/html/rfc7636                                    #
+######################################################################################
+
+# A couple of cheeky alternatives (`jq` required):
+# Print verifier and challenge on separate lines
+# curl -s "https://readiness.my.site.com/services/oauth2/pkce/generator" | jq -r '.code_verifier, .code_challenge'
+# Store codes to $verifier and $challenge
+# { read -r verifier; read -r challenge; } < <(curl -s "https://readiness.my.site.com/services/oauth2/pkce/generator" | jq -r '.code_verifier, .code_challenge')
+
+_pkce() {
+    # Converts base64 to base64-url (URL-safe version)
+    _base64_to_base64url() {
+        # Remove padding (=) and newlines, replace '+' with '-' and '/' with '_'
+        tr -d '=\n' | tr '+/' '-_'
+    }
+
+    # RFC7636 specifies code verifier should be 43 to 128 random characters
+    # 32 bytes in base64 is 43 characters (unpadded)
+    # 96 bytes in base64 is 128 characters (unpadded)
+    # https://datatracker.ietf.org/doc/html/rfc7636#section-4.1
+    local code_verifier; code_verifier="$(openssl rand -base64 96 | _base64_to_base64url)"
+    local code_challenge; code_challenge="$(printf %s "$code_verifier" | openssl dgst -binary -sha256 | openssl enc -base64 | _base64_to_base64url)"
+
+    # Separate by newline if `-n` is provided, otherwise use a tab character
+    case "$1" in # no need to loop through $@ as there is only a single argument (which is optional)
+        '-n'|'--newline') local delimiter='\n';;
+        *) local delimiter='\t';;
+    esac
+
+    # Print code verifier and code challenge, separated by a tab or newline
+    printf "%s$delimiter%s" "$code_verifier" "$code_challenge"
+
+    # Clean up local function to avoid bleeding into outer scope
+    unset -f _base64_to_base64url
+}
+
+_pkce "$@"
