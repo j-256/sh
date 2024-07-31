@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+
+###########################################################################
+# Finds the equivalent buying power today* of a historical amount of USD. #
+# e.g. "$1234.56 in Feb 1980 is equivalent to $4915.94 in Jun 2024"       #
+# Data Source: https://data.bls.gov/cgi-bin/cpicalc.pl                    #
+# * Previous month is used due to a 1-month lag in the data               #
+###########################################################################
+# Usage:                                                                  #
+#   inflate <amount> <year> [month]                                       #
+# (where month is an integer in [1,12])                                   #
+###########################################################################
+
+_inflate() {
+    [ "$1" ] || { echo "amount is required" >&2; return 1; }
+    [ "$2" ] || { echo "year is required" >&2; return 1; }
+    local amount; amount="$(printf '%.2f' "$1")"
+    local input_year="$2"
+    local input_month="${3:-1}" # default to January
+    # Zero-pad month if necessary
+    [ "$input_month" -lt 10 ] && input_month="0${input_month#0}"
+
+    # Month names array with a placeholder at index 0, so that 1 is January and 12 is December
+    local months=(ERR Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec)
+
+    # Get the current year and month
+    local current_year; current_year=$(date +%Y)
+    local current_month; current_month=$(date +%m)
+
+    # Data is available with a one-month delay, so subtract 1 from current month
+    # If it's currently January, loop back around to December of the previous year
+    local recent_year
+    local recent_month
+    if [ "$current_month" -eq 1 ]; then
+        recent_year=$((current_year - 1))
+        recent_month=12
+    else
+        recent_year=$current_year
+        recent_month=$(printf '%02d' $((current_month - 1))) # pad month to 2 digits
+    fi
+
+    # Format the input and recent year-month dates into a more readable format, e.g. "Jan 2024" rather than "202401"
+    # "10#" is necessary to avoid numbers with a leading 0 from being interpreted as octal
+    local input_date_formatted="${months[10#$input_month]} $input_year"
+    local recent_date_formatted="${months[10#$recent_month]} $recent_year"
+
+    # Fetch the data and extract the adjusted amount
+    local result; result="$(curl -fsS "https://data.bls.gov/cgi-bin/cpicalc.pl?cost1=$amount&year1=$input_year$input_month&year2=$recent_year$recent_month" | sed -n '/id="answer"/{s/^.*\$//;s/<.*$//;s/,//g;p;}')"
+    if [ -z "$result" ]; then
+        echo "Failed to convert \$$amount from $input_date_formatted to $recent_date_formatted" >&2
+        return 1
+    fi
+
+    # Print the result
+    echo "\$$amount in $input_date_formatted is equivalent to \$$result in $recent_date_formatted"
+}
+
+_inflate "$@"
