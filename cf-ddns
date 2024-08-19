@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 #! tested in: GNU bash, version 5.2.26(1)-release (x86_64-apple-darwin23.2.0) | older versions and other shells will work but not guaranteed
 
-############################################################################
-# Updates Cloudflare DNS to use the current machine's outbound IP address. #
-# Run periodically from host to achieve basic Dynamic DNS capabilities.    #
-# Usage: cf-ddns <api_token> <domain_name>                                 #
-# Required API token permissions: Zone.Zone, Zone.DNS                      #
-############################################################################
+###########################################################################################################################
+# Updates Cloudflare DNS to use the current machine's outbound IP address. Deletes all existing A records for the domain. #
+# Run periodically from host to achieve basic Dynamic DNS capabilities.                                                   #
+###########################################################################################################################
+# Usage:                                                                                                                  #
+#   cf-ddns <api_token> <domain_name>                                                                                     #
+# Required API token permissions: Zone.Zone, Zone.DNS                                                                     #
+###########################################################################################################################
 
 _cf_ddns() {
     local -r API_VERSION="v4"
