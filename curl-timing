@@ -235,11 +235,11 @@ while (( i++ < ${#files[@]} )); do # $urls and $files will be the same length
     done; count=0
 
     # Run `stats` if needed and save output to a variable
-    if [ -n "$print_stats" ] || [ -n "$save_stats" ]; then
+    if [ "$print_stats" ] || [ "$save_stats" ]; then
         stats_output="$(stats -n < "$file")"
     fi
     # If "save" flag is set, save `stats` analysis: file.txt -> file_stats.txt
-    if [ -n "$save_stats" ]; then
+    if [ "$save_stats" ]; then
         stats_file="${file//\.$file_ext/"_stats.$file_ext"}"
         # If a stats file already exists, back it up: file_stats.txt -> file_stats.txt.bak
         [ -f "$stats_file" ] && mv -v "$stats_file" "$stats_file.bak"
@@ -247,7 +247,7 @@ while (( i++ < ${#files[@]} )); do # $urls and $files will be the same length
         echo "Statistics saved to: $(realpath "$stats_file")"
     fi
     # If "print" flag is set, print `stats` output with an empty line on each end
-    if [ -n "$print_stats" ]; then
+    if [ "$print_stats" ]; then
         printf '\n%s\n\n' "$stats_output"
     fi
     echo # newline in between test cases (URLs)
