@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+
+############################################################################
+# Starts a web server (using socat) on the given port (default 8080) which #
+# returns 200 OK after waiting for n milliseconds                          #
+# e.g. curl http://localhost:8080/2500 # Responds after ~2.5 seconds       #
+############################################################################
+# Usage:                                                                   #
+#   slow-server [port]                                                     #
+############################################################################
+# Dependencies:                                                            #
+#   socat - upgraded netcat/nc, used as a simple server                    #
+#   sleep - must support fractional seconds on your system                 #
+############################################################################
+
+_slow_server() {
+    # Function arguments
+    local port="${1:-8080}"
+
+    # Check for socat dependency
+    if ! command -v socat >/dev/null 2>&1; then
+        echo "ERROR: Missing dependency: socat" >&2
+        return 1
+    fi
+
+    # Function invoked by socat below on each request
+    #shellcheck disable=SC2317 # "Command appears to be unreachable. Check usage (or ignore if invoked indirectly)."
+    _slow_response() {
+        _is_number() {
+            case "$1" in
+                ''|*[!0-9]*)
+                    return 1 ;; # not a number
+                *)
+                    return 0 ;; # is a number
+            esac
+        }
+        local method path version
+        read method path version
+        local last; last="$(basename "$path")"
+        printf %s "$method $path ($last)" >&2
+        # Ignore other paths, return not found
+        if ! _is_number "$last"; then
+            echo " [ignored]" >&2 # append to previous line
+            echo "HTTP/1.1 404 Not Found\r\n"
+            return 0
+        else
+            local delay_ms="$last"
+            printf '\n' >&2 # move to next line
+        fi
+        local seconds="$((delay_ms / 1000)).$((delay_ms % 1000))"
+        sleep "$seconds"
+        local response="HTTP/1.1 200 OK\r\n\r\n$last"
+        echo "$response"
+        echo "Done: $method $path ($delay_ms)" >&2
+        unset -f _is_number
+    }
+    export -f _slow_response # exported for socat
+
+    # Start simple server
+    echo "Starting server at http://localhost:$port"
+    socat "TCP-LISTEN:$port,fork,reuseaddr" "SYSTEM:_slow_response"
+    unset -f _slow_response # unset exported function when server closes
+}
+
+_slow_server "$@"
