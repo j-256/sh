@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+
+##########################################################################################################################################
+# Hardlinks all files from one directory to another (like copying but both files end up pointing to the same data), optionally recursing #
+##########################################################################################################################################
+# Usage:                                                                                                                                 #
+#   lndir [-r|--recursive] [-d|--dryrun] <source_dir> <destination_dir>                                                                  #
+##########################################################################################################################################
+
+_lndir() {
+    local recursive=false
+    local dryrun=false
+    local from_dir
+    local to_dir
+
+    # Parse arguments
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -r|--recursive) recursive=true ;;
+            -d|--dryrun|--dry-run) dryrun=true ;;
+            *) if [ -z "$from_dir" ]; then from_dir="$1"; else to_dir="$1"; fi ;;
+        esac
+        shift
+    done
+
+    if [ -z "$from_dir" ] || [ -z "$to_dir" ]; then
+        echo "Usage: lndir [-r|--recursive] [-d|--dryrun] <source_dir> <destination_dir>"
+        return 1
+    fi
+
+    _link_files() {
+        # Unquoted "#" asserts start of string
+        local parent_dir="${1/#"$from_dir"/"$to_dir"}"
+        if [ "$dryrun" = false ] && [ ! -d "$parent_dir" ]; then
+            mkdir -p "$parent_dir"
+        elif [ "$dryrun" = true ]; then
+            echo "Would create directory: $parent_dir"
+        fi
+
+        find "$1" -mindepth 1 -maxdepth 1 ! -name .DS_Store -print0 | while IFS= read -r -d $'\0' file; do
+            local filename; filename="$(basename "$file")"
+            local to_file="$parent_dir/$filename"
+
+            if [ -d "$file" ]; then
+                if [ "$recursive" = true ]; then
+                    _link_files "$file"
+                fi
+            else
+                if [ -f "$to_file" ]; then
+                    local existing_link; existing_link="$(find "$to_file" -samefile "$file" 2>/dev/null)"
+                    if [ "$existing_link" ]; then
+                        echo "Hardlink already exists: $to_file"
+                    else
+                        echo "File exists, cannot hardlink: $to_file"
+                    fi
+                else
+                    if [ "$dryrun" = false ]; then
+                        ln -v "$file" "$to_file"
+                    else
+                        echo "Would link: $file -> $to_file"
+                    fi
+                fi
+            fi
+        done
+    }
+
+    _link_files "$from_dir"
+
+    # Noting extra files
+    if [ "$dryrun" = false ]; then
+        echo "Extra files in destination not in source:"
+        find "$to_dir" -type f -print0 | while IFS= read -r -d $'\0' dest_file; do
+            local src_file="${dest_file/#$to_dir/$from_dir}"
+            if [ ! -e "$src_file" ]; then
+                echo "$dest_file"
+            fi
+        done
+
+        # Noting empty directories in destination
+        find "$to_dir" -type d -empty -print | while read -r dir; do
+            echo "Empty directory: $dir"
+        done
+    else
+        echo "Dry run enabled, no changes were made."
+    fi
+}
+
+_lndir "$@"
