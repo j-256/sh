@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+
+#################################################################################################
+# "Explodes" a directory, moving its contents up one level and deleting the now-empty directory #
+#################################################################################################
+# Usage:                                                                                        #
+#   explode <directory>                                                                         #
+# Exit Codes:                                                                                   #
+#   1: mv failed                                                                                #
+#   2: rmdir failed                                                                             #
+#################################################################################################
+
+_explode() {
+    local dir="$1"
+    # Validate input directory exists and is not a file
+    if [ ! -e "$dir" ]; then
+        echo "ERROR: $dir does not exist." >&2
+        return 1
+    fi
+    if [ ! -d "$dir" ]; then
+        echo "ERROR: $dir is not a directory." >&2
+        return 1
+    fi
+    # Move all files and directories up one level
+    if ! find "$dir" -mindepth 1 -maxdepth 1 -exec mv -n {} "$dir/.." \;; then
+        echo "ERROR: Failed to move all files and directories." >&2
+        return 1
+    fi
+    # Remove the target directory
+    if ! rmdir "$dir"; then
+        local num_files; num_files="$(find "$dir" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')"
+        echo "WARNING: Failed to remove $dir after exploding. There are $num_files files remaining." >&2
+        return 2
+    fi
+}
+
+_explode "$@"
