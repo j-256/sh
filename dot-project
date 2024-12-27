@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-#! tested in: GNU bash, version 5.2.26(1)-release (x86_64-apple-darwin23.2.0) | older versions and other shells will work but not guaranteed
 
 ################################################################################
 # Creates a .project file in each subfolder of the given or current directory, #
