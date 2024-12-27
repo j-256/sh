@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+
+#########################################################################
+# Prints a base64-encoded DKIM public key given the selector and domain #
+# Raw DNS response printed to stderr, key printed to stdout             #
+#########################################################################
+# Usage:                                                                #
+#   dkim-pubkey <selector> <domain>                                     #
+# Example:                                                              #
+#   dkim-pubkey dkim-prd gmail.com                                      #
+#   -> DNS TXT dkim-prd._domainkey.gmail.com, formatted                 #
+#########################################################################
+
+_dkim_pubkey() {
+    local selector="${1:?"not enough arguments: selector and domain required"}"
+    local domain="${2:?"not enough arguments: domain required"}"
+    local dns_hostname="$selector._domainkey.$domain"
+    local dns_response; dns_response="$(dig +short TXT "$dns_hostname")"
+    echo "\$ dig +short TXT \"$dns_hostname\"" >&2
+    if [ -z "$dns_response" ]; then
+        echo "ERROR: DNS response empty" >&2
+        return 1
+    fi
+    echo "$dns_response" >&2
+    echo >&2
+    echo "$dns_response" | sed 's/^.*p=//; s/"$//; s/" "//g'
+}
+
+_dkim_pubkey "$@"
