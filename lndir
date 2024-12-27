@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 
-##########################################################################################################################################
-# Hardlinks all files from one directory to another (like copying but both files end up pointing to the same data), optionally recursing #
-##########################################################################################################################################
-# Usage:                                                                                                                                 #
-#   lndir [-r|--recursive] [-d|--dryrun] <source_dir> <destination_dir>                                                                  #
-##########################################################################################################################################
+#########################################################################
+# Hardlinks all files from one directory to another (like copying but   #
+# both files end up pointing to the same data), optionally recursing    #
+#########################################################################
+# Usage:                                                                #
+#   lndir [-r|--recursive] [-d|--dryrun] <source_dir> <destination_dir> #
+#########################################################################
 
 _lndir() {
     local recursive=false
