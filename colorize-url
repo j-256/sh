@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-#! tested in: GNU bash, version 5.2.37(1)-release (x86_64-apple-darwin23.4.0) | older versions and other shells will work but not guaranteed
 
 ###################################################################################
 # Applies different colors to portions of provided URL, for increased readability #
@@ -84,16 +83,15 @@ _colorize_url() {
     # Intermediate variables prefixed with underscore
     local protocol="${url%%'://'*}"
     local _url_no_protocol="${url#*'://'}"
-    local hostname
+    local hostname=''
     local path=''
     local query=''
     local hash=''
 
+    # Extract pieces based on available delimiters (path, query, hash)
     if [ "$has_path" ]; then
-        # Path exists
         hostname="${_url_no_protocol%%'/'*}"
         local _path_query_hash="${_url_no_protocol#*/}" # Everything after the first slash
-
         if [ "$has_query" ] && [ "$has_hash" ]; then
             local _query_hash="${_path_query_hash#*'?'}"
             path="${_path_query_hash%%'?'*}"
@@ -108,11 +106,16 @@ _colorize_url() {
         else
             path="$_path_query_hash"
         fi
+    # Pathless URLs
     else
-        # Pathless URLs
-        hostname="${_url_no_protocol%%'?'*}"
+        if [ "$has_query" ]; then
+            hostname="${_url_no_protocol%%'?'*}"
+        elif [ "$has_hash" ]; then
+            hostname="${_url_no_protocol%%'#'*}"
+        else
+            hostname="${_url_no_protocol}"
+        fi
         local _after_hostname="${_url_no_protocol#"$hostname"}"
-
         if [ "$has_query" ] && [ "$has_hash" ]; then
             local _query_part="${_after_hostname#*\?}"
             local _hash_part="${_query_part#*#}"
@@ -128,10 +131,10 @@ _colorize_url() {
 
     # Colorize query string key-value pairs if applicable
     if [ "$query" ]; then
-        IFS='&' read -r -a query_params <<<"$query"
+        local query_params; IFS='&' read -r -a query_params <<<"$query"
         local colorized_query
         for param in "${query_params[@]}"; do
-            IFS='=' read -r -a param_parts <<<"$param"
+            local param_parts; IFS='=' read -r -a param_parts <<<"$param"
             local key="${param_parts[0]}"
             local value="${param_parts[1]}"
             if [ "${value}" ]; then
