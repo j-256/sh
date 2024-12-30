@@ -1,29 +1,57 @@
 #!/usr/bin/env bash
-#! tested in: GNU bash, version 5.2.15(1)-release (x86_64-apple-darwin22.1.0) | older versions and other shells will work but not guaranteed
+#! tested in: GNU bash, version 5.2.37(1)-release (x86_64-apple-darwin23.4.0) | older versions and other shells will work but not guaranteed
 
-#################################################################################
-# Apply different colors to portions of provided URL, for increased readability #
-#################################################################################
+###################################################################################
+# Applies different colors to portions of provided URL, for increased readability #
+###################################################################################
 
 _colorize_url() {
-    local url="$1"
-
-    # Inner function prefixed with an underscore just in case `color` has already been defined globally
+    #/# Internal Functions #\#
+    # Prints the nonprinting character for the requested ANSI color
     _color() {
-        local -A map=( [black]=0 [red]=1 [green]=2 [yellow]=3 [blue]=4 [magenta]=5 [cyan]=6 [white]=7 )
-        local base=30
-        local bright_base=90
+        local base=30 # regular colors start here
+        local bright_base=90 # bright (bold in some terminals) colors start here
+
+        # Get starting value based on whether or not bright variant was requested
         if [ "$1" = 'bright' ]; then
-            local code=$bright_base && shift
+            local color_code=$bright_base && shift
         else
-            local code=$base
+            local color_code=$base
         fi
-        local adj=${map["$1"]}
-        code=$((code + adj))
-        printf '\033[%sm' "$code"
+
+        # Convert color name to ANSI offset
+        local offset
+        case "$1" in
+            black)   offset=0 ;;
+            red)     offset=1 ;;
+            green)   offset=2 ;;
+            yellow)  offset=3 ;;
+            blue)    offset=4 ;;
+            magenta) offset=5 ;;
+            cyan)    offset=6 ;;
+            white)   offset=7 ;;
+            reset)   printf '\033[m'; return 0 ;; # reset to terminal default
+            *)       echo "Invalid color: \"$1\"" >&2; return 1 ;;
+        esac
+
+        color_code=$((color_code + offset))
+        printf '\033[%sm' "$color_code"
     }
 
-    local c_protocol; c_protocol="$(_color bright black)"
+    # Returns 0 if $1 contains $2
+    _contains() {
+        local string="$1"
+        local substring="$2"
+        # If string contains substring, it will be deleted and the two strings will no longer match
+        [ "${string#*"$substring"}" != "$string" ]
+    }
+
+    # Clean up internal functions when finished
+    trap 'unset -f _color _contains' RETURN
+    #\# Internal Functions #/#
+
+    #/# Color Control Characters #\#
+    local c_protocol; c_protocol="$(_color bright black)" # gray
     local c_hostname; c_hostname="$(_color bright white)"
     local c_path;         c_path="$(_color bright cyan)"
     local c_key;           c_key="$(_color bright yellow)"
@@ -32,38 +60,105 @@ _colorize_url() {
     local c_question; c_question="$(_color black)"
     local c_equals;     c_equals="$(_color white)"
     local c_and;           c_and="$(_color black)"
-    local c_reset;       c_reset="$(tput sgr0)"
+    local c_hash;         c_hash="$(_color white)"
+    local c_reset;       c_reset="$(_color reset)"
+    #\# Color Control Characters #/#
 
-    # Split the URL into parts: protocol, hostname, path, and query
+    # User input
+    local url="$1"
+    if [ -z "$url" ]; then
+        echo "ERROR: No URL provided" >&2
+        return 1
+    fi
+
+    # Check whether URL has a path, query string, and/or hash (fragment)
+    local has_path
+    local has_query
+    local has_hash
+    # If the URL contains a slash not prefixed by another one, there is a path
+    echo "$url" | grep -q -e '[^/]\/[^/]' -e '[^/]\/$' && has_path=1
+    _contains "${url%%'#'*}" "?" && has_query=1 # Check query only before the hash
+    _contains "$url" "#" && has_hash=1
+
+    # Split the URL into parts
+    # Intermediate variables prefixed with underscore
     local protocol="${url%%'://'*}"
-    local url_no_protocol="${url#*'://'}"
-    local hostname="${url_no_protocol%%'/'*}"
-    local path_and_query="${url_no_protocol#*'/'}"
-    local path="${path_and_query%%'?'*}"
+    local _url_no_protocol="${url#*'://'}"
+    local hostname
+    local path=''
     local query=''
+    local hash=''
 
-    if [ "$path_and_query" != "$path" ]; then
-        query="${path_and_query#*'?'}" # No leading '?'
+    if [ "$has_path" ]; then
+        # Path exists
+        hostname="${_url_no_protocol%%'/'*}"
+        local _path_query_hash="${_url_no_protocol#*/}" # Everything after the first slash
 
-        # Colorize query string keys and values
+        if [ "$has_query" ] && [ "$has_hash" ]; then
+            local _query_hash="${_path_query_hash#*'?'}"
+            path="${_path_query_hash%%'?'*}"
+            query="${_query_hash%%'#'*}"
+            hash="#${_query_hash#*'#'}"
+        elif [ "$has_query" ]; then
+            path="${_path_query_hash%%'?'*}"
+            query="${_path_query_hash#*'?'}"
+        elif [ "$has_hash" ]; then
+            path="${_path_query_hash%%'#'*}"
+            hash="#${_path_query_hash#*'#'}"
+        else
+            path="$_path_query_hash"
+        fi
+    else
+        # Pathless URLs
+        hostname="${_url_no_protocol%%'?'*}"
+        local _after_hostname="${_url_no_protocol#"$hostname"}"
+
+        if [ "$has_query" ] && [ "$has_hash" ]; then
+            local _query_part="${_after_hostname#*\?}"
+            local _hash_part="${_query_part#*#}"
+            query="${_query_part%%'#'*}"
+            hash="#$_hash_part"
+        elif [ "$has_query" ]; then
+            query="${_after_hostname#*\?}"
+        elif [ "$has_hash" ]; then
+            local _hash_part="${_after_hostname#*#}"
+            hash="#$_hash_part"
+        fi
+    fi
+
+    # Colorize query string key-value pairs if applicable
+    if [ "$query" ]; then
         IFS='&' read -r -a query_params <<<"$query"
-        local colorized_query=""
+        local colorized_query
         for param in "${query_params[@]}"; do
             IFS='=' read -r -a param_parts <<<"$param"
             local key="${param_parts[0]}"
             local value="${param_parts[1]}"
-            colorized_query+="$c_and&$c_key${key}$c_equals=$c_value${value}$c_reset"
+            if [ "${value}" ]; then
+                colorized_query+="$c_and&$c_key${key}$c_equals=$c_value${value}$c_reset"
+            else
+                # Include an equals sign only if one was used in the original URL
+                # e.g. see `k2`: `?k1=v1&k2=&k3=v3` vs `?k1=v1&k2&k3=v3`
+                if _contains "$url" "$key="; then # if echo "$query" | grep -q "\(^\|&\)$key="; then
+                    colorized_query+="$c_and&$c_key${key}$c_equals=$c_reset"
+                else
+                    colorized_query+="$c_and&$c_key${key}$c_reset"
+                fi
+            fi
         done
-        query="${colorized_query/#"$c_and&"/"$c_question?"}"
+        # Replace leading ampersand with a question mark (&k1=v1&k2=v2 -> ?k1=v1&k2=v2)
+        query="${colorized_query/#"$c_and&"/"$c_question?"}" # leading "?"
     fi
 
-    # Colorize and reassemble the URL
-    colorized_path="$c_slash/$c_path${path//\//$c_slash/$c_path}" # Colorize slashes
-    local colorized_url="$c_protocol${protocol}://$c_hostname${hostname}${colorized_path}$c_question${query}$c_reset"
-    echo "$colorized_url"
+    # Colorize path components and slashes
+    if [ "$path" ]; then
+        local colorized_slash="$c_slash/$c_path"
+        path="$colorized_slash${path//"/"/"$colorized_slash"}"
+    fi
 
-    # Avoid internal function leaking into global scope (best to avoid side effects when we can)
-    unset -f _color
+    # Finish colorizing and reassemble URL
+    local colorized_url="$c_protocol${protocol}://$c_hostname${hostname}${path}${query}${c_hash}${hash}$c_reset"
+    echo "$colorized_url"
 }
 
 _colorize_url "$@"
