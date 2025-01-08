@@ -46,7 +46,8 @@ _colorize_url() {
     }
 
     # Clean up internal functions when finished
-    trap 'unset -f _color _contains' RETURN
+    local __old_trap; __old_trap="$(trap -p RETURN)"
+    trap 'unset -f _color _contains; [ "$__old_trap" ] && eval "$__old_trap" || trap - RETURN' RETURN
     #\# Internal Functions #/#
 
     #/# Color Control Characters #\#
@@ -76,7 +77,8 @@ _colorize_url() {
     local has_hash
     # If the URL contains a slash not prefixed by another one, there is a path
     echo "$url" | grep -q -e '[^/]\/[^/]' -e '[^/]\/$' && has_path=1
-    _contains "${url%%'#'*}" "?" && has_query=1 # Check query only before the hash
+    local _before_hash="${url%%'#'*}" # Check for query only before the hash
+    _contains "$_before_hash" "?" && has_query=1
     _contains "$url" "#" && has_hash=1
 
     # Split the URL into parts
@@ -130,7 +132,7 @@ _colorize_url() {
     fi
 
     # Colorize query string key-value pairs if applicable
-    if [ "$query" ]; then
+    if [ "$has_query" ]; then
         local query_params; IFS='&' read -r -a query_params <<<"$query"
         local colorized_query
         for param in "${query_params[@]}"; do
@@ -150,11 +152,11 @@ _colorize_url() {
             fi
         done
         # Replace leading ampersand with a question mark (&k1=v1&k2=v2 -> ?k1=v1&k2=v2)
-        query="${colorized_query/#"$c_and&"/"$c_question?"}" # leading "?"
+        query="$c_question?${colorized_query#"$c_and&"}" # leading "?"
     fi
 
     # Colorize path components and slashes
-    if [ "$path" ]; then
+    if [ "$has_path" ]; then
         local colorized_slash="$c_slash/$c_path"
         path="$colorized_slash${path//"/"/"$colorized_slash"}"
     fi
