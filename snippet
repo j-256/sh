@@ -1,0 +1,181 @@
+#!/usr/bin/env bash
+
+####################################################################################################
+# Extracts a snippet of lines between start and end patterns from files or piped/redirected input  #
+####################################################################################################
+# Usage:                                                                                           #
+#   snippet -s pattern [-e pattern] [-f num] [-l num] [file ...]                                   #
+#   snippet -s pattern [-e pattern] [-t num] [file ...]                                            #
+#   snippet [-h]                                                                                   #
+# Options:                                                                                         #
+#   -s, --start pattern       Specify the pattern indicating the beginning of the desired snippet. #
+#   -e, --end pattern         Specify the pattern indicating the end of the desired snippet.       #
+#                             If not provided, reads to end of input.                              #
+#   -f, --trim-first num      Exclude the first num lines of the snippet.                          #
+#   -l, --trim-last num       Exclude the last num lines of the snippet.                           #
+#   -t, --trim num            Exclude the first and last num lines of the snippet.                 #
+#   -h, --help                Show this help message.                                              #
+####################################################################################################
+
+_snippet() {
+    local args=() # positional args
+    local start_pattern
+    local end_pattern
+    local trim_first=0
+    local trim_last=0
+
+    # Print usage (help) info
+    _show_help() {
+        # Underline only if output is a terminal (not a pipe or file)
+        local s; [ -t 1 ] && s="$(tput smul)"
+        local r; [ -t 1 ] && r="$(tput rmul)"
+        echo "Usage:"
+        echo "  snippet -s ${s}pattern${r} [-e ${s}pattern${r}] [-f ${s}num${r}] [-l ${s}num${r}] [${s}file${r} ${s}...${r}]"
+        echo "  snippet -s ${s}pattern${r} [-e ${s}pattern${r}] [-t ${s}num${r}] [${s}file${r} ${s}...${r}]"
+        echo "  snippet [-h]"
+        echo "Options:"
+        echo "  -s, --start ${s}pattern${r}   Specify the pattern indicating the beginning of the desired snippet."
+        echo "  -e, --end ${s}pattern${r}     Specify the pattern indicating the end of the desired snippet."
+        echo "                        If not provided, reads to end of input."
+        echo "  -f, --trim-first ${s}num${r}  Exclude the first ${s}num${r} lines of the snippet."
+        echo "  -l, --trim-last ${s}num${r}   Exclude the last ${s}num${r} lines of the snippet."
+        echo "  -t, --trim ${s}num${r}        Exclude the first and last ${s}num${r} lines of the snippet."
+        echo "  -h, --help            Show this help message."
+    }
+    # Drop first n lines of input
+    _dropfirst() {
+        # macOS `tail` does not support negative numbers, so we need another approach
+        local lines="${1:-0}"
+        if [ "$lines" -gt 0 ]; then
+            sed "1,${lines}d"
+        else
+            cat # print input as-is
+        fi
+    }
+    # Drop last n lines of input
+    _droplast() {
+        # macOS `head` does not support negative numbers, so we need another approach
+        local lines="${1:-0}"
+        if [ "$lines" -gt 0 ]; then
+            # Maintains a buffer of n lines and prints all but the last buffer
+            awk -v n="$lines" '
+                NR > n {                 # Once we have read more than n lines,
+                    print buffer[NR % n] # print the "oldest" line in the cyclic buffer
+                }
+                { buffer[NR % n] = $0 }  # Store the current line in the cyclic buffer
+            '
+            # Alternative: sed -n -e :a -e "1,${1:-1}!{P;N;D;};N;ba"
+        else
+            cat # print input as-is
+        fi
+    }
+    # Unset helper functions before returning
+    local __old_trap; __old_trap="$(trap -p RETURN)"
+    trap 'unset -f _show_help _dropfirst _droplast; [ "$__old_trap" ] && eval "$__old_trap" || trap - RETURN' RETURN
+
+    # Just print help if no arguments are provided
+    if [ $# -eq 0 ]; then
+        _show_help
+        return 0
+    fi
+
+    # Parse parameters
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -s|--start|--start-pattern)
+                # Required value: Ensure $2 exists
+                if [ -z "$2" ]; then
+                    echo "[ERR] Missing value for '$1'." >&2
+                    return 1
+                fi
+                start_pattern="$2"
+                shift 2
+                ;;
+            -e|--end|--end-pattern)
+                # Required value: Ensure $2 exists
+                if [ -z "$2" ]; then
+                    echo "[ERR] Missing value for '$1'." >&2
+                    return 1
+                fi
+                end_pattern="$2"
+                shift 2
+                ;;
+            # Drop first n lines of snippet
+            -f|--trim-first|--trim-start)
+                # Required value: Ensure $2 exists
+                if [ -z "$2" ]; then
+                    echo "[ERR] Missing value for '$1'." >&2
+                    return 1
+                fi
+                trim_first="$2"
+                shift 2
+                ;;
+            # Drop last n lines of snippet
+            -l|--trim-last|--trim-end)
+                # Required value: Ensure $2 exists
+                if [ -z "$2" ]; then
+                    echo "[ERR] Missing value for '$1'." >&2
+                    return 1
+                fi
+                trim_last="$2"
+                shift 2
+                ;;
+            # Drop first and last n lines of snippet
+            -t|--trim)
+                # Required value: Ensure $2 exists
+                if [ -z "$2" ]; then
+                    echo "[ERR] Missing value for '$1'." >&2
+                    return 1
+                fi
+                trim_first="$2"
+                trim_last="$2"
+                shift 2
+                ;;
+            -h|--help)
+                _show_help
+                return 0
+                ;;
+            # End of options, parse remainder as positional
+            --)
+                while [ $# -gt 0 ]; do
+                    args+=("$1")
+                    shift
+                done
+                break
+                ;;
+            # Unknown option
+            -*)
+                echo "[ERR] Unknown option '$1'." >&2
+                return 1
+                ;;
+            # Positional argument
+            *)
+                args+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    # Error if no start pattern provided
+    if [ -z "$start_pattern" ]; then
+        echo "[ERR] Start pattern is required." >&2
+        return 1
+    fi
+
+    # If no end pattern provided, read to end of string
+    local sed_cmd
+    if [ "$end_pattern" ]; then
+        sed_cmd="/$start_pattern/,/$end_pattern/p"
+    else
+        sed_cmd="/$start_pattern/,\$p"
+    fi
+
+    # Print file contents if filenames provided, otherwise use piped/redirected input
+    if [ ${#args[@]} -gt 0 ]; then
+        sed -n "$sed_cmd" "${args[@]}" | _dropfirst "$trim_first" | _droplast "$trim_last"
+    else
+        sed -n "$sed_cmd" | _dropfirst "$trim_first" | _droplast "$trim_last"
+    fi
+}
+
+_snippet "$@"
