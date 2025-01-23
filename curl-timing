@@ -17,32 +17,21 @@
 ############################################################################################
 
 ######### CONFIGURATION #########
-# Number of requests to send to each URL (first parameter, default 0 which just prints the URLs and exits)
-declare -ix num_requests="${1:-0}"
+# Number of requests to send to each URL (default 0, which just prints the URLs and exits)
+export num_requests="${1:-0}"
+# Number of seconds to sleep between requests (optional)
+export sleep="$2"
 
 # Helper variables
-pid="78916783M"
-base_url="https://zzcu-010.dx.commercecloud.salesforce.com/s/RefArch/dw/shop/v23_2/products/$pid?client_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-no_expands=""
-some_expands="expand=availability,variations,prices,images,promotions"
-all_expands="expand=availability,bundled_products,links,promotions,options,images,prices,variations,set_products,recommendations"
+base_url="https://www.sweatybetty.com/api/cache/ShopperSearch/productSearch?src=undefined&apiConfig=eyJwYXJhbWV0ZXJzIjp7InNpdGVJZCI6IlNCLVVTIn0sImxvY2FsZSI6ImVuLVVTIiwiY3VycmVuY3kiOiJVU0QiLCJwYXRoIjoiL3VzIn0=&parameters="
+common_params='{"limit":24,"refine":["c_size=M|M|L","cgid=sale"],"sort":"best-matches"}'
 
-# URLs to query
-mapfile -t urls <<EOF
-http://example.com/
-$base_url$no_expands
-$base_url&$some_expands
-$base_url&$all_expands
-EOF
-# Corresponding log file names (absolute or relative path)
-# Response times will be stored in ${file}_${numRequests}.txt
-# Stats will be stored in ${file}_${numRequests}_stats.txt, if enabled
-mapfile -t files <<EOF
-example.com
-no-expands
-${some_expands//,/-}
-${all_expands//,/-}
-EOF
+# Additional URLs and filenames added for each element in the $expands array
+urls=("$base_url$(printf %s "$common_params" | base64)") # NOTE: Excluding expand is the same as requesting all expansions
+files=("no-expand")
+all_expands="availability,images,prices,represented_products,variations"
+# Appended to base URL
+expands=("none" "$all_expands" "availability" "images" "prices" "represented_products" "variations")
 
 # Run results through `stats` and print to stdout
 print_stats=true # empty for false, NOT "false"
@@ -54,6 +43,14 @@ save_stats=true # empty for false, NOT "false"
 # Debug flag for verbose output, mostly used for development
 [ "$c_DEBUG" ] || export c_DEBUG= #true
 ######### /CONFIGURATION #########
+
+# Assemble URLs and filenames
+# urls=()
+# files=()
+for expand in "${expands[@]}"; do
+    urls+=("$base_url$(printf %s "${common_params%?}"',"expand":"'"$expand"'"}' | base64)")
+    files+=("expand=${expand//,/-}")
+done
 
 dbg() { [ "$c_DEBUG" ]; }
 
@@ -163,6 +160,7 @@ colorize_url() {
     local path="${path_and_query%%\?*}"
     local query=""
 
+    # Handle query string if present
     if [ "$path_and_query" != "$path" ]; then
         query="${path_and_query#*\?}" # No leading '?'
 
@@ -175,15 +173,13 @@ colorize_url() {
             local value="${param_parts[1]}"
             colorized_query+="$c_and&$c_key${key}$c_equals=$c_value${value}$c_reset"
         done
-        query="${colorized_query/#$c_and&/$c_question?}"
+        query="${colorized_query/#"$c_and&"/"$c_question?"}"
     fi
 
     # Colorize and reassemble the URL
-    colorized_path="$c_slash/$c_path${path//\//$c_slash/$c_path}" # Colorize slashes
+    local colorized_path="$c_slash/$c_path${path//"/"/"$c_slash/$c_path"}" # replace all slashes with the colored version
     local colorized_url="$c_protocol${protocol}://$c_hostname${hostname}${colorized_path}$c_question${query}$c_reset"
-    printf '%s\n' "$colorized_url"
-
-    unset -f color # Internal function
+    echo "$colorized_url"
 }
 range() { # cat file | range 500 1000 # Get lines 500-1000
     sed -n "$1,$2"P
@@ -231,7 +227,10 @@ while (( i++ < ${#files[@]} )); do # $urls and $files will be the same length
     while ((count++ < num_requests)); do
         # Append `(current/total)` requests to existing prefix, left-zero-padded: `[2/4](057/200)`
         px2="$px$(printf "(%0${#num_requests}d/$num_requests)" "$count")"
+        # Send request, logging response time to file
         echo "$px2 $(req "$url" | tee -a "$file")ms"
+        # Pause between requests if requested
+        [ "$sleep" ] && sleep "$sleep"
     done; count=0
 
     # Run `stats` if needed and save output to a variable
