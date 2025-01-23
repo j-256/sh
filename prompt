@@ -2,26 +2,25 @@
 #! tested in: GNU bash, version 5.2.26(1)-release (x86_64-apple-darwin23.2.0) | older versions and other shells will work but not guaranteed
 # Major caveat: Because of the placeholder logic, the first character entered cannot be backspaced
 
-########################################################################################################
-# Prompt the user for input and save it to a variable, with an optional default value and placeholder. #
-# If placeholder is not provided, default value is used.                                               #
-# Any occurrences of "%DEFAULT%" in the placeholder are replaced by the provided default value.        #
-# Due to the nature of the script, it can only be source'd into the current environment, not executed. #
-# Usage:                                                                                               #
-#   . prompt <variable> [default] [placeholder]                                                        #
-#   source prompt <variable> [default] [placeholder]                                                   #
-########################################################################################################
+#########################################################################################################
+# Prompts the user for input and save it to a variable, with an optional default value and placeholder. #
+# If placeholder is not provided, default value is used.                                                #
+# Any occurrences of "%DEFAULT%" in the placeholder are replaced by the provided default value.         #
+# Due to the nature of the script, it can only be source'd into the current environment, not executed.  #
+# Usage:                                                                                                #
+#   . prompt <variable> [default] [placeholder]                                                         #
+#########################################################################################################
 # Considered supporting POSIX sh, but reading a single character for the fancy placeholder functionality
 #  introduces a level of complexity which isn't worth it unless the extra compatibility is actually needed
 
 # Do nothing if the script was executed instead of sourced
-# Process is "-bash" if sourced from bash, and $ZSH_EVAL_CONTEXT will contain "file" if sourced from zsh
-_proc_name="$(ps -p $$ -ocomm=)"
-if [ "$_proc_name" = "bash" ] || { [ "$_proc_name" = "zsh" ] && [ "${ZSH_EVAL_CONTEXT#*"file"}" = "$ZSH_EVAL_CONTEXT" ]; }; then
+# $0 is /path/to/bash or -bash if sourced and ZSH_EVAL_CONTEXT contains "file" if sourced
+_basename="${0##*'/'}"
+if { [ "$BASH_VERSION" ] && [ "${_basename#'-'}" != "bash" ]; } || { [ "$ZSH_VERSION" ] && [ "${ZSH_EVAL_CONTEXT#*"file"}" = "$ZSH_EVAL_CONTEXT" ]; } then
     echo "This script must be sourced to work correctly."
     exit 1
 fi
-unset _proc_name # cleanup
+unset _basename
 
 _prompt() {
     local -r zsh="$ZSH_VERSION" # truthy if shell is zsh, falsy otherwise - we essentially assume bash
@@ -30,7 +29,7 @@ _prompt() {
     local DEFAULT="$3"
     local PLACEHOLDER=""
     # if provided, set placeholder to the 4th parameter, substituting the special string "%DEFAULT%" with $DEFAULT 
-    if [ -n "$4" ]; then
+    if [ "$4" ]; then
         PLACEHOLDER="${4//"%DEFAULT%"/"$DEFAULT"}"
     # ... otherwise, set placeholder to default value
     else
@@ -55,15 +54,17 @@ _prompt() {
 
     local input
     # If the input character is not empty or just a newline, read the entire line
-    if [ -n "$first_char" ] && [ "$first_char" != $'\n' ]; then
+    if [ "$first_char" ] && [ "$first_char" != $'\n' ]; then
         # Clear the rest of the line, read a line of input, and prepend the initial character
         tput el
         local line; IFS= read -r line
+        #shellcheck disable=SC2034 # $input is used in eval below
         input="$first_char$line"
     fi
 
     # Store the line input by the user, or the default value if none was provided, to the provided variable name
-    declare -g "$VARNAME"="${input:-"$DEFAULT"}"
+    eval "$VARNAME"'="${input:-"$DEFAULT"}"'
+    #declare -g "$VARNAME"="${input:-"$DEFAULT"}" # eval version seems to have better compatibility
 }
 
 _prompt "$@"
