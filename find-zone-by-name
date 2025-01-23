@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-#! tested in: GNU bash, version 5.2.15(1)-release (x86_64-apple-darwin22.1.0) | older versions and other shells will work but not guaranteed
+#! tested in: GNU bash, version 5.2.26(1)-release (x86_64-apple-darwin23.2.0) | older versions and other shells will work but not guaranteed
 
 ##################################################################################################
-# Page through GET /zones/info until a zone is found whose name contains the provided substring. #
+# Pages through GET /zones/info until a zone is found whose name contains the provided substring #
 ##################################################################################################
 # Usage:                                                                                         #
 #     find-zone-by-name [options]                                                                #
@@ -81,7 +81,7 @@ _find_zone_by_name() {
 
     while true; do
         # Call GET /zones/info
-        response="$(curl -si -H 'User-Agent: sfcc-getzone' -H "Authorization: Bearer $jwt" --location "$baseUrl?offset=$offset&limit=$limit" | tr -d '\r')"
+        response="$(curl -fSsiL -X GET "$baseUrl?offset=$offset&limit=$limit" -H 'User-Agent: sfcc-getzone' -H "Authorization: Bearer $jwt" | tr -d '\r')"
 
         # Extract response headers
         responseHeaders="$(echo "$response" | sed -n '/^HTTP\//,/^$/p' | sed '1d;$d')"
