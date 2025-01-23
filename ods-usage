@@ -35,12 +35,12 @@ _ods_usage() {
         if echo "$json" | jq empty 2>/dev/null; then
             _jq() { echo "$json" | jq -r "$@"; }
         else
-            echo "ERROR: Input is not valid JSON - preview below" >&2
-            echo "$*" | cut -c "1-$(tput cols)" >&2
+            echo "ERROR: Input is not valid JSON - first line preview below" >&2
+            echo "$*" | head -n 1 | cut -c "1-$(tput cols)" >&2
             return 1
         fi
     else
-        # Exit with error status if input is not valid JSON
+        # Define jq helper if clipboard contains valid JSON, otherwise exit with error status
         if pbpaste | jq empty 2>/dev/null; then
             _jq() { pbpaste | jq -r "$@"; }
         else
@@ -51,7 +51,7 @@ _ods_usage() {
 
     # If output is being piped or redirected, do not print control characters for text formatting
     local format_text=true
-    if [ -p /dev/stdout ] || [ ! -t 1 ]; then # output is being piped || stdout (fd1) is not a terminal
+    if [ ! -t 1 ]; then # stdout (fd1) is not a terminal
         format_text=''
     fi
 
@@ -78,7 +78,7 @@ _ods_usage() {
     echo "active:  $sbx_count_active"
     echo "deleted: $sbx_count_deleted"
 
-    # Print minutes up and down (per resource for uptime only, as it does not apply to downtime)
+    # Print minutes up and down (per resource profile for uptime only, as it does not apply to downtime)
     echo "$(_smul)Uptime & Downtime$(_rmul)"
     local min_down; min_down="$(_jq '.data.minutesDown')"
     local min_up;     min_up="$(_jq '.data.minutesUp')"
