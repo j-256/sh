@@ -118,36 +118,12 @@ INFO
 #region Detect sourced or executed (`. script`/`source script` vs `script`)
 # If $0 is the name of a shell rather than some other filename, presumably the script was sourced
 # There are various methods with their own pros and cons
-
-# 1
-# Check whether $0 equals the basename of $SHELL (which should be the path to the currently-running shell)
-if [ "${0//-}" != "$(basename "$SHELL")" ]; then
-    echo "This script has been executed."
-fi
-
-# 2
-# Quite slow given the amount of I/O
-# Check whether $0 equals the basename of any lines in /etc/shells (the allowed shells)
-SOURCED=''
-while IFS= read -r line; do
-    # We have to basename $line because $0 isn't a full path, from testing
-    # Bash's $0 is "-bash" for some reason, so remove hyphens
-    if [ "${0//-}" = "$(basename "$line")" ]; then
-        SOURCED=true
-    fi
-done < "/etc/shells"
-[ $SOURCED = true ] || echo "This script has been executed."
-
-# 3 (best for now?)
-# Works on bash and zsh
-# Process is "-bash" if sourced from bash, and $ZSH_EVAL_CONTEXT will contain "file" if sourced from zsh
-proc_name="$(ps -p $$ -ocomm=)"
-if [ "$proc_name" = "bash" ] || { [ "$proc_name" = "zsh" ] && [ "${ZSH_EVAL_CONTEXT#*"file"}" = "$ZSH_EVAL_CONTEXT" ]; }; then
+# $0 is /path/to/bash or -bash if sourced and ZSH_EVAL_CONTEXT contains "file" if sourced
+_basename="${0##*'/'}"
+if { [ "$BASH_VERSION" ] && [ "${_basename#'-'}" != "bash" ]; } || { [ "$ZSH_VERSION" ] && [ "${ZSH_EVAL_CONTEXT#*"file"}" = "$ZSH_EVAL_CONTEXT" ]; } then
     echo "Executed"
-else
-    echo "Sourced"
 fi
-unset proc_name # cleanup
+unset _basename
 #endregion
 
 
@@ -155,4 +131,148 @@ unset proc_name # cleanup
 #region cURL - all timing fields
 curl_format="appconnect: %{time_appconnect}\nconnect: %{time_connect}\nnamelookup: %{time_namelookup}\npretransfer: %{time_pretransfer}\nredirect: %{time_redirect}\nstarttransfer: %{time_starttransfer}\ntotal: %{time_total}\n"
 curl -sS -w "$curl_format" -o /dev/null "$url"
+#endregion
+
+
+
+#region Check for script dependencies
+func() {
+    # Check for dependencies
+    local dependencies="socat jq"
+    local missing_deps='' # false
+    _check_dependency() {
+        command -v "$1" >/dev/null 2>&1
+    }
+    local dependency
+    for dependency in $dependencies; do
+        if ! _check_dependency "$dependency"; then
+            echo "Missing dependency: $dependency" >&2
+            missing_deps=true
+        fi
+    done
+    unset -f _check_dependency
+    if [ "$missing_deps" ]; then
+        echo "ERROR: Missing dependencies" >&2
+        return 1
+    fi
+}
+#endregion
+
+
+
+#region Print a string n times
+repeat() {
+    printf "%$2s" | sed "s/ /$1/g"
+}
+hr() { # horizontal rule, as in <hr> in HTML
+    _repeat '-' "$(tput cols)"
+}
+#endregion
+
+
+
+#region Function/command skeleton - parameter handling, help, cleanup trap
+shell_func() {
+    local verbose=false
+    local args=() # positional args
+    [ -t 0 ] || args=("$(cat)") # use piped/redirected input as positional param if available
+    local max_args=0 # allow n positional args, 0 for infinite
+    local opt_val_required
+    local opt_flag_optional=false
+    local opt_val_optional="default_value"
+
+    # Print usage (help) info
+    _show_help() {
+        # Underline only if output is a terminal (not a pipe or file)
+        local s; [ -t 1 ] && s="$(tput smul)"
+        local r; [ -t 1 ] && r="$(tput rmul)"
+        echo "Usage:"
+        echo "  shell_func [-v] -r ${s}value${r} [-o [${s}value${r}]] [${s}args${r} ${s}...${r}]"
+        echo "  shell_func -h"
+        echo "Options:"
+        echo "  -r, --val-required ${s}value${r}    Specify an option, ${s}value${r} required"
+        echo "  -o, --val-optional [${s}value${r}]  Specify an option, ${s}value${r} optional"
+        echo "  -v, --verbose               Enable verbose output"
+        echo "  -h, --help                  Show this help message"
+    }
+    # True if verbose flag is set
+    _verbose() { [ "$verbose" = true ]; }
+    local __old_trap; __old_trap="$(trap -p RETURN)"
+    trap 'unset -f _show_help _verbose; [ "$__old_trap" ] && eval "$__old_trap" || trap - RETURN' RETURN
+
+    # Parse parameters
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -r|--val-required)
+                # Required value: Ensure $2 exists
+                if [ -z "$2" ]; then # || [ "${2#'-'}" != "$2" ]
+                    echo "[ERR] Missing value for option '$1'." >&2
+                    return 1
+                fi
+                opt_val_required="$2"
+                shift 2
+                ;;
+            -o|--val-optional)
+                # Optional value: Use what follows unless it is another -option, then keep default
+                if [ "$2" ] && [ "${2#'-'}" = "$2" ]; then
+                    opt_flag_optional=true
+                    opt_val_optional="$2"
+                    shift 2
+                else
+                    opt_flag_optional=true
+                    _verbose && echo "$1 provided but no value"
+                    shift
+                fi
+                ;;
+            -v|--verbose)
+                verbose=true
+                shift
+                ;;
+            -h|--help)
+                _show_help
+                return 0
+                ;;
+            # End of options, parse remainder as positional
+            --)
+                while [ $# -gt 0 ]; do
+                    args+=("$1")
+                    shift
+                done
+                break
+                ;;
+            # Unknown option
+            -*)
+                echo "[ERR] Unknown option '$1'." >&2
+                return 1
+                ;;
+            # Positional argument
+            *)
+                args+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    # Check that mandatory arguments have been provided
+    if [ -z "$opt_val_required" ]; then
+        echo "[ERR] -r, --val-required is required" >&2
+        return 1
+    fi
+
+    # Check positional arg quantity outside of loop to avoid having two different error messages for -- and *
+    if [ $max_args -ne 0 ] && [ ${#args[@]} -ge $max_args ]; then
+        echo "[ERR] Only $max_args positional arguments allowed." >&2
+        return 1
+    fi
+
+    # Debug output (if verbose is enabled)
+    _verbose && echo "This is verbose" >&2
+
+    # Replace with function logic
+    echo "opt_val_required: $opt_val_required"
+    echo "opt_flag_optional: $opt_flag_optional"
+    echo "opt_val_optional: $opt_val_optional"
+    echo "verbose: $verbose"
+    echo "Positional parameters: $(printf '[%s] ' "${args[@]}")"
+}
 #endregion
