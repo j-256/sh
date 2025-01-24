@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+#! tested in: GNU bash, version 5.2.26(1)-release (x86_64-apple-darwin23.2.0) | older versions and other shells will work but not guaranteed
+
+#################################################################################
+# Backs up tracked and untracked changes to a new branch, pushes it to a remote #
+# (default "origin"), and deletes the temporary branch.                         #
+#################################################################################
+# Usage:                                                                        #
+#   git-backup <repo_directory> [remote_name]                                   #
+#################################################################################
+
+_git_backup() {
+    # Directory of the Git repository
+    local repo_dir="${1:?"no directory provided"}"
+    # Name of remote to push to - git defaults to "origin" so we do too
+    local remote="${2:-"origin"}"
+
+    _failed() {
+        echo "ERROR: \`$1\` failed" >&2
+    }
+
+    local timestamp="$(TZ=Etc/UTC date +"%Y-%m-%d-%H%M.%S")"
+    local backup_name="backup-$timestamp"
+    echo "Starting git repo backup $timestamp"
+
+    # Change to the repository directory
+    if ! cd "$repo_dir"; then
+        echo "Failed to change to directory \"$repo_dir\"" >&2
+        unset -f _failed
+        return 1
+    fi
+
+    # Stash any uncommitted changes and untracked files
+    if ! git stash save --include-untracked "$backup_name"; then
+        _failed "git stash save --include-untracked \"$backup_name\""
+        unset -f _failed
+        return 1
+    fi
+
+    # Create and switch to new branch for backup
+    if ! git checkout -b "$backup_name"; then
+        _failed "git checkout -b \"$backup_name\""
+        unset -f _failed
+        return 1
+    fi
+
+    # Apply the changes from stash, overwriting any conflicts
+    local stash_apply_output
+    if ! stash_apply_output="$(git stash apply 2>&1)"; then
+        _failed "git stash apply"
+        unset -f _failed
+        return 1
+    fi
+    if echo "$stash_apply_output" | tee /dev/stdout | grep -q 'CONFLICT'; then
+        echo "Conflicts detected during 'git stash apply'. Attempting to resolve conflicts by keeping stashed changes."
+        git status --short | grep '^U' | cut -c 4- \
+        | while read -r file; do
+            echo "Resolving conflict in $file"
+            if ! git checkout --theirs "$file"; then
+                _failed "git checkout --theirs \"$file\""
+                unset -f _failed
+                return 1
+            fi
+            git add "$file"
+        done
+        echo "Conflicts resolved. Committing the changes."
+    fi
+
+    # Add all changes to the index
+    if ! git add .; then
+        _failed "git add ."
+        unset -f _failed
+        return 1
+    fi
+
+    # Commit the changes
+    if ! git commit -m "Backup $timestamp"; then
+        _failed "git commit -m \"Backup $timestamp\""
+        unset -f _failed
+        return 1
+    fi
+
+    # Push the changes to the remote repository
+    if ! git push "$remote" "$backup_name"; then
+        _failed "git push \"$remote\" \"$backup_name\""
+        unset -f _failed
+        return 1
+    fi
+
+    # Switch back to the original branch
+    if ! git checkout -; then
+       _failed "git checkout -"
+       unset -f _failed
+       return 1
+    fi
+
+    # Restore changes to original branch
+    if ! git stash apply; then
+        _failed "git stash apply"
+        unset -f _failed
+        return 1
+    fi
+
+    # Delete the backup branch locally, now that it has been pushed to the remote repository
+    if ! git branch -D "$backup_name"; then
+        _failed "git branch -D \"$backup_name\""
+        unset -f _failed
+        return 1
+    fi
+
+    # Clean up local function
+    unset -f _failed
+}
+
+_git_backup "$@"
