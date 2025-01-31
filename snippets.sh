@@ -173,57 +173,61 @@ hr() { # horizontal rule, as in <hr> in HTML
 
 #region Function/command skeleton - parameter handling, help, cleanup trap
 shell_func() {
+    # Array to compile positional arguments
+    local args=()
+    # OPTION 1: Read piped/redirected input as one long string
+    [ -t 0 ] || args=("$(cat)")
+    # OPTION 2: Read piped/redirected input as an array of lines
+    [ -t 0 ] || while IFS= read -r; do args+=("$REPLY"); done
+    # Allow n positional args, 0 for infinite
+    local max_args=0
+    # If true, print extra information
     local verbose=false
-    local args=() # positional args
-    [ -t 0 ] || args=("$(cat)") # use piped/redirected input as positional param if available
-    local max_args=0 # allow n positional args, 0 for infinite
+    # Required argument, guaranteed a value later
     local opt_val_required
+    # If true, the optional argument was specified by the caller
     local opt_flag_optional=false
     local opt_val_optional="default_value"
 
-    # Print usage (help) info
+    # Print usage (help) info - below mimics the format of most manpages
     _show_help() {
         # Underline only if output is a terminal (not a pipe or file)
-        local s; [ -t 1 ] && s="$(tput smul)"
-        local r; [ -t 1 ] && r="$(tput rmul)"
-        echo "Usage:"
+        # Fall back to empty string if tput is unavailable
+        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
+        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        echo "NAME"
+        echo "  shell_func - do cool things"
+        echo "SYNOPSIS"
         echo "  shell_func [-v] -r ${s}value${r} [-o [${s}value${r}]] [${s}args${r} ${s}...${r}]"
         echo "  shell_func -h"
-        echo "Options:"
+        echo "OPTIONS"
         echo "  -r, --val-required ${s}value${r}    Specify an option, ${s}value${r} required"
         echo "  -o, --val-optional [${s}value${r}]  Specify an option, ${s}value${r} optional"
         echo "  -v, --verbose               Enable verbose output"
         echo "  -h, --help                  Show this help message"
     }
+
     # True if verbose flag is set
     _verbose() { [ "$verbose" = true ]; }
+
+    # Print user messages with prefix
+    _error() {
+        echo "[ERR] shell_func: $*" >&2
+    }
+    _warn() {
+        echo "[WAR] shell_func: $*" >&2
+    }
+    _info() {
+        echo "[INF] shell_func: $*"
+    }
+
     local __old_trap; __old_trap="$(trap -p RETURN)"
-    trap 'unset -f _show_help _verbose; [ "$__old_trap" ] && eval "$__old_trap" || trap - RETURN' RETURN
+    trap 'unset -f _show_help _verbose _error _warn _info; [ "$__old_trap" ] && eval "$__old_trap" || trap - RETURN' RETURN
 
     # Parse parameters
     while [ $# -gt 0 ]; do
         case "$1" in
-            -r|--val-required)
-                # Required value: Ensure $2 exists
-                if [ -z "$2" ]; then # || [ "${2#'-'}" != "$2" ]
-                    echo "[ERR] Missing value for option '$1'." >&2
-                    return 1
-                fi
-                opt_val_required="$2"
-                shift 2
-                ;;
-            -o|--val-optional)
-                # Optional value: Use what follows unless it is another -option, then keep default
-                if [ "$2" ] && [ "${2#'-'}" = "$2" ]; then
-                    opt_flag_optional=true
-                    opt_val_optional="$2"
-                    shift 2
-                else
-                    opt_flag_optional=true
-                    _verbose && echo "$1 provided but no value"
-                    shift
-                fi
-                ;;
+            # Handle verbose first in case it is used during arg parsing
             -v|--verbose)
                 verbose=true
                 shift
@@ -232,8 +236,32 @@ shell_func() {
                 _show_help
                 return 0
                 ;;
+            -r|--val-required)
+                # This option must be followed by a value, so use $2 even if it starts with a dash, unlike with -o
+                if [ "${2+x}" ]; then # recognize an empty string as set
+                    opt_val_required="$2"
+                    shift 2
+                else
+                    _error "Missing value for option '$1'."
+                    return 1
+                fi
+                ;;
+            -o|--val-optional)
+                opt_flag_optional=true
+                # If a value follows the key which doesn't begin with a dash, use it,
+                # otherwise interpret it as the next option and move on
+                if [ "$2" ] && [ "${2#'-'}" = "$2" ]; then
+                    opt_val_optional="$2"
+                    shift
+                else
+                    opt_flag_optional=true
+                    _verbose && _warn "No value provided for $1"
+                fi
+                shift
+                ;;
             # End of options, parse remainder as positional
             --)
+                shift # discard "--"
                 while [ $# -gt 0 ]; do
                     args+=("$1")
                     shift
@@ -242,7 +270,7 @@ shell_func() {
                 ;;
             # Unknown option
             -*)
-                echo "[ERR] Unknown option '$1'." >&2
+                _error "Unknown option '$1'."
                 return 1
                 ;;
             # Positional argument
@@ -253,20 +281,20 @@ shell_func() {
         esac
     done
 
-    # Check that mandatory arguments have been provided
+    # Ensure mandatory arguments have been provided - absence of ${+x} disallows empty strings
     if [ -z "$opt_val_required" ]; then
-        echo "[ERR] -r, --val-required is required" >&2
+        _error "-r, --val-required is required"
         return 1
     fi
 
     # Check positional arg quantity outside of loop to avoid having two different error messages for -- and *
-    if [ $max_args -ne 0 ] && [ ${#args[@]} -ge $max_args ]; then
-        echo "[ERR] Only $max_args positional arguments allowed." >&2
+    if [ $max_args -ne 0 ] && [ ${#args[@]} -gt $max_args ]; then
+        _error "Only $max_args positional arguments allowed. Provided: ${#args[@]}."
         return 1
     fi
 
     # Debug output (if verbose is enabled)
-    _verbose && echo "This is verbose" >&2
+    _verbose && _info "This is verbose" >&2
 
     # Replace with function logic
     echo "opt_val_required: $opt_val_required"
