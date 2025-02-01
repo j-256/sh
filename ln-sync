@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+#! tested in: GNU bash, version 5.2.26(1)-release (x86_64-apple-darwin23.2.0) | older versions and other shells will work but not guaranteed
+
+##################################################################################################
+# Syncs two directories so that each are hardlinked to the same files                            #
+# (WIP - does not currently do anything with filenames which are in only one of the directories) #
+##################################################################################################
+# Usage:                                                                                         #
+#   ln-sync [-b|--brief] [-n|--no-backup] <dir1> <dir2>                                          #
+##################################################################################################
+
+_ln_sync() {
+    # NOTE: "origin" and "target" are interchangeable given the two-way sync (user prompted for which to keep if files differ)
+    local origin
+    local target
+    local brief_mode=0     # if 1, show comparison only without any syncing
+    local backup_enabled=1 # if 1, back up files before replacing
+
+    # Parse command-line arguments
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -b|--brief) brief_mode=1 ;;
+            -n|--no-backup) backup_enabled=0 ;;
+            *)
+                if   [ -z "$origin" ]; then origin="$1"
+                elif [ -z "$target" ]; then target="$1"
+                else echo "ERROR: Too many positional arguments." >&2; return 1; fi
+                ;;
+        esac
+        shift
+    done
+
+    if [ -z "$origin" ] || [ -z "$target" ]; then
+        echo "ERROR: Must specify two directories." >&2
+        return 1
+    fi
+
+    # Moves $file to $file.bak (if $file.bak exists, backs up to $file.bak.bak, etc)
+    _backup_file() {
+        local file="$1"
+        local backup="$file.bak"
+
+        # If $file.bak exists, back up to $file.bak.bak, etc
+        # TODO: Reverse logic so .bak is always the most recent, .bak.bak next most recent, etc (move all down one)
+        while [ -e "$backup" ]; do
+            backup="$backup.bak"
+        done
+
+        if mv "$file" "$backup"; then
+            echo "Backup created: $file -> $backup"
+        else
+            echo "Failed to create backup for $file" >&2
+        fi
+    }
+
+    # Moves $file to $file.bak, creates a hardlink in its place, and prints a failure/success message
+    _backup_and_link() {
+        local file_to_replace="$1"
+        local file_to_link="$2"
+
+        # Back up the file before replacing it, if flag is on
+        if [ $backup_enabled -eq 1 ]; then
+            _backup_file "$file_to_replace"
+        fi
+
+        if ln -f "$file_to_link" "$file_to_replace"; then
+            echo "Hardlink updated: $file_to_replace -> $file_to_link"
+        else
+            echo "Failed to update hardlink for $file_to_replace" >&2
+        fi
+    }
+
+    # Prompts user to decide what action to take for a pair of files (keep 1, keep 2, skip, cancel, diff)
+    _prompt_for_action() {
+        local origin_file="$1"
+        local target_file="$2"
+        local choice
+        while true; do
+            echo "Choose action for $(basename "$origin_file"): 1 (keep left), 2 (keep right), s (skip), c (cancel), d (diff): "
+            read -r choice
+            case $choice in
+                1) _backup_and_link "$target_file" "$origin_file"; break ;;
+                2) _backup_and_link "$origin_file" "$target_file"; break ;;
+                s) break ;;
+                c) echo "Operation cancelled by user."; return 0 ;;
+                d) code --diff "$origin_file" "$target_file" ;;
+                *) echo "Invalid choice. Please select again." ;;
+            esac
+        done
+    }
+
+    # Collect all unique filenames across both directories (NOT recursive)
+    local -a origin_files # all filenames in dir1
+    local -a target_files # all filenames in dir2
+    local -a all_files    # union of origin and target filenames
+    mapfile -t origin_files < <(find -L "$origin" -maxdepth 1 -type f ! -name '.DS_Store' ! -name '*.bak' -exec basename {} \; | sort)
+    mapfile -t target_files < <(find -L "$target" -maxdepth 1 -type f ! -name '.DS_Store' ! -name '*.bak' -exec basename {} \; | sort)
+    mapfile -t all_files < <(printf '%s\n' "${origin_files[@]}" "${target_files[@]}" | sort -u)
+
+    # Check whether each file exists in origin, target, or both
+    local comparison_output # holds lines of output to be piped to `column -t` for formatting
+    local RED=$'\033[31m'   # sets text color to red
+    local GREEN=$'\033[32m' # sets text color to green
+    local CYAN=$'\033[36m'  # sets text color to cyan
+    local WHITE=$'\033[37m' # sets text color to white
+    local RESET=$'\033[0m'  # resets text formatting
+    local NL=$'\n'          # newline character
+    local file         # each filename as $all_files is iterated
+    local origin_file  # path to $file in dir1 as $all_files is iterated
+    local target_file  # path to $file in dir2 as $all_files is iterated
+    local origin_inode # inode of $file in dir1 as $all_files is iterated
+    local target_inode # inode of $file in dir2 as $all_files is iterated
+    local -a non_hardlinked_files # holds filenames which are not hardlinked to each other
+    for file in "${all_files[@]}"; do
+        origin_file="$origin/$file"
+        target_file="$target/$file"
+        if [ -e "$origin_file" ] && [ -e "$target_file" ]; then # file exists in both origin and target
+            # Compare filenames' inodes to see whether they point to the same file
+            origin_inode=$(stat -f "%i" "$origin_file" 2>/dev/null)
+            target_inode=$(stat -f "%i" "$target_file" 2>/dev/null)
+            # If inodes match (files are already hardlinked), print them in green
+            if [ "$origin_inode" = "$target_inode" ]; then
+                comparison_output+="$GREEN$file#$file$RESET$NL"
+            # If inodes do not match (files are not hardlinked), print them in red and add to list of files to be hardlinked later
+            else
+                comparison_output+="$RED$file#$file$RESET$NL"
+                non_hardlinked_files+=("$file")
+            fi
+        elif [ -e "$origin_file" ]; then # file exists in origin but not target (no second column)
+            comparison_output+="$WHITE$file$RESET$NL"
+        elif [ -e "$target_file" ]; then # file exists in target but not origin (no first column)
+            comparison_output+="$WHITE#$file$RESET$NL" # leading hash so `column -t -s '#'` puts nothing on the left
+        fi
+    done
+
+    # Print header listing the two directories, followed by the comparison
+    echo "$CYAN$origin <==> $target$RESET"
+    echo "$comparison_output" | column -t -s '#'
+
+    # If brief mode is enabled, stop after printing comparison (do not make any changes)
+    if [ $brief_mode -eq 1 ]; then
+        return 0
+    fi
+
+    # Loop through files which are not hardlinked and sync them
+    local file
+    for file in "${non_hardlinked_files[@]}"; do
+        local origin_file="$origin/$file"
+        local target_file="$target/$file"
+        if cmp -s "$origin_file" "$target_file"; then
+            echo "Files '$origin_file' and '$target_file' are identical. Updating hardlink."
+            _backup_and_link "$origin_file" "$target_file"
+        else
+            echo "Files '$origin_file' and '$target_file' differ."
+            echo "Origin last modified: $(stat -f "%Sm" "$origin_file") Size: $(stat -f "%z" "$origin_file")"
+            echo "Target last modified: $(stat -f "%Sm" "$target_file") Size: $(stat -f "%z" "$target_file")"
+            _prompt_for_action "$origin_file" "$target_file"
+        fi
+    done
+}
+
+_ln_sync "$@"
