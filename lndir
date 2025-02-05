@@ -1,41 +1,242 @@
 #!/usr/bin/env bash
 
-#########################################################################
-# Hardlinks all files from one directory to another (like copying but   #
-# both files end up pointing to the same data), optionally recursing    #
-#########################################################################
-# Usage:                                                                #
-#   lndir [-r|--recursive] [-d|--dryrun] <source_dir> <destination_dir> #
-#########################################################################
+###########################################################################
+# Hardlinks all files from one directory to another (like copying but     #
+# both files end up pointing to the same data), optionally recursing,     #
+# and optionally resolving conflicts interactively.                       #
+###########################################################################
+# Usage:                                                                  #
+#   lndir [options] <source_dir> <destination_dir>                        #
+#                                                                         #
+# Options:                                                                #
+#   -r, --recursive      Process directories recursively                  #
+#   -d, --dryrun         Dry run mode (no changes are made)               #
+#   -i, --interactive    Resolve conflicts interactively                  #
+#   -s, --sync           Two-way synchronization mode (non-recursive)     #
+#   -f, --force          Force overwrite of conflicting files             #
+#   -n, --nobak          Do not create backup (.bak) when overwriting     #
+#   -h, --help           Display this help message                        #
+###########################################################################
 
 _lndir() {
+    # Helper functions for messages and help
+    _show_help() {
+        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
+        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        echo "NAME"
+        echo "  lndir - Hardlink files from one directory to another, with optional sync mode"
+        echo "SYNOPSIS"
+        echo "  lndir [${s}options${r}] <${s}source_dir${r}> <${s}destination_dir${r}>"
+        echo "OPTIONS"
+        echo "  -r, --recursive      Process directories recursively"
+        echo "  -d, --dryrun         Dry run mode (no changes are made)"
+        echo "  -i, --interactive    Prompt on conflict"
+        echo "  -s, --sync           Two-way synchronization mode (non-recursive)"
+        echo "  -f, --force          Force overwrite of conflicting files"
+        echo "  -n, --nobak,         Do not create backup (.bak) when overwriting"
+        echo "  -h, --help           Display this help message"
+    }
+    _error() { echo "[ERR] lndir: $*" >&2; }
+    _warn()  { echo "[WAR] lndir: $*" >&2; }
+    _info()  { echo "[INF] lndir: $*"; }
+
+    # Option defaults
     local recursive=false
     local dryrun=false
+    local interactive=false
+    local sync=false
+    local force=false
+    local nobak=false
     local from_dir
     local to_dir
 
     # Parse arguments
     while [ $# -gt 0 ]; do
         case "$1" in
-            -r|--recursive) recursive=true ;;
-            -d|--dryrun|--dry-run) dryrun=true ;;
-            *) if [ -z "$from_dir" ]; then from_dir="$1"; else to_dir="$1"; fi ;;
+            -r|--recursive)
+                recursive=true
+                shift
+                ;;
+            -d|--dryrun|--dry-run)
+                dryrun=true
+                shift
+                ;;
+            -i|--interactive)
+                interactive=true
+                shift
+                ;;
+            -s|--sync)
+                sync=true
+                shift
+                ;;
+            -f|--force)
+                force=true
+                shift
+                ;;
+            -n|--nobak|--no-backup)
+                nobak=true
+                shift
+                ;;
+            -h|--help)
+                _show_help
+                return 0
+                ;;
+            # End of options: Parse remainder as positional
+            --)
+                shift
+                while [ $# -gt 0 ]; do
+                    if [ -z "$from_dir" ]; then
+                        from_dir="$1"
+                    else
+                        to_dir="$1"
+                    fi
+                    shift
+                done
+                break
+                ;;
+            -*)
+                _error "Unknown option '$1'."
+                return 1
+                ;;
+            *)
+                if [ -z "$from_dir" ]; then
+                    from_dir="$1"
+                else
+                    to_dir="$1"
+                fi
+                shift
+                ;;
         esac
-        shift
     done
 
-    if [ -z "$from_dir" ] || [ -z "$to_dir" ]; then
-        echo "Usage: lndir [-r|--recursive] [-d|--dryrun] <source_dir> <destination_dir>"
+    # $from_dir is defined first, so if it isn't defined we know neither is $to_dir
+    if [ -z "$from_dir" ]; then
+        _error "Source and destination directories not provided."
+        _show_help
+        return 1
+    elif [ -z "$to_dir" ]; then
+        _error "Destination directory not provided."
+        _show_help
         return 1
     fi
 
+    # Backup a file by moving it to file.bak (adding extra .bak if needed)
+    _backup_file() {
+        local file="$1"
+        local backup="$file.bak"
+        while [ -e "$backup" ]; do
+            backup="$backup.bak"
+        done
+        if mv "$file" "$backup"; then
+            _info "Backup created: $file -> $backup"
+        else
+            _error "Failed to create backup for $file"
+        fi
+    }
+
+    # Interactive conflict resolution
+    # Prompts the user using the format:
+    # "Choose an action for <basename>: 1 (keep source), 2 (keep destination), s (skip), c (cancel), d (diff), v (VSCode diff): "
+    _handle_conflict() {
+        local src="$1"
+        local dst="$2"
+        local basename
+        local choice
+        while true; do
+            basename="$(basename "$src")"
+            _info "Choose an action for $basename: 1 (keep source), 2 (keep destination), s (skip), c (cancel), d (diff), v (VSCode diff): "
+            read -r choice
+            case "$choice" in
+                1)
+                    _update_link "$src" "$dst"
+                    break
+                    ;;
+                2)
+                    _update_link "$dst" "$src"
+                    break
+                    ;;
+                s)
+                    _info "Skipping conflict for $basename"
+                    break
+                    ;;
+                c)
+                    _warn "Operation cancelled by user."
+                    return 1
+                    ;;
+                d)
+                    if ! diff "$src" "$dst"; then
+                        _warn "\`diff\` command failed or differences found."
+                    fi
+                    ;;
+                v)
+                    if ! code --diff "$src" "$dst"; then
+                        _warn "\`code --diff\` command failed or differences found."
+                    fi
+                    ;;
+                *)
+                    _warn "Invalid option. Please select again."
+                    ;;
+            esac
+        done
+    }
+
+    # Common helper to unconditionally update (overwrite) a link
+    # Backs up the target unless nobak is set
+    _update_link() {
+        local src="$1"
+        local dst="$2"
+        if [ "$dryrun" = true ]; then
+            _info "Would update link: $src -> $dst"
+        else
+            if [ "$nobak" = false ]; then
+                _backup_file "$dst"
+            fi
+            if ln -f "$src" "$dst"; then
+                _info "Updated link: $dst"
+            else
+                _error "Failed to update link: $dst"
+            fi
+        fi
+    }
+
+    # Common helper to resolve a conflict using force or interactive options
+    _try_update_link() {
+        local src="$1"
+        local dst="$2"
+        if [ "$force" = true ]; then
+            if [ "$dryrun" = true ]; then
+                _info "Would force update: $src -> $dst"
+            else
+                if [ "$nobak" = false ]; then
+                    _backup_file "$dst"
+                fi
+                if ln -f "$src" "$dst"; then
+                    _info "Force updated: $dst"
+                else
+                    _error "Failed to force update: $dst"
+                fi
+            fi
+        elif [ "$interactive" = true ]; then
+            if [ "$dryrun" = true ]; then
+                _info "Would prompt for conflict resolution for: $src -> $dst"
+            else
+                _handle_conflict "$src" "$dst"
+            fi
+        else
+            _warn "File exists, cannot hardlink: $dst"
+        fi
+    }
+
+    # One-way linking mode: hardlink files from source to destination
     _link_files() {
         # Unquoted "#" asserts start of string
         local parent_dir="${1/#"$from_dir"/"$to_dir"}"
-        if [ "$dryrun" = false ] && [ ! -d "$parent_dir" ]; then
-            mkdir -p "$parent_dir"
-        elif [ "$dryrun" = true ]; then
-            echo "Would create directory: $parent_dir"
+        if [ ! -d "$parent_dir" ]; then
+            if [ "$dryrun" = true ]; then
+                _info "Would create directory: $parent_dir"
+            else
+                mkdir -p "$parent_dir"
+            fi
         fi
 
         find "$1" -mindepth 1 -maxdepth 1 ! -name .DS_Store -print0 | while IFS= read -r -d $'\0' file; do
@@ -50,39 +251,84 @@ _lndir() {
                 if [ -f "$to_file" ]; then
                     local existing_link; existing_link="$(find "$to_file" -samefile "$file" 2>/dev/null)"
                     if [ "$existing_link" ]; then
-                        echo "Hardlink already exists: $to_file"
+                        _info "Hardlink already exists: $to_file"
                     else
-                        echo "File exists, cannot hardlink: $to_file"
+                        _try_update_link "$file" "$to_file"
                     fi
                 else
-                    if [ "$dryrun" = false ]; then
-                        ln -v "$file" "$to_file"
+                    if [ "$dryrun" = true ]; then
+                        _info "Would link: $file -> $to_file"
                     else
-                        echo "Would link: $file -> $to_file"
+                        ln -v "$file" "$to_file"
                     fi
                 fi
             fi
         done
     }
 
-    _link_files "$from_dir"
+    # Sync mode: two-way synchronization of files in the top level of both directories
+    # For files that exist in both directories, if they are not hardlinked:
+    #   - If the files are identical, update the destination to be a hardlink to the source.
+    #   - If they differ, then:
+    #       - With -f/--force, automatically overwrite (using source as authoritative),
+    #         backing up first unless -n/--nobak is given.
+    #       - With -i/--interactive, prompt for conflict resolution using the format above.
+    #       - Otherwise, print a conflict warning to stderr and skip.
+    # Files that exist in only one directory are skipped.
+    _sync_mode() {
+        local -a from_files
+        local -a to_files
+        local -a all_files
+        mapfile -t from_files < <(find -L "$from_dir" -maxdepth 1 -type f ! -name '.DS_Store' ! -name '*.bak' -exec basename {} \; | sort)
+        mapfile -t to_files < <(find -L "$to_dir" -maxdepth 1 -type f ! -name '.DS_Store' ! -name '*.bak' -exec basename {} \; | sort)
+        mapfile -t all_files < <(printf '%s\n' "${from_files[@]}" "${to_files[@]}" | sort -u)
 
-    # Noting extra files
-    if [ "$dryrun" = false ]; then
-        echo "Extra files in destination not in source:"
-        find "$to_dir" -type f -print0 | while IFS= read -r -d $'\0' dest_file; do
-            local src_file="${dest_file/#$to_dir/$from_dir}"
-            if [ ! -e "$src_file" ]; then
-                echo "$dest_file"
+        local file
+        local src_file
+        local dst_file
+        for file in "${all_files[@]}"; do
+            src_file="$from_dir/$file"
+            dst_file="$to_dir/$file"
+            if [ -e "$src_file" ] && [ -e "$dst_file" ]; then
+                # Check whether their inodes are the same; in other words whether they point to the same file
+                if [ "$(stat -f "%i" "$src_file" 2>/dev/null)" = "$(stat -f "%i" "$dst_file" 2>/dev/null)" ]; then
+                    _info "Already synced: $file"
+                else
+                    if cmp -s "$src_file" "$dst_file"; then
+                        _update_link "$src_file" "$dst_file"
+                    else
+                        _try_update_link "$src_file" "$dst_file"
+                    fi
+                fi
+            else
+                _warn "Skipping, exists only in one directory: $file"
             fi
         done
+    }
 
-        # Noting empty directories in destination
-        find "$to_dir" -type d -empty -print | while read -r dir; do
-            echo "Empty directory: $dir"
-        done
+    # Clean up functions to avoid polluting global namespace
+    local __old_trap; __old_trap="$(trap -p RETURN)"
+    trap 'unset -f _lndir _show_help _error _warn _info _backup_file _handle_conflict _update_link _try_update_link _link_files _sync_mode; [ "$__old_trap" ] && eval "$__old_trap" || trap - RETURN' RETURN
+
+    # Main execution: if sync mode is enabled, run sync mode; otherwise, one-way linking
+    if [ "$sync" = true ]; then
+        _sync_mode
     else
-        echo "Dry run enabled, no changes were made."
+        _link_files "$from_dir"
+        if [ "$dryrun" = false ]; then
+            _info "Extra files in destination not in source:"
+            find "$to_dir" -type f -print0 | while IFS= read -r -d $'\0' dest_file; do
+                local src_file; src_file="${dest_file/#$to_dir/$from_dir}"
+                if [ ! -e "$src_file" ]; then
+                    _info "$dest_file"
+                fi
+            done
+            find "$to_dir" -type d -empty -print0 | while IFS= read -r -d $'\0' dir; do
+                _warn "Empty directory: $dir"
+            done
+        else
+            _info "Dry run enabled, no changes were made."
+        fi
     fi
 }
 
