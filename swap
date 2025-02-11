@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+
+######################################################################
+# Swaps two files by renaming them with `mv`.                        #
+######################################################################
+# Usage:                                                             #
+#   swap <file1> <file2>                                             #
+######################################################################
+# Exit Status Codes:                                                 #
+#   0  Success                                                       #
+#   1  Not enough arguments                                          #
+#   2  First file does not exist                                     #
+#   3  First file is a directory                                     #
+#   4  Second file does not exist                                    #
+#   5  Second file is a directory                                    #
+#   6  Failed to move the first file to a temporary location         #
+#   7  Failed to move the second file to the first file location     #
+#   8  Failed to move the temporary file to the second file location #
+######################################################################
+# TODO: -v support
+
+_swap() {
+    if [ $# -lt 2 ]; then
+        echo "ERROR: Must provide two files to swap. You specified $#." >&2
+        return 1
+    fi
+    local file1="$1"
+    local file2="$2"
+
+    # Validate first file
+    if [ ! -e "$file1" ]; then
+        echo "ERROR: File '$file1' does not exist." >&2
+        return 2
+    elif [ -d "$file1" ]; then
+        echo "ERROR: '$file1' is a directory." >&2
+        return 3
+    fi
+
+    # Validate second file
+    if [ ! -e "$file2" ]; then
+        echo "ERROR: File '$file2' does not exist." >&2
+        return 4
+    elif [ -d "$file2" ]; then
+        echo "ERROR: '$file2' is a directory." >&2
+        return 5
+    fi
+
+    # Create a unique temporary filename for swapping
+    local basename; basename="$(basename "$file1")"
+    local temp_file="/tmp/temp-swap-$basename"
+    while [ -e "$temp_file" ]; do
+        temp_file="/tmp/temp-swap-$basename-$$-$RANDOM"
+    done
+
+    # Perform the swap using `mv`. Return distinct codes for each failure point.
+    if ! mv "$file1" "$temp_file"; then # file1 -> temp
+        echo "ERROR: Failed to move '$file1' to temporary file '$temp_file'." >&2
+        return 6
+    fi
+    if ! mv "$file2" "$file1"; then # file2 -> file1
+        echo "ERROR: Failed to move '$file2' to '$file1'." >&2
+        # Move failed - Attempt to restore the original file
+        if ! mv "$temp_file" "$file1"; then
+            echo "ERROR: Failed to restore '$temp_file' to '$file1'." >&2
+        fi
+        return 7
+    fi
+    if ! mv "$temp_file" "$file2"; then # temp -> file2
+        echo "ERROR: Failed to move temporary file to '$file2'." >&2
+        return 8
+    fi
+
+    # 0 status code is implied, but we will be explicit
+    return 0
+}
+
+_swap "$@"
