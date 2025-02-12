@@ -185,10 +185,10 @@ _lndir() {
     _update_link() {
         local src="$1"
         local dst="$2"
-        if [ "$dryrun" = true ]; then
+        if $dryrun; then
             _info "Would update link: $src -> $dst"
         else
-            if [ "$nobak" = false ]; then
+            if ! $nobak; then
                 _backup_file "$dst"
             fi
             if ln -f "$src" "$dst"; then
@@ -203,11 +203,11 @@ _lndir() {
     _try_update_link() {
         local src="$1"
         local dst="$2"
-        if [ "$force" = true ]; then
-            if [ "$dryrun" = true ]; then
+        if $force; then
+            if $dryrun; then
                 _info "Would force update: $src -> $dst"
             else
-                if [ "$nobak" = false ]; then
+                if ! $nobak; then
                     _backup_file "$dst"
                 fi
                 if ln -f "$src" "$dst"; then
@@ -216,8 +216,8 @@ _lndir() {
                     _error "Failed to force update: $dst"
                 fi
             fi
-        elif [ "$interactive" = true ]; then
-            if [ "$dryrun" = true ]; then
+        elif $interactive; then
+            if $dryrun; then
                 _info "Would prompt for conflict resolution for: $src -> $dst"
             else
                 _handle_conflict "$src" "$dst"
@@ -230,9 +230,9 @@ _lndir() {
     # One-way linking mode: hardlink files from source to destination
     _link_files() {
         # Unquoted "#" asserts start of string
-        local parent_dir="${1/#"$from_dir"/"$to_dir"}"
+        local parent_dir="${1/#$from_dir/$to_dir}"
         if [ ! -d "$parent_dir" ]; then
-            if [ "$dryrun" = true ]; then
+            if $dryrun; then
                 _info "Would create directory: $parent_dir"
             else
                 mkdir -p "$parent_dir"
@@ -244,7 +244,7 @@ _lndir() {
             local to_file="$parent_dir/$filename"
 
             if [ -d "$file" ]; then
-                if [ "$recursive" = true ]; then
+                if $recursive; then
                     _link_files "$file"
                 fi
             else
@@ -256,7 +256,7 @@ _lndir() {
                         _try_update_link "$file" "$to_file"
                     fi
                 else
-                    if [ "$dryrun" = true ]; then
+                    if $dryrun; then
                         _info "Would link: $file -> $to_file"
                     else
                         ln -v "$file" "$to_file"
@@ -290,8 +290,9 @@ _lndir() {
             src_file="$from_dir/$file"
             dst_file="$to_dir/$file"
             if [ -e "$src_file" ] && [ -e "$dst_file" ]; then
-                # Check whether their inodes are the same; in other words whether they point to the same file
-                if [ "$(stat -f "%i" "$src_file" 2>/dev/null)" = "$(stat -f "%i" "$dst_file" 2>/dev/null)" ]; then
+                # Check whether they point to the same file; in other words, whether their inodes are the same
+                local existing_link; existing_link="$(find "$to_file" -samefile "$file" 2>/dev/null)"
+                if [ "$existing_link" ]; then
                     _info "Already synced: $file"
                 else
                     if cmp -s "$src_file" "$dst_file"; then
@@ -311,15 +312,20 @@ _lndir() {
     trap 'unset -f _lndir _show_help _error _warn _info _backup_file _handle_conflict _update_link _try_update_link _link_files _sync_mode; [ "$__old_trap" ] && eval "$__old_trap" || trap - RETURN' RETURN
 
     # Main execution: if sync mode is enabled, run sync mode; otherwise, one-way linking
-    if [ "$sync" = true ]; then
+    if $sync; then
         _sync_mode
     else
         _link_files "$from_dir"
-        if [ "$dryrun" = false ]; then
-            _info "Extra files in destination not in source:"
+        if ! $dryrun; then
+            # If true, found files in $to_dir which aren't in $from_dir
+            local found_extra=false
             find "$to_dir" -type f -print0 | while IFS= read -r -d $'\0' dest_file; do
-                local src_file; src_file="${dest_file/#$to_dir/$from_dir}"
+                src_file="${dest_file/#$to_dir/$from_dir}"
                 if [ ! -e "$src_file" ]; then
+                    if ! $found_extra; then
+                        _info "Extra files in destination not in source:"
+                        found_extra=true # Ensures header prints only once
+                    fi
                     _info "$dest_file"
                 fi
             done
