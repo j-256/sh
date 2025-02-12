@@ -1,0 +1,180 @@
+#!/usr/bin/env bash
+
+###################################################################################################################
+# Prints a random string according to the options provided and stores it to the variable $LASTPASS for reference. #
+###################################################################################################################
+# Usage:                                                                                                          #
+#   pwgen [-l|--length length] [-c|--charset charset] [-e|--exclude charset] [length]                             #
+# Options                                                                                                         #
+#   -l, --length     Generate a password with [length] characters.              Default: 32                       #
+#   -c, --charset    Define the `tr`` charset used to generate the password.    Default: [:alnum:][:punct:]       #
+#   -e, --exclude    Define the `tr` charset to exclude from the password.      Default: (None)                   #
+#   -h, --help       Display this help message                                                                    #
+###################################################################################################################
+
+_pwgen() {
+    # Default 32 characters (arbitrary "long" length)
+    local length=32
+    # Generate from alphanumeric + OWASP password special characters: https://owasp.org/www-community/password-special-characters
+    local digit='0123456789' # [:digit:]
+    local upper='ABCDEFGHIJKLMNOPQRSTUVWXYZ' # [:upper:]
+    local lower='abcdefghijklmnopqrstuvwxyz' # [:lower:]
+    local alnum="$digit$upper$lower" # [:alnum:]
+    local punct='!"#$%&'\''()*+,-./:;<=>?@[\]^_`{|}~' # [:punct:]
+    # Using the full list of characters like this instead of ranges (e.g. a-z) makes it easier to exclude later
+    local charset="$alnum$punct"
+    # Will be set to a tr range of characters to exclude from the password
+    local exclude=''
+    # Will ultimately be set to the generated password
+    export LASTPASS=''
+
+    # Helper functions for messages and help
+    _show_help() {
+        # Only underline if stdout is a terminal
+        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
+        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        echo "NAME"
+        echo "  pwgen - Prints a random string according to the options provided and stores it to the variable \$LASTPASS for reference."
+        echo "SYNOPSIS"
+        echo "  pwgen [-l|--length ${s}length${r}] [-c|--charset ${s}charset${r}] [-e|--exclude ${s}charset${r}] [${s}length${r}]"
+        echo "OPTIONS"
+        echo "  -l, --length   Generate a password with ${s}length${r} characters.             Default: $length"
+        echo "  -c, --charset  Define the \`tr\` charset used to generate the password.  Default: [:alnum:][:punct:]"
+        echo "  -e, --exclude  Define the \`tr\` charset to exclude from the password.   Default: (None)"
+        echo "  -h, --help     Display this help message"
+    }
+    _error() { echo "[ERR] pwgen: $*" >&2; }
+    _warn()  { echo "[WRN] pwgen: $*" >&2; }
+    _info()  { echo "[INF] pwgen: $*"; }
+
+    # Escapes forward slashes and ampersands with a backslash, ensuring `sed` sees a literal string
+    _escape_sed() {
+        printf %s "$1" | sed 's/[\/&]/\\&/g'
+    }
+
+    # Prints all characters between (and including) a start and end
+    # _expand_range b e -> bcde
+    _expand_range() {
+        # Expect start and end as separate arguments, but also support providing a range instead
+        local start_char="$1"
+        local end_char="$2"
+        # Support a range as input (b-d) instead of separate start and end arguments (b d)
+        if [ -z "$end_char" ]; then
+            # If only one argument was provided but it's a range (has a hyphen), get start and end from the range
+            if echo "$start_char" | grep -q '^[^-]-[^-]$'; then # check for dash surrounded by 1 non-dash character
+                end_char="${start_char#*-}" # remove everything before the hyphen
+                start_char="${start_char%-*}" # remove everything after the hyphen
+            # Error out if there is no second argument and the first is not a hyphenated range
+            else
+                _error "Range expected (e.g. \"b-d\" or \"b d\") but only one argument provided." >&2
+                return 2
+            fi
+        fi
+        # Convert characters to their ASCII values in decimal
+        local start_num; start_num="$(printf "%d" "'$start_char")"
+        local end_num; end_num="$(printf "%d" "'$end_char")"
+        # If the end of the range comes before the start, warn and exit early
+        if [ "$end_num" -lt "$start_num" ]; then
+            _warn "Range start is after end; nothing will be printed to stdout." >&2
+            return 3
+        fi
+        # Exit early if not all requested characters are printable and single-byte
+        if [ "$start_num" -lt 32 ] || [ "$start_num" -gt 126 ] || [ "$end_num" -lt 32 ] || [ "$end_num" -gt 126 ]; then
+            _warn "$start_num or $end_num is outside of printable ASCII range ([32,126]); nothing will be printed to stdout." >&2
+            return 4
+        fi
+        local result
+        for ((i = start_num; i <= end_num; i++)); do
+            # Append the next character using an octal escape sequence, given its decimal ASCII value
+            result+=$(printf "\\%03o" "$i") # decimal -> octal, \{octal} -> character
+        done
+        printf %s "$result"
+    }
+
+    _expand_all_ranges() {
+        local input="$1"
+        local range start end expanded
+        # Loop until no more character ranges are found
+        while echo "$input" | grep -qE '([A-Za-z0-9])-([A-Za-z0-9])'; do
+            # Extract the first matched range
+            range=$(echo "$input" | sed -E 's/.*([A-Za-z0-9]-[A-Za-z0-9]).*/\1/')
+            # Split the range into start and end
+            start=${range%-*}
+            end=${range#*-}
+            # Expand the character range (B-D -> BCD)
+            expanded=$(_expand_range "$start" "$end")
+            # Replace the first occurrence of the range with its expanded version
+            input=$(echo "$input" | sed -E "s/$range/$expanded/")
+        done
+        printf %s "$input"
+    }
+
+    # Expands POSIX bracket expressions, e.g. [:digit:] -> 0123456789
+    _expand_posix() {
+        printf %s "$*" | sed "
+            # Leaving out [:space:] and [:cntrl:], which shouldn't be relevant here
+            s/\[:digit:\]/$digit/g;
+            s/\[:upper:\]/$upper/g;
+            s/\[:lower:\]/$lower/g;
+            s/\[:alpha:\]/$upper$lower/g;
+            s/\[:alnum:\]/$digit$upper$lower/g;
+            s/\[:punct:\]/$(_escape_sed "$punct")/g;"
+    }
+
+    # Clean up functions to avoid polluting global namespace
+    local __old_trap; __old_trap="$(trap -p RETURN)"
+    trap 'unset -f _show_help _error _warn _info _escape_sed _expand_range _expand_all_ranges _expand_posix; [ "$__old_trap" ] && eval "$__old_trap" || trap - RETURN' RETURN
+
+    # Handle arguments
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -l|--length)
+                [ "$2" ] || { _error "$1 specified but no length provided"; _show_help; return 1; }
+                length="$2"
+                shift 2
+                ;;
+            -c|--charset)
+                [ "$2" ] || { _error "$1 specified but no charset provided"; _show_help; return 1; }
+                charset="$2"
+                shift 2
+                ;;
+            -e|--exclude|-x)
+                [ "$2" ] || { _error "$1 specified but no charset provided"; _show_help; return 1; }
+                exclude="$2"
+                shift 2
+                ;;
+            -h|--help)
+                _show_help
+                return 0
+                ;;
+            ""|*[!0-9]*) # Not an --option or a number
+                _error "Unknown option '$1'."
+                _show_help
+                return 1
+                ;;
+            *) # Must be a number
+                length="$1"
+                shift
+                ;;
+        esac
+    done
+
+    # Expand provided charset, then remove excluded characters
+    charset="$(_expand_posix "$(_expand_all_ranges "$charset")" | tr -d "$exclude")"
+
+    # Exit early if charset is empty after applying exclusions
+    [ "$charset" ] || { _error "Charset is empty after exclusions"; return 5; }
+
+    # Generate the password in a loop to ensure the length is exactly right
+    LASTPASS=""
+    while [ "${#LASTPASS}" -lt "$length" ]; do
+        # Generate a batch of characters and append them to $LASTPASS
+        # Setting locale via LC_ALL=C instructs tr to process input as single bytes instead of potentially-multi-byte UTF-8
+        LASTPASS="$LASTPASS$(LC_ALL=C tr -dc "$charset" </dev/random | head -c "$((length - ${#LASTPASS}))")"
+    done
+
+    # Print the final result
+    echo "$LASTPASS"
+}
+
+_pwgen "$@"
