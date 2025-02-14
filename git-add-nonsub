@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+
+###########################################################################
+# Temporarily moves the .git directory of a target directory, runs        #
+# `git add` on it, then restores the .git directory. Useful for tracking  #
+# a directory in an outer repo without adding it as a submodule.          #
+###########################################################################
+# Usage:                                                                  #
+#   git-add-nonsub <directory>                                            #
+###########################################################################
+
+_git_add_nonsub() {
+    local dir=''
+    local git_backup=''
+
+    # Helper functions
+    _show_help() {
+        # Only underline if stdout is a terminal
+        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
+        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        echo "NAME"
+        echo "  git-add-nonsub - Temporarily moves .git directory, runs 'git add', and restores it."
+        echo "                   Useful for tracking a directory in an outer repository without adding it as a submodule."
+        echo "SYNOPSIS"
+        echo "  git-add-nonsub [${s}options${r}] <${s}directory${r}>"
+        echo "OPTIONS"
+        echo "  -h, --help         Display this help message"
+    }
+
+    _error() { echo "[ERR] $*" >&2; }
+    _info() { echo "[INF] $*"; }
+
+    _backup_git() {
+        local target_dir="$1"
+        git_backup="$(mktemp -d)/.git"
+        if ! mv "$target_dir/.git" "$git_backup"; then
+            _error "Failed to move .git to $git_backup"
+            return 1
+        fi
+        _info "Backup created at $git_backup"
+    }
+
+    _restore_git() {
+        local target_dir="$1"
+        if ! mv "$git_backup" "$target_dir/.git"; then
+            _error "Failed to restore .git from $git_backup"
+            return 1
+        fi
+        # Remove the temp folder containing .git
+        rmdir "$(dirname "$git_backup")"
+        _info "Restored .git directory"
+    }
+
+    # Parse arguments
+    if [ $# -eq 0 ]; then
+        _error "No directory specified."
+        _show_help
+        return 1
+    fi
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -h|--help)
+                _show_help
+                return 0
+                ;;
+            -*)
+                _error "Unknown option: $1"
+                _show_help
+                return 1
+                ;;
+            *)
+                if [ -z "$dir" ]; then
+                    dir="$1"
+                else
+                    _error "Unexpected argument: $1"
+                    _show_help
+                    return 1
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    # Ensure the directory exists
+    if [ ! -d "$dir" ]; then
+        _error "Directory '$dir' does not exist."
+        return 1
+    fi
+
+    # Ensure the directory contains a .git folder
+    if [ ! -d "$dir/.git" ]; then
+        _error "No .git directory found in '$dir'."
+        return 1
+    fi
+
+    # Main process
+    if _backup_git "$dir"; then
+        _info "Running git add on '$dir'..."
+        if git -C "$dir" add .; then
+            _info "git add completed successfully."
+        else
+            _error "git add failed. Restoring .git..."
+            _restore_git "$dir"
+            return 1
+        fi
+        _restore_git "$dir"
+    else
+        _error "Failed to back up .git. Exiting."
+        return 1
+    fi
+}
+
+_git_add_nonsub "$@"
