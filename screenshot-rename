@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+
+########################################################################
+# Renames new macOS screenshots to contain the timestamp only          #
+# "Screenshot 2025-08-04 at 12.05.57.png" -> "2025-08-04 12.05.57.png" #
+########################################################################
+# Usage:                                                               #
+#   screenshot-rename                                                  #
+########################################################################
+# Dependencies:                                                        #
+#   fswatch - file change monitor                                      #
+########################################################################
+
+_screenshot_rename() {
+    if ! command -v fswatch >/dev/null 2>&1; then
+        echo "Error: fswatch is not installed. Please install it to use this script." >&2
+        return 1
+    fi
+    echo "Watching for new screenshots on the Desktop..."
+    local path
+    fswatch -0 "$HOME/Desktop" | while IFS= read -r -d '' path; do
+        case "$path" in
+            "$HOME"/Desktop/Screenshot\ *.png)
+                # We get multiple lines for a single screenshot, so the file may already be moved
+                [ -f "$path" ] || continue
+                printf %s "Renaming screenshot: $path"
+                local timestamp="$(date '+%Y-%m-%d %H.%M.%S')"
+                local dest="$HOME/Desktop/$timestamp.png"
+                # In case two renames are attempted at the same time, ensure unique names
+                i=1
+                while [ -e "$dest" ]; do
+                    dest="$HOME/Desktop/$timestamp-$i.png"
+                    i=$((i + 1))
+                done
+                echo " -> $(basename "$dest")"
+                mv "$path" "$dest"
+                ;;
+        esac
+    done
+}
+
+_screenshot_rename "$@"
