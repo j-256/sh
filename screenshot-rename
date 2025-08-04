@@ -5,17 +5,41 @@
 # "Screenshot 2025-08-04 at 12.05.57.png" -> "2025-08-04 12.05.57.png" #
 ########################################################################
 # Usage:                                                               #
-#   screenshot-rename                                                  #
+#   screenshot-rename [--help|-h] [--utc|-u]                           #
+# Options:                                                             #
+#   --help, -h    Show this help message and exit                      #
+#   --utc, -u     Use UTC timezone instead of local time               #
 ########################################################################
 # Dependencies:                                                        #
 #   fswatch - file change monitor                                      #
 ########################################################################
 
 _screenshot_rename() {
+    local use_utc=false
+
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --utc|-u) use_utc=true ;;
+            --help|-h)
+                echo "Usage:"
+                echo "  screenshot-rename [--help|-h] [--utc|-u]"
+                echo "Options:"
+                echo "  --help, -h    Show this help message and exit"
+                echo "  --utc, -u     Use UTC timezone instead of local time"
+                return 0
+                ;;
+            --) shift; break ;;  # explicitly stop option parsing
+            -*) echo "Unknown option: $1" >&2; return 2 ;;
+            *) echo "Unexpected argument: $1" >&2; return 2 ;;
+        esac
+        shift
+    done
+
     if ! command -v fswatch >/dev/null 2>&1; then
         echo "Error: fswatch is not installed. Please install it to use this script." >&2
         return 1
     fi
+
     echo "Watching for new screenshots on the Desktop..."
     local path
     fswatch -0 "$HOME/Desktop" | while IFS= read -r -d '' path; do
@@ -24,10 +48,18 @@ _screenshot_rename() {
                 # We get multiple lines for a single screenshot, so the file may already be moved
                 [ -f "$path" ] || continue
                 printf %s "Renaming screenshot: $path"
-                local timestamp="$(date '+%Y-%m-%d %H.%M.%S')"
+
+                # Choose time zone
+                local timestamp
+                if [ "$use_utc" = true ]; then
+                    timestamp="$(TZ=Etc/UTC date '+%Y-%m-%d %H.%M.%S')"
+                else
+                    timestamp="$(TZ=/etc/localtime date '+%Y-%m-%d %H.%M.%S')"
+                fi
+
                 local dest="$HOME/Desktop/$timestamp.png"
                 # In case two renames are attempted at the same time, ensure unique names
-                i=1
+                local i=1
                 while [ -e "$dest" ]; do
                     dest="$HOME/Desktop/$timestamp-$i.png"
                     i=$((i + 1))
