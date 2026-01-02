@@ -9,7 +9,7 @@
 # Returns 0 if $1 contains $2, otherwise returns 1
 contains() {
     # If $1 contains $2, everything up to and including $2 will be removed and it will therefore no longer equal $1
-    [ "${1#*"$2"}" != "$1" ] && return 0 || return 1
+    [ "${1#*"$2"}" != "$1" ]
 }
 #endregion
 
@@ -120,7 +120,7 @@ INFO
 # There are various methods with their own pros and cons
 # $0 is /path/to/bash or -bash if sourced and ZSH_EVAL_CONTEXT contains "file" if sourced
 _basename="${0##*'/'}"
-if { [ "$BASH_VERSION" ] && [ "${_basename#'-'}" != "bash" ]; } || { [ "$ZSH_VERSION" ] && [ "${ZSH_EVAL_CONTEXT#*"file"}" = "$ZSH_EVAL_CONTEXT" ]; } then
+if { [ "$BASH_VERSION" ] && [ "${_basename#'-'}" != "bash" ]; } || { [ "$ZSH_VERSION" ] && [ "${ZSH_EVAL_CONTEXT#*"file"}" = "$ZSH_EVAL_CONTEXT" ]; }; then
     echo "Executed"
 fi
 unset _basename
@@ -130,7 +130,7 @@ unset _basename
 
 #region cURL - all timing fields
 curl_format="appconnect: %{time_appconnect}\nconnect: %{time_connect}\nnamelookup: %{time_namelookup}\npretransfer: %{time_pretransfer}\nredirect: %{time_redirect}\nstarttransfer: %{time_starttransfer}\ntotal: %{time_total}\n"
-curl -sS -w "$curl_format" -o /dev/null "$url"
+curl -sfS -w "$curl_format" -o /dev/null "$url"
 #endregion
 
 
@@ -139,19 +139,15 @@ curl -sS -w "$curl_format" -o /dev/null "$url"
 func() {
     # Check for dependencies
     local dependencies="socat jq"
-    local missing_deps='' # false
-    _check_dependency() {
-        command -v "$1" >/dev/null 2>&1
-    }
+    local missing_deps=false
     local dependency
     for dependency in $dependencies; do
-        if ! _check_dependency "$dependency"; then
+        if ! command -v "$dependency" >/dev/null 2>&1; then
             echo "Missing dependency: $dependency" >&2
             missing_deps=true
         fi
     done
-    unset -f _check_dependency
-    if [ "$missing_deps" ]; then
+    if $missing_deps; then
         echo "ERROR: Missing dependencies" >&2
         return 1
     fi
@@ -215,7 +211,7 @@ shell_func() {
         echo "[ERR] shell_func: $*" >&2
     }
     _warn() {
-        echo "[WAR] shell_func: $*" >&2
+        echo "[WRN] shell_func: $*" >&2
     }
     _info() {
         echo "[INF] shell_func: $*"
@@ -266,7 +262,6 @@ shell_func() {
                     args+=("$1")
                     shift
                 done
-                break
                 ;;
             # Unknown option
             -*)
