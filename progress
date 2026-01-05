@@ -1,25 +1,107 @@
 #!/usr/bin/env bash
-#! tested in: GNU bash, version 5.2.15(1)-release (x86_64-apple-darwin22.1.0) | older versions and other shells will work but not guaranteed
 
 ###################################################
-# Display progress bar with completion percentage #
+# Progress bar utility
+#
+# Renders a single-line progress bar with percentage completion
+#
+# Usage:
+#   progress [OPTIONS] CURRENT MAX
+#
+# Positional arguments:
+#   CURRENT   Current progress value (integer, clamped to 0..MAX)
+#   MAX       Maximum value representing 100% (positive integer)
+#
+# Options:
+#   -w, --width N
+#       Width of the progress bar itself, not the total line width
+#       The bar is automatically clamped so the rendered line never wraps
+#
+#   -p, --progress-char CHAR
+#       Character used for the completed portion of the bar
+#
+#   -r, --remaining-char CHAR
+#       Character used for the remaining portion of the bar
+#
+#   --stderr
+#       Force progress output to stderr
+#
+#   --stdout
+#       Force progress output to stdout
+#
+#   -h, --help
+#       Show this help and exit
+#
+# Output behavior:
+#   - By default, progress output prefers stderr so stdout remains clean
+#   - Interactive redraws (\r) are only used when the chosen output stream is a TTY
+#   - In non-TTY contexts, output is emitted only once at completion
 ###################################################
 
 _progress() {
-    local current
-    local max
+    local current=""
+    local max=""
     local bar_width=50
-    local progress_char="#" # Filled columns of the loading bar
-    local remaining_char=" " # Unfilled columns of the loading bar
+    local progress_char="#"
+    local remaining_char=" "
+    local interactive=false
+    local out_mode="auto" # auto (prefer stderr), stderr, stdout
+
+    _usage() {
+        cat <<'EOF'
+Progress bar utility
+
+Renders a single-line progress bar with percentage completion
+
+Usage:
+  progress [OPTIONS] CURRENT MAX
+
+Positional arguments:
+  CURRENT   Current progress value (integer, clamped to 0..MAX)
+  MAX       Maximum value representing 100% (positive integer)
+
+Options:
+  -w, --width N
+      Width of the progress bar itself, not the total line width
+      The bar is automatically clamped so the rendered line never wraps
+
+  -p, --progress-char CHAR
+      Character used for the completed portion of the bar
+
+  -r, --remaining-char CHAR
+      Character used for the remaining portion of the bar
+
+  --stderr
+      Force progress output to stderr
+
+  --stdout
+      Force progress output to stdout
+
+  -h, --help
+      Show this help and exit
+
+Output behavior:
+  - By default, progress output prefers stderr so stdout remains clean
+  - Interactive redraws (\r) are only used when the chosen output stream is a TTY
+  - In non-TTY contexts, output is emitted only once at completion
+EOF
+    }
 
     # Parse options
     while [ $# -gt 0 ]; do
         case "$1" in
-            -c|--continue)
-                # If -c|--continue was provided, we need to overwrite the previous invocation by moving the cursor up one line
-                tput cuu1 && shift
+            -h|--help)
+                _usage
+                return 0
+            ;;
+            --stderr)
+                out_mode="stderr" && shift
+            ;;
+            --stdout)
+                out_mode="stdout" && shift
             ;;
             -w|--width)
+                # Width is the bar width, not the total printed line width
                 [ "$2" ] || { echo "Error: Missing value for width option." >&2; return 1; }
                 bar_width="$2" && shift 2
             ;;
@@ -27,8 +109,8 @@ _progress() {
                 [ "$2" ] || { echo "Error: Missing value for progress character option." >&2; return 1; }
                 progress_char="$2" && shift 2
             ;;
-            -r|--remaining-char|-n|--non-progress-char)
-                [ "$2" ] || { echo "Error: Missing value for non-progress character option." >&2; return 1; }
+            -r|--remaining-char)
+                [ "$2" ] || { echo "Error: Missing value for remaining character option." >&2; return 1; }
                 remaining_char="$2" && shift 2
             ;;
             *)
@@ -40,29 +122,166 @@ _progress() {
         esac
     done
 
-    # Ensure required positional parameters are set
+    # Validate required arguments
     if [ -z "$current" ] || [ -z "$max" ]; then
-        echo "Error: Missing required positional parameter(s)." >&2; return 1
+        echo "Error: Missing required positional parameter(s)" >&2
+        echo "Try: progress --help" >&2
+        return 1
     fi
 
-    # Calculate the progress percentage
+    # Basic number input validation
+    # current is allowed to be any integer; it will be clamped into range below
+    case "$current" in
+        -[0-9]*|[0-9]*) ;;
+        *) echo "Error: current must be an integer" >&2; return 1 ;;
+    esac
+    # max is a hard invariant: must be a positive integer
+    case "$max" in
+        [0-9]*)
+            [ "$max" -gt 0 ] || { echo "Error: max must be > 0" >&2; return 1; }
+        ;;
+        *) echo "Error: max must be a positive integer" >&2; return 1 ;;
+    esac
+    # bar_width is a hard invariant: must be a positive integer
+    case "$bar_width" in
+        [0-9]*)
+            [ "$bar_width" -gt 0 ] || { echo "Error: width must be > 0" >&2; return 1; }
+        ;;
+        *) echo "Error: width must be a positive integer" >&2; return 1 ;;
+    esac
+
+    _select_out_fd() {
+        case "$out_mode" in
+            stderr) echo 2 ;;
+            stdout) echo 1 ;;
+            auto)
+                # Prefer stderr so stdout stays clean for pipelines and command substitution
+                # Stdout is often redirected while stderr remains a TTY
+                if [ -t 2 ]; then
+                    echo 2
+                elif [ -t 1 ]; then
+                    echo 1
+                else
+                    echo 2
+                fi
+            ;;
+        esac
+    }
+
+    _is_tty_fd() {
+        case "$1" in
+            1) [ -t 1 ] ;;
+            2) [ -t 2 ] ;;
+            *) return 1 ;;
+        esac
+    }
+
+    _get_term_cols() {
+        # Returns terminal column count (integer), falling back to 80
+        # Prefers stty against /dev/tty, then tput against /dev/tty, then $COLUMNS
+        # /dev/tty uses the controlling terminal and avoids stdin/stdout redirection edge cases
+        local cols=""
+        local out=""
+
+        if command -v stty >/dev/null 2>&1; then
+            if out="$(stty size </dev/tty 2>/dev/null)"; then
+                cols="${out##* }"
+                case "$cols" in
+                    ''|*[!0-9]*) cols="" ;;
+                esac
+                [ "$cols" ] && { echo "$cols"; return 0; }
+            fi
+        fi
+
+        if command -v tput >/dev/null 2>&1; then
+            if out="$(tput cols </dev/tty 2>/dev/null)"; then
+                cols="$out"
+                case "$cols" in
+                    ''|*[!0-9]*) cols="" ;;
+                esac
+                [ "$cols" ] && { echo "$cols"; return 0; }
+            fi
+        fi
+
+        cols="$COLUMNS"
+        case "$cols" in
+            ''|*[!0-9]*) cols="" ;;
+        esac
+        [ "$cols" ] && { echo "$cols"; return 0; }
+
+        # Default to 80 columns
+        echo 80
+        return 0
+    }
+
+    _print_on_fd() {
+        # Usage: _print_on_fd FD FORMAT [ARGS...]
+        # FORMAT is a printf format string
+        local fd="$1"
+        shift
+        if [ "$fd" -eq 2 ]; then
+            # Ignore ShellCheck: We are explicitly expecting a printf format string in the variable
+            # shellcheck disable=2059 # "Don't use variables in the printf format string. Use printf '..%s..' "$foo"."
+            printf "$@" >&2
+        else
+            # Ignore ShellCheck: We are explicitly expecting a printf format string in the variable
+            # shellcheck disable=2059 # "Don't use variables in the printf format string. Use printf '..%s..' "$foo"."
+            printf "$@"
+        fi
+    }
+
+    local out_fd="$(_select_out_fd)"
+
+    # Interactive mode depends on the chosen output stream being a TTY
+    if _is_tty_fd "$out_fd"; then
+        interactive=true
+    fi
+
+    # Clamp bar_width so the rendered line cannot wrap and break \r redraw behavior
+    # Rendered format: "[" + bar + "] " + "%3d%%"
+    # Fixed overhead = 1 + 2 + 5 = 8
+    if [ "$interactive" = true ]; then
+        local term_cols="$(_get_term_cols)"
+        local fixed_width=8
+        local max_width=$((term_cols - fixed_width))
+        [ "$max_width" -lt 1 ] && max_width=1
+        [ "$bar_width" -gt "$max_width" ] && bar_width="$max_width"
+    fi
+
+    # Clamp current
+    [ "$current" -lt 0 ] && current=0
+    [ "$current" -gt "$max" ] && current="$max"
+
     local progress=$((current * 100 / max))
-    # Calculate the number of progress and non-progress characters for the progress bar
     local progress_count=$((progress * bar_width / 100))
     local remaining_count=$((bar_width - progress_count))
-    # Build the progress bar string
-    local progress_bar; progress_bar="$(printf "%${progress_count}s" | sed "s/ /$progress_char/g")$(printf "%${remaining_count}s" | sed "s/ /$remaining_char/g")"
-    # Print the progress bar
-    printf "Progress: [%s] %d%%   \n" "$progress_bar" "$progress"
-    : <<'/example'
-    tput civis
-    progress 0 10
-    for i in {1..10}; do
-        sleep 1
-        progress -c "$i" 10
-    done
-    tput cnorm
-/example
+
+    # Build the bar without external processes
+    local filled=""
+    local empty=""
+    printf -v filled "%*s" "$progress_count" ""
+    printf -v empty "%*s" "$remaining_count" ""
+    filled="${filled// /$progress_char}"
+    empty="${empty// /$remaining_char}"
+
+    if [ "$interactive" = true ]; then
+        # Interactive redraw on the chosen fd
+        _print_on_fd "$out_fd" "\r[%s%s] %3d%%" "$filled" "$empty" "$progress"
+        if [ "$current" -eq "$max" ]; then
+            _print_on_fd "$out_fd" "\n"
+        fi
+    else
+        # Non-TTY: avoid spamming logs or pipelines
+        if [ "$current" -eq "$max" ]; then
+            _print_on_fd "$out_fd" "[%s%s] %3d%%\n" "$filled" "$empty" "$progress"
+        fi
+    fi
+
+    unset -f _usage
+    unset -f _select_out_fd
+    unset -f _is_tty_fd
+    unset -f _get_term_cols
+    unset -f _print_on_fd
 }
 
 _progress "$@"
