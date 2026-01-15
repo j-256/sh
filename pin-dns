@@ -301,7 +301,7 @@ EOF
             return 1
         fi
         local info_plist="$chrome_app/Contents/Info.plist"
-        local chrome_version; chrome_version="$(defaults read "$info_plist" CFBundleShortVersionString 2> /dev/null)"
+        local chrome_version; chrome_version="$(defaults read "$info_plist" CFBundleShortVersionString 2>/dev/null)"
         if [ -z "$chrome_version" ]; then
             _error "Unable to determine Chrome version (failed to read $info_plist)."
             return 1
@@ -362,8 +362,7 @@ EOF
             dig_out="$(dig +short "$target" 2>/dev/null)"
         fi
 
-        local ip=""
-        ip="$(printf '%s\n' "$dig_out" | tail -n 1)"
+        local ip; ip="$(printf '%s\n' "$dig_out" | tail -n 1)"
         if [ -z "$ip" ]; then
             _error "dig returned no results for TARGET '$target'."
             return 4
@@ -522,13 +521,11 @@ EOF
         *) path="/$path" ;;
     esac
 
-    local url=""
-    url="${scheme}://${host}${path}"
+    local url="${scheme}://${host}${path}"
 
     local ip=""
     if [ -n "$target" ]; then
-        local resolved=""
-        resolved="$(_resolve_target_to_ip "$target" "$resolver")"
+        local resolved; resolved="$(_resolve_target_to_ip "$target" "$resolver")"
         local rc=$?
         if [ "$rc" -ne 0 ]; then return "$rc"; fi
         ip="$resolved"
@@ -538,8 +535,7 @@ EOF
     if _curl_args_has_user_agent "${curl_args[@]}"; then
         ua=""
     else
-        local ua_out=""
-        ua_out="$(_get_user_agent)"
+        local ua_out; ua_out="$(_get_user_agent)"
         local ua_rc=$?
         if [ "$ua_rc" -ne 0 ] || [ -z "$ua_out" ]; then
             _warn "User-Agent detection failed; falling back to 'sfcc-test'."
@@ -549,8 +545,7 @@ EOF
         fi
     fi
 
-    local -a cmd
-    cmd=()
+    local -a cmd=()
 
     cmd+=("curl")
     if [ -z "$no_silent" ]; then
