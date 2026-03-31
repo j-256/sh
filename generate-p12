@@ -28,7 +28,8 @@ _generate_p12() {
     trap 'unset -f _color _prompt _echo _bold _error _file_exists' RETURN
     # Applies provided formatting (typically color) to output
     _color() {
-        local color="$1" && shift
+        local color="$1"
+        shift
         if [ -t 0 ]; then # input is not piped or redirected (_func hi)
             printf "${color}%s\\n${reset}" "$@"
         else # input is piped or redirected (cat file | _func, _func <file)
@@ -133,6 +134,7 @@ EOF
     echo #newline
 
     # Prompt for desired cert expiration, in years
+    local years
     while :; do # keep prompting until a nonzero integer is entered
         _prompt "Years until expiration: "
         read -r years
@@ -177,7 +179,7 @@ EOF
         return 1
     fi
     echo #newline
-    _bold "Created PKCS12 client certificate:" 
+    _bold "Created PKCS12 client certificate:"
     _echo "$p12_filename"
     echo #newline
 
@@ -187,7 +189,7 @@ EOF
 
     # Return to original directory
     if ! cd "$old_dir"; then
-        echo "[ERR] Failed to revert to original directory" >&2
+        _error "Failed to revert to original directory"
         return 1
     fi
 }
