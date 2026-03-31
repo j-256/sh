@@ -158,14 +158,8 @@ EOF
     echo #newline
 
     ### Step 2 of 3: Create a certificate from the CSR using the CA files and password
-    # Read CA private key password from text file
-    local pass
-    if ! pass="$(cat "$ca_pass_filename")"; then
-        _error "Failed to read CA password from $ca_pass_filename"
-        return 1
-    fi
     # Create X.509 certificate to be bundled with the user's private key in the PKCS#12 keystore
-    if ! openssl x509 -req -in "$req_filename" -out "$pem_filename" -days "$days" -CA "$ca_cert_filename" -CAkey "$ca_key_filename" -passin "pass:$pass" -CAserial "$ca_serial_filename"; then
+    if ! openssl x509 -req -in "$req_filename" -out "$pem_filename" -days "$days" -CA "$ca_cert_filename" -CAkey "$ca_key_filename" -passin "file:$ca_pass_filename" -CAserial "$ca_serial_filename"; then
         _error "${bold}\`openssl x509\` (step 2/3) failed - .pem file not generated"
         return 1
     fi
