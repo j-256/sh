@@ -1,0 +1,224 @@
+#!/bin/bash
+# notify - show a macOS notification via osascript
+#
+# Usage: notify [OPTIONS] [MESSAGE ...]
+#        command | notify [OPTIONS]
+#
+# Options:
+#   -t, --title TITLE        Notification title (default: "Notification")
+#   -s, --subtitle SUBTITLE  Notification subtitle
+#       --sound SOUND        Sound name (default: "Glass")
+#   -n, --no-sound           Suppress notification sound
+#   -l, --list-sounds        List available sound names and exit
+#   -h, --help               Show help and exit
+#
+# Environment:
+#   NOTIFY_TITLE    Default title (overridden by --title)
+#   NOTIFY_SOUND    Default sound (overridden by --sound / --no-sound)
+#
+# Notes:
+#   - Notifications are attributed to Script Editor (the osascript host app)
+#   - Notification duration is controlled by macOS, not this script
+#     (System Settings > Notifications > Script Editor)
+#
+# Compatible with macOS /bin/bash 3.2 (no Bash 4+ features)
+_notify() {
+    local SCRIPT_PATH="${BASH_SOURCE[0]}"
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "$SCRIPT_PATH")"
+
+    _is_tty() { [ -t 2 ]; }
+
+    _error() {
+        if _is_tty; then
+            printf '\033[1;31m%s\033[0m\n' "[ERR] $SCRIPT_NAME: $*" >&2
+        else
+            printf '%s\n' "[ERR] $SCRIPT_NAME: $*" >&2
+        fi
+    }
+
+    _print_help() {
+        cat <<'EOF'
+Usage: notify [OPTIONS] [MESSAGE ...]
+       command | notify [OPTIONS]
+
+Options:
+  -t, --title TITLE        Notification title (default: "Notification")
+  -s, --subtitle SUBTITLE  Notification subtitle
+      --sound SOUND        Sound name (default: "Glass")
+  -n, --no-sound           Suppress notification sound
+  -l, --list-sounds        List available sound names and exit
+  -h, --help               Show help and exit
+
+Environment:
+  NOTIFY_TITLE    Default title (overridden by --title)
+  NOTIFY_SOUND    Default sound (overridden by --sound / --no-sound)
+
+Notification duration is controlled by macOS, not this script
+(System Settings > Notifications > Script Editor)
+EOF
+    }
+
+    _list_sounds() {
+        local sounds=""
+        local dir file name
+
+        for dir in /System/Library/Sounds ~/Library/Sounds; do
+            [ -d "$dir" ] || continue
+            for file in "$dir"/*; do
+                [ -f "$file" ] || continue
+                name="${file##*/}"
+                name="${name%.*}"
+                sounds="${sounds:+$sounds$'\n'}$name"
+            done
+        done
+
+        if [ -z "$sounds" ]; then
+            _error "No sounds found in /System/Library/Sounds/ or ~/Library/Sounds/"
+            return 1
+        fi
+
+        printf '%s\n' "$sounds" | sort
+    }
+
+    __unset() {
+        unset -f _is_tty
+        unset -f _error
+        unset -f _print_help
+        unset -f _list_sounds
+        unset -f __unset
+    }
+
+    # shellcheck disable=2329 # "This function is never invoked. Check usage (or ignored if invoked indirectly)."
+    local __old_trap; __old_trap="$(trap -p RETURN)"
+    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; [ "$__old_trap" ] && eval "$__old_trap" || trap - RETURN' RETURN
+
+    if ! command -v osascript >/dev/null 2>&1; then
+        _error "osascript not found (macOS only)"
+        return 3
+    fi
+
+    local title="${NOTIFY_TITLE:-Notification}"
+    local subtitle=""
+    local sound="${NOTIFY_SOUND:-Glass}"
+    local no_sound=""
+    local list_sounds=""
+    local -a args=()
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -h|--help)
+                _print_help
+                return 0
+                ;;
+            -l|--list-sounds)
+                list_sounds=1
+                shift
+                ;;
+            -n|--no-sound)
+                no_sound=1
+                shift
+                ;;
+            -t|--title)
+                if [ $# -lt 2 ]; then
+                    _error "Missing value for $1"
+                    return 2
+                fi
+                title="$2"
+                shift 2
+                ;;
+            --title=*)
+                title="${1#*=}"
+                shift
+                ;;
+            -s|--subtitle)
+                if [ $# -lt 2 ]; then
+                    _error "Missing value for $1"
+                    return 2
+                fi
+                subtitle="$2"
+                shift 2
+                ;;
+            --subtitle=*)
+                subtitle="${1#*=}"
+                shift
+                ;;
+            --sound)
+                if [ $# -lt 2 ]; then
+                    _error "Missing value for $1"
+                    return 2
+                fi
+                sound="$2"
+                shift 2
+                ;;
+            --sound=*)
+                sound="${1#*=}"
+                shift
+                ;;
+            --)
+                shift
+                while [ $# -gt 0 ]; do
+                    args+=("$1")
+                    shift
+                done
+                ;;
+            -*)
+                _error "Unknown option: $1"
+                return 2
+                ;;
+            *)
+                args+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    if [ -n "$list_sounds" ]; then
+        _list_sounds
+        return $?
+    fi
+
+    # Build message from positional args or stdin
+    local message=""
+    if [ ${#args[@]} -gt 0 ]; then
+        message="${args[*]}"
+    elif [ ! -t 0 ]; then
+        message="$(cat)"
+    fi
+
+    if [ -z "$message" ]; then
+        _error "MESSAGE is required (pass as argument or pipe to stdin)"
+        _print_help >&2
+        return 2
+    fi
+
+    local effective_sound="$sound"
+    if [ -n "$no_sound" ]; then
+        effective_sound=""
+    fi
+
+    osascript - "$message" "$title" "$subtitle" "$effective_sound" <<'APPLESCRIPT'
+on run argv
+    set msg to item 1 of argv
+    set ttl to item 2 of argv
+    set sub to item 3 of argv
+    set snd to item 4 of argv
+    if sub is "" and snd is "" then
+        display notification msg with title ttl
+    else if sub is "" then
+        display notification msg with title ttl sound name snd
+    else if snd is "" then
+        display notification msg with title ttl subtitle sub
+    else
+        display notification msg with title ttl subtitle sub sound name snd
+    end if
+end run
+APPLESCRIPT
+}
+
+_notify "$@"
+__notify_rc=$?
+unset -f _notify
+if [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __notify_rc; return $__notify_rc"
+fi
+eval "unset __notify_rc; exit $__notify_rc"
