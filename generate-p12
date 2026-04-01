@@ -72,13 +72,10 @@ _generate_p12() {
         return $any_missing
     }
 
-    # TODO: We should just include the path in the filenames rather than changing to the directory and back
-    local wd="${1:-"$PWD"}" # working directory
-    # Save old dir to `cd` back to
-    local old_dir="$PWD"
-    # `cd` to working directory (or current if not provided, which will be a no-op)
-    if ! cd "$wd"; then
-        _error "Failed to change to specified directory"
+    local wd="${1:-"$PWD"}"
+    # Resolve to absolute path (the cd runs in a subshell via command substitution)
+    if ! wd="$(cd "$wd" && pwd)"; then
+        _error "Failed to access specified directory"
         return 1
     fi
 
@@ -102,10 +99,10 @@ _generate_p12() {
     )"
 
     # Assemble cert bundle filenames and verify that they all exist before proceeding
-    local ca_cert_filename="${hostname}_01.crt"
-    local ca_key_filename="${hostname}_01.key"
-    local ca_pass_filename="${hostname}_01.txt"
-    local ca_serial_filename="${hostname}.srl" # CA serial is the only one which doesn't end in _01
+    local ca_cert_filename="$wd/${hostname}_01.crt"
+    local ca_key_filename="$wd/${hostname}_01.key"
+    local ca_pass_filename="$wd/${hostname}_01.txt"
+    local ca_serial_filename="$wd/${hostname}.srl" # CA serial is the only one which doesn't end in _01
     # Verify necessary files exist, printing any which are missing
     if ! _file_exists "$ca_cert_filename" "$ca_key_filename" "$ca_pass_filename" "$ca_serial_filename"; then
         _error "${bold}Necessary file(s) missing, aborting p12 generation"
@@ -114,10 +111,10 @@ _generate_p12() {
 
     # Define output file names
     local user="$USER"
-    local req_filename="$user-$hostname.req"
-    local key_filename="$user-$hostname.key"
-    local pem_filename="$user-$hostname.pem"
-    local p12_filename="$user-$hostname.p12"
+    local req_filename="$wd/$user-$hostname.req"
+    local key_filename="$wd/$user-$hostname.key"
+    local pem_filename="$wd/$user-$hostname.pem"
+    local p12_filename="$wd/$user-$hostname.p12"
 
     # Print the filenames which will be used
     _echo <<EOF
@@ -185,13 +182,7 @@ EOF
 
     ### DONE
     _bold "Finished successfully. Full path to p12:"
-    _echo "$PWD/$p12_filename"
-
-    # Return to original directory
-    if ! cd "$old_dir"; then
-        _error "Failed to revert to original directory"
-        return 1
-    fi
+    _echo "$p12_filename"
 }
 
 _generate_p12 "$@"
