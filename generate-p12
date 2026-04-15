@@ -10,6 +10,35 @@
 ##############################################################################################
 
 _generate_p12() {
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+
+    _show_help() {
+        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
+        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        echo "NAME"
+        echo "  generate-p12 - generate .p12 client certificate for staging MFA"
+        echo "SYNOPSIS"
+        echo "  generate-p12 [${s}cert_bundle_directory${r}]"
+        echo "  generate-p12 -h"
+        echo "DESCRIPTION"
+        echo "  Interactive script that generates a PKCS#12 (.p12) client"
+        echo "  certificate for Salesforce B2C Commerce staging code upload"
+        echo "  MFA. Run from the directory the cert bundle was unzipped to,"
+        echo "  or provide that path as an argument."
+        echo ""
+        echo "  Prompts for: hostname, cert expiration, CSR fields, and an"
+        echo "  export password to encrypt the .p12 file."
+        echo "DEPENDENCIES"
+        echo "  openssl"
+    }
+
+    case "$1" in
+        -h|--help)
+            _show_help
+            return 0
+            ;;
+    esac
+
     # Example hostname: "cert.staging.customer.realm.demandware.net"
     # However, any BM hostname or as little as "customer.realm" or "customer-realm" may be provided
 
@@ -25,7 +54,11 @@ _generate_p12() {
     #  $'\E[0m' or $'\E[m', but those essentially match `tput sgr0`, clearing all formatting
 
     # Unset inner functions before returning
-    trap 'unset -f _color _prompt _echo _bold _error _file_exists' RETURN
+    __unset() {
+        unset -f __unset _show_help _color _prompt _echo _bold _error _file_exists
+    }
+    local __old_trap; __old_trap="$(trap -p RETURN)"
+    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; [ "$__old_trap" ] && eval "$__old_trap" || trap - RETURN' RETURN
     # Applies provided formatting (typically color) to output
     _color() {
         local color="$1"
@@ -80,7 +113,7 @@ _generate_p12() {
     fi
 
     local hostname
-    _prompt "Hostname (cert.staging.***): "
+    _prompt "BM Hostname: "
     read -r hostname
     echo #newline
     # Make sure we end up with a good hostname no matter what form it's provided in
@@ -98,11 +131,30 @@ _generate_p12() {
              s/$/.demandware.net/'
     )"
 
-    # Assemble cert bundle filenames and verify that they all exist before proceeding
-    local ca_cert_filename="$wd/${hostname}_01.crt"
-    local ca_key_filename="$wd/${hostname}_01.key"
-    local ca_pass_filename="$wd/${hostname}_01.txt"
-    local ca_serial_filename="$wd/${hostname}.srl" # CA serial is the only one which doesn't end in _01
+    # Find the highest cert bundle suffix (_01, _02, etc.) with all 3 required files
+    local ca_suffix=""
+    local candidate
+    local suffix
+    for candidate in "$wd/${hostname}_"[0-9][0-9].crt; do
+        [ -f "$candidate" ] || continue # no matches -- glob returned literally
+        suffix="${candidate%.crt}"
+        suffix="${suffix##*_}"
+        if [ -f "$wd/${hostname}_${suffix}.key" ] && \
+           [ -f "$wd/${hostname}_${suffix}.txt" ]; then
+            ca_suffix="$suffix" # glob is ascending, so last match is highest
+        fi
+    done
+    if [ -z "$ca_suffix" ]; then
+        _error "No complete cert bundle found for ${hostname}"
+        _error "Expected files: ${hostname}_XX.crt, .key, .txt"
+        return 1
+    fi
+
+    # Assemble cert bundle filenames
+    local ca_cert_filename="$wd/${hostname}_${ca_suffix}.crt"
+    local ca_key_filename="$wd/${hostname}_${ca_suffix}.key"
+    local ca_pass_filename="$wd/${hostname}_${ca_suffix}.txt"
+    local ca_serial_filename="$wd/${hostname}.srl" # .srl never has a numeric suffix
     # Verify necessary files exist, printing any which are missing
     if ! _file_exists "$ca_cert_filename" "$ca_key_filename" "$ca_pass_filename" "$ca_serial_filename"; then
         _error "${bold}Necessary file(s) missing, aborting p12 generation"
@@ -118,15 +170,15 @@ _generate_p12() {
 
     # Print the filenames which will be used
     _echo <<EOF
-${smul}Using these filenames:${rmul}
-  $ca_cert_filename
-  $ca_key_filename
-  $ca_pass_filename
-  $ca_serial_filename
-  $req_filename
-  $key_filename
-  $pem_filename
-  $p12_filename
+${smul}Using these files in ${wd}:${rmul}
+  ${ca_cert_filename##*/}
+  ${ca_key_filename##*/}
+  ${ca_pass_filename##*/}
+  ${ca_serial_filename##*/}
+  ${req_filename##*/}
+  ${key_filename##*/}
+  ${pem_filename##*/}
+  ${p12_filename##*/}
 EOF
     echo #newline
 
@@ -186,3 +238,9 @@ EOF
 }
 
 _generate_p12 "$@"
+__generate_p12_rc=$?
+unset -f _generate_p12
+if [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __generate_p12_rc; return $__generate_p12_rc"
+fi
+eval "unset __generate_p12_rc; exit $__generate_p12_rc"
