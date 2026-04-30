@@ -85,7 +85,7 @@ Display names are set to the product ID (for bases) or `BASE# Variant ###` (for 
 | Code | Meaning |
 |---|---|
 | 0 | Success |
-| 1 | Invalid arguments (missing required args, non-numeric values, zero or negative counts) |
+| 2 | Usage error (missing required args, non-numeric values, zero or negative counts) |
 
 ### Dependencies
 

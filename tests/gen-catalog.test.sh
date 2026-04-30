@@ -29,43 +29,43 @@ test_help_short() {
 
 test_missing_all_args() {
     run_script
-    assert_rc "no args exits 1" 1
+    assert_rc "no args exits 2" 2
     assert_err_contains "usage message" "Usage: gen-catalog"
 }
 
 test_missing_variants_per_base() {
     run_script 5
-    assert_rc "missing second arg exits 1" 1
+    assert_rc "missing second arg exits 2" 2
     assert_err_contains "usage message" "Usage: gen-catalog"
 }
 
 test_base_count_non_numeric() {
     run_script "abc" 2
-    assert_rc "non-numeric base_count exits 1" 1
+    assert_rc "non-numeric base_count exits 2" 2
     assert_err_contains "base_count must be integer" "BASE_COUNT must be a positive integer"
 }
 
 test_variants_per_base_non_numeric() {
     run_script 2 "xyz"
-    assert_rc "non-numeric variants_per_base exits 1" 1
+    assert_rc "non-numeric variants_per_base exits 2" 2
     assert_err_contains "variants_per_base must be integer" "VARIANTS_PER_BASE must be a positive integer"
 }
 
 test_base_count_zero() {
     run_script 0 2
-    assert_rc "zero base_count exits 1" 1
+    assert_rc "zero base_count exits 2" 2
     assert_err_contains "must be greater than zero" "must be greater than zero"
 }
 
 test_variants_per_base_zero() {
     run_script 2 0
-    assert_rc "zero variants_per_base exits 1" 1
+    assert_rc "zero variants_per_base exits 2" 2
     assert_err_contains "must be greater than zero" "must be greater than zero"
 }
 
 test_base_count_negative() {
     run_script -5 2
-    assert_rc "negative base_count exits 1" 1
+    assert_rc "negative base_count exits 2" 2
     assert_err_contains "base_count must be integer" "BASE_COUNT must be a positive integer"
 }
 

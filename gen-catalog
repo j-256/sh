@@ -32,6 +32,9 @@ _gen_catalog() {
         echo "  ${s}variants_per_base${r}   Number of variants per base product"
         echo "  ${s}catalog_id${r}          Catalog ID (default: test-catalog)"
         echo "  -h, --help          Show this help message"
+        echo "EXIT STATUS"
+        echo "  0  Success"
+        echo "  2  Usage error (missing or non-positive-integer arg)"
     }
 
     main() {
@@ -41,26 +44,26 @@ _gen_catalog() {
 
         if [ ! "$base_count" ] || [ ! "$variants_per_base" ]; then
             echo "Usage: $SCRIPT_NAME BASE_COUNT VARIANTS_PER_BASE [CATALOG_ID]" >&2
-            return 1
+            return 2
         fi
 
         case "$base_count" in
             *[!0-9]*)
                 echo "BASE_COUNT must be a positive integer" >&2
-                return 1
+                return 2
                 ;;
         esac
 
         case "$variants_per_base" in
             *[!0-9]*)
                 echo "VARIANTS_PER_BASE must be a positive integer" >&2
-                return 1
+                return 2
                 ;;
         esac
 
         if [ "$base_count" -le 0 ] || [ "$variants_per_base" -le 0 ]; then
             echo "BASE_COUNT and VARIANTS_PER_BASE must be greater than zero" >&2
-            return 1
+            return 2
         fi
 
         if [ ! "$catalog_id" ]; then
