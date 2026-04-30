@@ -199,11 +199,13 @@ test_read_with_newline() {
 
 test_invalid_option() {
     run_script --invalid-option
-    assert_rc "invalid option still runs" 0
-    # Invalid options are treated as the default case (tab separator)
+    assert_rc "invalid option exits 2" 2
+    assert_err_contains "invalid option error mentions flag" "--invalid-option"
+    assert_err_contains "invalid option points to -h" "-h"
+    # No output should be produced
     local output
     output="$(get_stdout)"
-    assert_contains "invalid option uses tab" "$output" "$(printf '\t')"
+    assert_eq "invalid option writes nothing to stdout" "$output" ""
 }
 
 test_openssl_rand_called() {

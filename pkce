@@ -48,6 +48,7 @@ _pkce() {
         echo "  { read -r verifier; read -r challenge; } < <($SCRIPT_NAME -n)"
         echo "EXIT STATUS"
         echo "  0  Success"
+        echo "  2  Usage error (unknown option)"
         echo "  3  Dependency error (openssl missing)"
         echo "DEPENDENCIES"
         echo "  openssl"
@@ -75,8 +76,9 @@ _pkce() {
 
     local delimiter
     case "$1" in
+        "") delimiter='\t' ;;
         -n|--newline) delimiter='\n' ;;
-        *) delimiter='\t' ;;
+        *) _error "Unknown option: $1. Run \`$SCRIPT_NAME -h\` for usage."; return 2 ;;
     esac
 
     # RFC7636 specifies code verifier should be 43 to 128 random characters
