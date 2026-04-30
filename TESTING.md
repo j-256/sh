@@ -4,7 +4,7 @@ Standards for test files in this repository.
 
 ## Principles
 
-- Every script gets a `<name>.test.sh` in the same directory
+- Every script gets a `<name>.test.sh` in `tests/` (alongside `test-helpers.sh` and `test-runner.sh`)
 - Tests are self-contained, network-free, and runnable with bash 3.2+
 - No external dependencies beyond bash builtins and standard POSIX tools (mktemp, cat, mkdir, chmod, etc.)
 - All external commands the script-under-test calls (curl, dig, jq, etc.) are shimmed
@@ -22,7 +22,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=test-helpers.sh
 source "$SCRIPT_DIR/test-helpers.sh"
 
-UNDER_TEST="$SCRIPT_DIR/script-name"
+UNDER_TEST="$SCRIPT_DIR/../script-name"
 
 # --- shims ---
 
@@ -212,9 +212,9 @@ chmod +x "$SHIM_DIR/dig"
 
 ## test-runner.sh
 
-An aggregate runner that finds and runs all test files. Lives in the same directory. Unlike test files, this follows CONVENTIONS.md since it is a tool.
+An aggregate runner that finds and runs all test files. Lives in `tests/` alongside the test files. Unlike test files, this follows CONVENTIONS.md since it is a tool.
 
-- Globs `*.test.sh` in its own directory
+- Globs `*.test.sh` in its own directory (`tests/`)
 - Runs each file, captures its exit code
 - Accepts an optional pattern to filter which tests to run (e.g. `test-runner.sh pin-dns`)
 - Prints a final summary: which files passed, which failed
