@@ -87,7 +87,8 @@ Use whichever makes the most sense for your context.
 | Code | Meaning |
 |---|---|
 | 0 | Success |
-| 1 | Usage error (missing required flag, invalid unit, invalid size, duplicate flags) |
+| 2 | Usage error (missing required flag, invalid unit, invalid size, duplicate flags) |
+| 3 | Dependency error (bc missing) |
 
 ### Constraints
 
