@@ -115,7 +115,7 @@ Width detection uses `stty`, then `tput`, then `$COLUMNS`, falling back to 80.
 | Code | Meaning |
 |---|---|
 | 0 | Success |
-| 1 | Usage error (missing arguments, invalid number, width <= 0) |
+| 2 | Usage error (missing arguments, invalid number, width <= 0) |
 
 ### Dependencies
 

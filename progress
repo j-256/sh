@@ -58,6 +58,9 @@ _progress() {
         echo "CAVEATS"
         echo "  In non-TTY contexts, output is suppressed until ${s}current${r} == ${s}max${r}"
         echo "  to avoid spamming logs or pipelines."
+        echo "EXIT STATUS"
+        echo "  0  Success"
+        echo "  2  Usage error (missing/invalid arg, bad flag value)"
         echo "DEPENDENCIES"
         echo "  stty, tput"
     }
@@ -77,21 +80,21 @@ _progress() {
             ;;
             -w|--width)
                 # Width is the bar width, not the total printed line width
-                [ "$2" ] || { echo "Error: Missing value for width option." >&2; return 1; }
+                [ "$2" ] || { echo "Error: Missing value for width option." >&2; return 2; }
                 bar_width="$2" && shift 2
             ;;
             -p|--progress-char)
-                [ "$2" ] || { echo "Error: Missing value for progress character option." >&2; return 1; }
+                [ "$2" ] || { echo "Error: Missing value for progress character option." >&2; return 2; }
                 progress_char="$2" && shift 2
             ;;
             -r|--remaining-char)
-                [ "$2" ] || { echo "Error: Missing value for remaining character option." >&2; return 1; }
+                [ "$2" ] || { echo "Error: Missing value for remaining character option." >&2; return 2; }
                 remaining_char="$2" && shift 2
             ;;
             *)
                 if [ -z "$current" ]; then current="$1"
                 elif [ -z "$max" ]; then max="$1"
-                else echo "Error: Too many positional arguments." >&2; return 1; fi
+                else echo "Error: Too many positional arguments." >&2; return 2; fi
                 shift
             ;;
         esac
@@ -101,28 +104,28 @@ _progress() {
     if [ -z "$current" ] || [ -z "$max" ]; then
         echo "Error: Missing required positional parameter(s)" >&2
         echo "Try: progress --help" >&2
-        return 1
+        return 2
     fi
 
     # Basic number input validation
     # current is allowed to be any integer; it will be clamped into range below
     case "$current" in
         -[0-9]*|[0-9]*) ;;
-        *) echo "Error: current must be an integer" >&2; return 1 ;;
+        *) echo "Error: current must be an integer" >&2; return 2 ;;
     esac
     # max is a hard invariant: must be a positive integer
     case "$max" in
         [0-9]*)
-            [ "$max" -gt 0 ] || { echo "Error: max must be > 0" >&2; return 1; }
+            [ "$max" -gt 0 ] || { echo "Error: max must be > 0" >&2; return 2; }
         ;;
-        *) echo "Error: max must be a positive integer" >&2; return 1 ;;
+        *) echo "Error: max must be a positive integer" >&2; return 2 ;;
     esac
     # bar_width is a hard invariant: must be a positive integer
     case "$bar_width" in
         [0-9]*)
-            [ "$bar_width" -gt 0 ] || { echo "Error: width must be > 0" >&2; return 1; }
+            [ "$bar_width" -gt 0 ] || { echo "Error: width must be > 0" >&2; return 2; }
         ;;
-        *) echo "Error: width must be a positive integer" >&2; return 1 ;;
+        *) echo "Error: width must be a positive integer" >&2; return 2 ;;
     esac
 
     _select_out_fd() {
