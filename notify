@@ -1,8 +1,10 @@
 #!/bin/bash
 # notify - show a macOS notification via osascript
 #
-# Usage: notify [OPTIONS] [MESSAGE ...]
-#        command | notify [OPTIONS]
+# Usage:
+#   notify [options] [message ...]
+#   command | notify [options]
+#   notify -h
 #
 # Options:
 #   -t, --title TITLE        Notification title (default: "Notification")
@@ -13,18 +15,14 @@
 #   -h, --help               Show help and exit
 #
 # Environment:
-#   NOTIFY_TITLE    Default title (overridden by --title)
-#   NOTIFY_SOUND    Default sound (overridden by --sound / --no-sound)
+#   NOTIFY_TITLE  Default title (overridden by --title)
+#   NOTIFY_SOUND  Default sound (overridden by --sound / --no-sound)
 #
-# Notes:
-#   - Notifications are attributed to Script Editor (the osascript host app)
-#   - Notification duration is controlled by macOS, not this script
-#     (System Settings > Notifications > Script Editor)
-#
-# Compatible with macOS /bin/bash 3.2 (no Bash 4+ features)
+# macOS only. osascript is the backing mechanism for notifications.
+
 _notify() {
-    local SCRIPT_PATH="${BASH_SOURCE[0]}"
-    local SCRIPT_NAME; SCRIPT_NAME="$(basename "$SCRIPT_PATH")"
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="notify" ;; esac
 
     _is_tty() { [ -t 2 ]; }
 
@@ -36,31 +34,48 @@ _notify() {
         fi
     }
 
-    _print_help() {
-        cat <<'EOF'
-Usage: notify [OPTIONS] [MESSAGE ...]
-       command | notify [OPTIONS]
-
-Options:
-  -t, --title TITLE        Notification title (default: "Notification")
-  -s, --subtitle SUBTITLE  Notification subtitle
-      --sound SOUND        Sound name (default: "Glass")
-  -n, --no-sound           Suppress notification sound
-  -l, --list-sounds        List available sound names and exit
-  -h, --help               Show help and exit
-
-Environment:
-  NOTIFY_TITLE    Default title (overridden by --title)
-  NOTIFY_SOUND    Default sound (overridden by --sound / --no-sound)
-
-Notification duration is controlled by macOS, not this script
-(System Settings > Notifications > Script Editor)
-EOF
+    _show_help() {
+        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
+        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        echo "NAME"
+        echo "  $SCRIPT_NAME - show a macOS notification via osascript"
+        echo "SYNOPSIS"
+        echo "  $SCRIPT_NAME [${s}options${r}] [${s}message${r} ...]"
+        echo "  ${s}command${r} | $SCRIPT_NAME [${s}options${r}]"
+        echo "  $SCRIPT_NAME -h"
+        echo "DESCRIPTION"
+        echo "  Displays a macOS notification in the top-right corner and in"
+        echo "  Notification Center. The ${s}message${r} may be passed as positional"
+        echo "  arguments or piped to stdin."
+        echo ""
+        echo "  Notifications are attributed to Script Editor (the osascript host"
+        echo "  app). Notification duration is controlled by macOS, not this script"
+        echo "  (System Settings > Notifications > Script Editor)."
+        echo "OPTIONS"
+        echo "  -t, --title ${s}title${r}        Notification title (default: \"Notification\")"
+        echo "  -s, --subtitle ${s}subtitle${r}  Notification subtitle"
+        echo "      --sound ${s}sound${r}        Sound name (default: \"Glass\")"
+        echo "  -n, --no-sound           Suppress notification sound"
+        echo "  -l, --list-sounds        List available sound names and exit"
+        echo "  -h, --help               Show this help message"
+        echo "ENVIRONMENT"
+        echo "  NOTIFY_TITLE    Default title (overridden by --title)"
+        echo "  NOTIFY_SOUND    Default sound (overridden by --sound / --no-sound)"
+        echo "EXIT STATUS"
+        echo "  0  Success"
+        echo "  2  Invalid arguments or missing required message"
+        echo "  3  osascript not found (not running on macOS)"
+        echo "DEPENDENCIES"
+        echo "  osascript (macOS)"
+        echo "CAVEATS"
+        echo "  macOS only. osascript is the backing mechanism for notifications."
     }
 
     _list_sounds() {
         local sounds=""
-        local dir file name
+        local dir
+        local file
+        local name
 
         for dir in /System/Library/Sounds ~/Library/Sounds; do
             [ -d "$dir" ] || continue
@@ -83,7 +98,7 @@ EOF
     __unset() {
         unset -f _is_tty
         unset -f _error
-        unset -f _print_help
+        unset -f _show_help
         unset -f _list_sounds
         unset -f __unset
     }
@@ -106,7 +121,7 @@ EOF
     while [ $# -gt 0 ]; do
         case "$1" in
             -h|--help)
-                _print_help
+                _show_help
                 return 0
                 ;;
             -l|--list-sounds)
@@ -186,7 +201,7 @@ EOF
 
     if [ -z "$message" ]; then
         _error "MESSAGE is required (pass as argument or pipe to stdin)"
-        _print_help >&2
+        _show_help >&2
         return 2
     fi
 
@@ -217,7 +232,7 @@ APPLESCRIPT
 _notify "$@"
 __notify_rc=$?
 unset -f _notify
-if [ "${BASH_SOURCE[0]}" != "$0" ]; then
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __notify_rc; return $__notify_rc"
 fi
 eval "unset __notify_rc; exit $__notify_rc"

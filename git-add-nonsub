@@ -1,61 +1,98 @@
-#!/usr/bin/env bash
-
-###########################################################################
-# Temporarily moves the .git directory of a target directory, runs        #
-# `git add` on it, then restores the .git directory. Useful for tracking  #
-# a directory in an outer repo without adding it as a submodule.          #
-###########################################################################
-# Usage:                                                                  #
-#   git-add-nonsub <directory>                                            #
-###########################################################################
+#!/bin/bash
+# git-add-nonsub - Temporarily move a nested .git aside so `git add` stages the
+#                  directory's files in the outer repo instead of as a submodule
+#
+# Usage:
+#   git-add-nonsub <directory>
+#   git-add-nonsub -h
+#
+# Options:
+#   <directory>   Path to a directory containing its own .git (nested repo)
+#   -h, --help    Show help message
 
 _git_add_nonsub() {
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="git-add-nonsub" ;; esac
     local dir=''
     local git_backup=''
 
-    # Helper functions
     _show_help() {
-        # Only underline if stdout is a terminal
         local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
         local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
         echo "NAME"
-        echo "  git-add-nonsub - Temporarily moves .git directory, runs 'git add', and restores it."
-        echo "                   Useful for tracking a directory in an outer repository without adding it as a submodule."
+        echo "  $SCRIPT_NAME - temporarily move a nested .git aside so git add stages files"
         echo "SYNOPSIS"
-        echo "  git-add-nonsub [${s}options${r}] <${s}directory${r}>"
+        echo "  $SCRIPT_NAME <${s}directory${r}>"
+        echo "  $SCRIPT_NAME -h"
+        echo "DESCRIPTION"
+        echo "  Moves ${s}directory${r}/.git to a temp location, runs \`git add .\` inside"
+        echo "  ${s}directory${r} (so the OUTER repo's git picks up the files directly"
+        echo "  instead of creating a submodule reference), then restores the .git"
+        echo "  directory. Useful for vendoring a third-party repo without maintaining"
+        echo "  a submodule link."
         echo "OPTIONS"
-        echo "  -h, --help         Display this help message"
+        echo "  ${s}directory${r}   Directory that contains its own .git subdirectory"
+        echo "  -h, --help    Show this help message"
+        echo "PRECONDITIONS"
+        echo "  - ${s}directory${r} must exist and contain a .git subdirectory"
+        echo "  - Must be invoked from inside an outer git repository's working tree"
+        echo "EXIT STATUS"
+        echo "  0   Success"
+        echo "  1   Runtime failure (backup, restore, or git add failed)"
+        echo "  2   Usage / precondition error"
+        echo "  130 Interrupted (SIGINT/SIGTERM/SIGHUP); emergency restore attempted"
+        echo "DEPENDENCIES"
+        echo "  git"
+        echo "CAVEATS"
+        echo "  The temporary .git move is not fully crash-safe. A signal-trap"
+        echo "  (INT/TERM/HUP) will attempt to restore .git, but a SIGKILL or power"
+        echo "  loss between the move and restore will leave the target without its"
+        echo "  .git directory. The temp path is printed so manual recovery is"
+        echo "  possible."
     }
 
-    _error() { echo "[ERR] $*" >&2; }
+    _error() { echo "[$SCRIPT_NAME] ERROR: $*" >&2; }
     _info() { echo "[INF] $*"; }
 
     _backup_git() {
         local target_dir="$1"
-        git_backup="$(mktemp -d)/.git"
+        git_backup="$(mktemp -d)"
         if ! mv "$target_dir/.git" "$git_backup"; then
-            _error "Failed to move .git to $git_backup"
+            _error "Failed to move .git to $git_backup."
             return 1
         fi
-        _info "Backup created at $git_backup"
+        _info "Backup created at $git_backup."
     }
 
     _restore_git() {
         local target_dir="$1"
+        # Move the backup to $target_dir
         if ! mv "$git_backup" "$target_dir/.git"; then
-            _error "Failed to restore .git from $git_backup"
+            _error "Failed to restore $git_backup to $target_dir/.git."
             return 1
         fi
-        # Remove the temp folder containing .git
-        rmdir "$(dirname "$git_backup")"
-        _info "Restored .git directory"
+        _info "Restored .git directory."
     }
+
+    # Emergency restore for INT/TERM/HUP: only acts if we moved .git and haven't
+    # restored it. Silent on failure (signal handler context; stderr may be
+    # truncated).
+    _emergency_restore() {
+        if [ -n "$git_backup" ] && [ -d "$git_backup" ] && [ -n "$dir" ] && [ ! -d "$dir/.git" ]; then
+            mv "$git_backup" "$dir/.git" 2>/dev/null
+        fi
+    }
+
+    # Clean up functions to avoid polluting global namespace (only relevant if sourced)
+    __unset() {
+        unset -f __unset _show_help _error _info _backup_git _restore_git _emergency_restore
+    }
+    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
     # Parse arguments
     if [ $# -eq 0 ]; then
-        _error "No directory specified."
-        _show_help
-        return 1
+        _error "No directory specified. Run \`$SCRIPT_NAME -h\` for usage."
+        return 2
     fi
 
     while [ $# -gt 0 ]; do
@@ -65,17 +102,15 @@ _git_add_nonsub() {
                 return 0
                 ;;
             -*)
-                _error "Unknown option: $1"
-                _show_help
-                return 1
+                _error "Unknown option: $1. Run \`$SCRIPT_NAME -h\` for usage."
+                return 2
                 ;;
             *)
                 if [ -z "$dir" ]; then
                     dir="$1"
                 else
-                    _error "Unexpected argument: $1"
-                    _show_help
-                    return 1
+                    _error "Unexpected argument: $1. Run \`$SCRIPT_NAME -h\` for usage."
+                    return 2
                 fi
                 shift
                 ;;
@@ -85,26 +120,47 @@ _git_add_nonsub() {
     # Ensure the directory exists
     if [ ! -d "$dir" ]; then
         _error "Directory '$dir' does not exist."
-        return 1
+        return 2
     fi
 
     # Ensure the directory contains a .git folder
     if [ ! -d "$dir/.git" ]; then
         _error "No .git directory found in '$dir'."
-        return 1
+        return 2
+    fi
+
+    # Precondition: the current working directory must be inside an outer git
+    # repo, otherwise `git add` (run from inside "$dir" after the .git move)
+    # has no repo to stage into and would fail cryptically.
+    if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        _error "not inside a git repository. Run from an outer repo's working tree."
+        return 2
     fi
 
     # Main process
     if _backup_git "$dir"; then
+        # Trap signals so an interrupt between backup and restore attempts to
+        # put .git back before the script dies. The restore is best-effort; see
+        # CAVEATS in --help.
+        trap '_emergency_restore; exit 130' INT TERM HUP
+
         _info "Running git add on '$dir'..."
+        local add_rc=0
         if git -C "$dir" add .; then
             _info "git add completed successfully."
         else
             _error "git add failed. Restoring .git..."
-            _restore_git "$dir"
+            add_rc=1
+        fi
+        local restore_rc=0
+        _restore_git "$dir" || restore_rc=$?
+        trap - INT TERM HUP
+        if [ "$add_rc" -ne 0 ]; then
             return 1
         fi
-        _restore_git "$dir"
+        if [ "$restore_rc" -ne 0 ]; then
+            return 1
+        fi
     else
         _error "Failed to back up .git. Exiting."
         return 1
@@ -112,3 +168,9 @@ _git_add_nonsub() {
 }
 
 _git_add_nonsub "$@"
+__git_add_nonsub_rc=$?
+unset -f _git_add_nonsub
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __git_add_nonsub_rc; return $__git_add_nonsub_rc"
+fi
+eval "unset __git_add_nonsub_rc; exit $__git_add_nonsub_rc"

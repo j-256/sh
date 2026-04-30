@@ -1,0 +1,123 @@
+#!/bin/bash
+# dw-jwt - Generate a signed JWT for Salesforce B2C Commerce (Demandware) OAuth2
+#
+# Usage:
+#   dw-jwt <client_id> <private_key_file>
+#   dw-jwt -h
+#
+# Options:
+#   client_id          SFCC API client ID (used as iss and sub claims)
+#   private_key_file   Path to the RSA private key (PEM format)
+#   -h, --help         Show help message
+
+_dw_jwt() {
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="dw-jwt" ;; esac
+
+    _error() { echo "[$SCRIPT_NAME] ERROR: $*" >&2; }
+
+    _show_help() {
+        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
+        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        echo "NAME"
+        echo "  $SCRIPT_NAME - generate a signed JWT for Salesforce B2C Commerce OAuth2"
+        echo "SYNOPSIS"
+        echo "  $SCRIPT_NAME ${s}client_id${r} ${s}private_key_file${r}"
+        echo "  $SCRIPT_NAME -h"
+        echo "DESCRIPTION"
+        echo "  Salesforce B2C Commerce (formerly Demandware) is a SaaS e-commerce"
+        echo "  platform. This script generates the RS256 JWT used when calling"
+        echo "  Account Manager's OAuth2 client_credentials endpoint"
+        echo "  (https://account.demandware.com). The token is valid for 30 minutes"
+        echo "  and is printed to stdout, ready to use as the client_assertion in a"
+        echo "  subsequent token request."
+        echo ""
+        echo "  A PEM key starts with \`-----BEGIN RSA PRIVATE KEY-----\` or"
+        echo "  \`-----BEGIN PRIVATE KEY-----\` and ends with the matching"
+        echo "  \`-----END ...-----\` line."
+        echo "OPTIONS"
+        echo "  ${s}client_id${r}          SFCC API client ID (used as iss and sub claims)"
+        echo "  ${s}private_key_file${r}   Path to the RSA private key (PEM format)"
+        echo "  -h, --help         Show this help message"
+        echo "EXIT STATUS"
+        echo "  0  Success"
+        echo "  1  Signing failed (openssl error)"
+        echo "  2  Usage / argument error"
+        echo "  3  Dependency error (openssl missing)"
+        echo "  4  Private key file not found or unreadable"
+        echo "DEPENDENCIES"
+        echo "  openssl"
+    }
+
+    __unset() {
+        unset -f __unset _show_help _error
+    }
+    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
+
+    case "$1" in
+        -h|--help) _show_help; return 0 ;;
+    esac
+
+    if ! command -v openssl >/dev/null 2>&1; then
+        _error "openssl is required"
+        return 3
+    fi
+
+    local client_id="$1"
+    local private_key="$2"
+
+    if [ -z "$client_id" ]; then
+        _error "client_id is required. Run \`$SCRIPT_NAME -h\` for usage."
+        return 2
+    fi
+    if [ -z "$private_key" ]; then
+        _error "private_key_file is required. Run \`$SCRIPT_NAME -h\` for usage."
+        return 2
+    fi
+    if [ ! -r "$private_key" ]; then
+        _error "private key file not found or unreadable: $private_key"
+        return 4
+    fi
+
+    local header='{"alg":"RS256","typ":"JWT"}'
+    local now; now="$(date +%s)"
+    local exp=$((now + 1800))
+    local payload='{
+        "iss": "'"$client_id"'",
+        "sub": "'"$client_id"'",
+        "exp": '"$exp"',
+        "aud": "https://account.demandware.com:443/dwsso/oauth2/access_token",
+        "iat": '"$now"'
+    }'
+
+    # Base64url encode header and payload (without newlines), trimming '=' padding
+    local header_b64; header_b64="$(printf %s "$header" | openssl base64 -e -A | tr '+/' '-_' | tr -d '=')"
+    local payload_b64; payload_b64="$(printf %s "$payload" | openssl base64 -e -A | tr '+/' '-_' | tr -d '=')"
+
+    # Sign with the private key. openssl-dgst runs in its own step (not inline in
+    # a pipeline) so we can check its exit status directly -- a broken key must
+    # fail loudly rather than produce garbage that looks like a valid signature.
+    local sig_bin
+    sig_bin="$(mktemp -t dw-jwt.XXXXXX)" || { _error "mktemp failed"; return 1; }
+    # Copy trap restoration is handled on RETURN; mktemp file cleanup below.
+    printf %s "$header_b64.$payload_b64" | openssl dgst -sha256 -sign "$private_key" >"$sig_bin" 2>/dev/null
+    local rc_dgst=$?
+    if [ "$rc_dgst" -ne 0 ] || [ ! -s "$sig_bin" ]; then
+        rm -f "$sig_bin"
+        _error "signing failed (openssl exited $rc_dgst). Check the private key file."
+        return 1
+    fi
+    local signature; signature="$(openssl base64 -e -A -in "$sig_bin" | tr '+/' '-_' | tr -d '=')"
+    rm -f "$sig_bin"
+
+    # Create final JWT
+    echo "$header_b64.$payload_b64.$signature"
+}
+
+_dw_jwt "$@"
+__dw_jwt_rc=$?
+unset -f _dw_jwt
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __dw_jwt_rc; return $__dw_jwt_rc"
+fi
+eval "unset __dw_jwt_rc; exit $__dw_jwt_rc"

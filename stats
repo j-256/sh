@@ -1,15 +1,51 @@
-#!/usr/bin/env bash
-#! tested in: GNU bash, version 5.2.15(1)-release (x86_64-apple-darwin22.1.0) | older versions and other shells will work but not guaranteed
-
-################################################################################
-# Given a newline-delimited list of integers, calculate:                       #
-#  count, total, average, max, min, range (max-min), and outliers (1.5*IQR)    #
-################################################################################
+#!/bin/bash
+# stats - calculate statistics from a whitespace-separated list of integers
+#
+# Computes count, total, average, max, min, range (max-min), and outliers
+# (1.5 * IQR method) from stdin input.
+#
+# Usage:
+#   command | stats [-n]
+#   stats -h
 
 _stats() {
-    # Read a list of newline-delimited integers from stdin
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="stats" ;; esac
+
+    _show_help() {
+        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
+        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        echo "NAME"
+        echo "  $SCRIPT_NAME - calculate statistics from a list of integers"
+        echo "SYNOPSIS"
+        echo "  ${s}command${r} | $SCRIPT_NAME [-n]"
+        echo "  $SCRIPT_NAME -h"
+        echo "DESCRIPTION"
+        echo "  Reads whitespace-separated integers from stdin and prints count, total,"
+        echo "  average, range (min to max), and outliers (1.5 * IQR method). Input may"
+        echo "  be newline-, space-, or tab-delimited (or any mix)."
+        echo "OPTIONS"
+        echo "  -n             Print the dataset before statistics"
+        echo "  -h, --help     Show this help message"
+        echo "DEPENDENCIES"
+        echo "  bc, sort"
+    }
+
+    __unset() {
+        unset -f __unset _show_help
+    }
+    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
+
+    case "${1-}" in
+        -h|--help) _show_help; return 0 ;;
+    esac
+
+    # Read a list of whitespace-separated integers from stdin (newlines, spaces, tabs all OK)
     local -a numbers
-    mapfile -t numbers < <(cat)
+    local line
+    while IFS= read -r line || [ -n "$line" ]; do
+        [ -n "$line" ] && numbers+=("$line")
+    done < <(tr -s '[:space:]' '\n')
 
     # Check for any non-digits (which would most likely be a decimal point) - allow spaces as the numbers are concatenated with spaces
     grep -q '[^0-9 ]' <<<"${numbers[*]}" && { echo "Error: Integers only." >&2; return 1; }
@@ -18,7 +54,7 @@ _stats() {
 
     # Sort the numbers in ascending order (for outlier calculation, but it gets us min and max too)
     local -a sorted
-    mapfile -t sorted < <(printf '%s\n' "${numbers[@]}" | sort -n)
+    while IFS= read -r line || [ -n "$line" ]; do sorted+=("$line"); done < <(printf '%s\n' "${numbers[@]}" | sort -n)
     #mapfile -t sorted <<< "$(printf '%s\n' "${numbers[@]}" | sort -n)"
     #sorted=($(printf '%s\n' "${numbers[@]}" | sort -n))
 
@@ -48,7 +84,7 @@ _stats() {
     # Get total, min, and max
     local -i total; total=$(printf '%s+' "${sorted[@]}" | sed 's/+$//' | bc)
     local -i min="${sorted[0]}"
-    local -i max="${sorted[-1]}"
+    local -i max="${sorted[$((${#sorted[@]} - 1))]}"
     local -i range=$((max - min))
 
     # Print results
@@ -61,3 +97,9 @@ _stats() {
 }
 
 _stats "$@"
+__stats_rc=$?
+unset -f _stats
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __stats_rc; return $__stats_rc"
+fi
+eval "unset __stats_rc; exit $__stats_rc"

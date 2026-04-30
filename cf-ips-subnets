@@ -1,0 +1,88 @@
+#!/bin/bash
+# cf-ips-subnets - Expand Cloudflare IPv4 ranges into /16 and /24 subnets
+#
+# Usage:
+#   cf-ips-subnets
+#
+# Dependencies:
+#   ipcalc - https://github.com/kjokjo/ipcalc
+#   curl
+
+_cf_ips_subnets() {
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="cf-ips-subnets" ;; esac
+
+    _show_help() {
+        # No user-facing placeholders, so tput smul/rmul are unused here.
+        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
+        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        echo "NAME"
+        echo "  $SCRIPT_NAME - expand Cloudflare IPv4 ranges into /16 and /24 subnets"
+        echo "SYNOPSIS"
+        echo "  $SCRIPT_NAME [${s}-h${r}]"
+        echo "DESCRIPTION"
+        echo "  Fetches Cloudflare's published IPv4 CIDR ranges and expands each"
+        echo "  into /16 or /24 subnets (whichever is closest without exceeding"
+        echo "  the original range). Useful for allowlisting in systems that"
+        echo "  only accept /16 or /24 prefixes."
+        echo "  Input ranges larger than /24 are rejected."
+        echo "OPTIONS"
+        echo "  -h, --help   Show this help message"
+        echo "DEPENDENCIES"
+        echo "  curl"
+        echo "  ipcalc - https://github.com/kjokjo/ipcalc"
+    }
+
+    __unset() {
+        unset -f __unset _show_help
+    }
+    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
+
+    case "$1" in
+        -h|--help)
+            _show_help
+            return 0
+            ;;
+    esac
+
+    if ! command -v ipcalc >/dev/null 2>&1; then
+        echo "ERROR: ipcalc is required (https://github.com/kjokjo/ipcalc)" >&2
+        return 1
+    fi
+
+    local -a cf
+    local line
+    while IFS= read -r line; do
+        [ "$line" ] && cf+=("$line")
+    done < <(curl -s https://www.cloudflare.com/ips-v4)
+
+    if [ ${#cf[@]} -eq 0 ]; then
+        echo "ERROR: Failed to fetch Cloudflare IPs" >&2
+        return 1
+    fi
+
+    local i
+    local cidr
+    local new_cidr
+    for i in "${cf[@]}"; do
+        cidr="${i:(-2)}"
+        if [ "$cidr" -gt 24 ]; then
+            echo "Cannot allowlist ranges greater than /24" >&2
+            return 1
+        fi
+        if [ "$cidr" -gt 16 ]; then
+            new_cidr=24
+        else
+            new_cidr=16
+        fi
+        ipcalc -b "$i" "$new_cidr" | grep 'Network' | sed 's/Network: *// ; s/ *$// ; 1d'
+    done
+}
+
+_cf_ips_subnets "$@"
+__cf_ips_subnets_rc=$?
+unset -f _cf_ips_subnets
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __cf_ips_subnets_rc; return $__cf_ips_subnets_rc"
+fi
+eval "unset __cf_ips_subnets_rc; exit $__cf_ips_subnets_rc"

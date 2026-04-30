@@ -1,0 +1,130 @@
+#!/bin/bash
+# spf-find-ip - find an IP address in SPF DNS records
+#
+# Usage:
+#   spf-find-ip <domain> <ip>
+#   spf-find-ip -h
+#
+# Options:
+#   domain       Domain whose SPF record is the starting point
+#   ip           IP address to search for (literal or /32)
+#   -h, --help   Show help message
+#
+# Recursively searches SPF include: directives for the given IP. Does not
+# currently support IP ranges -- the IP must appear as-is or with /32.
+
+# TODO: Support IP ranges?
+_spf_find_ip() {
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="spf-find-ip" ;; esac
+
+    _error() { echo "[$SCRIPT_NAME] ERROR: $*" >&2; }
+
+    get_spf_record() {
+        local domain="$1"
+        echo "SPF record for $domain:" >&2
+        dig @8.8.8.8 +tcp +short TXT "$domain" | grep "v=spf1" | sed 's/.*v=spf1/v=spf1/; s/"//g; s/  / /g' | tee /dev/stderr
+        echo "" >&2
+    }
+
+    find_include_directive_recursive() {
+        local spf_record="$1"
+        local ip="$2"
+
+        local tokens
+        # Split SPF record into space-separated tokens
+        IFS=' ' read -r -a tokens <<< "$spf_record"
+
+        local token
+        for token in "${tokens[@]}"; do
+            if [ "${token%%:*}" = "include" ]; then
+                local include_domain="${token#"include:"}"
+                local included_record; included_record="$(get_spf_record "$include_domain")"
+
+                if [ "$included_record" ]; then
+                    # If target IP is present in the included SPF record, return to finish recursion
+                    if echo "$included_record" | grep -q "$ip"; then
+                        echo "IP $ip is included by: $include_domain"
+                        echo "${included_record/"$ip"/"$(tput setaf 1)$ip$(tput sgr0)"}"
+                        return 0
+                    fi
+                    # If not present, keep searching recursively
+                    find_include_directive_recursive "$included_record" "$ip"
+                else
+                    echo "No SPF record found for included domain $include_domain"
+                fi
+            fi
+        done
+        # If IP not found after iterating through all tokens, return nonzero and potentially continue with the next include
+        return 1
+    }
+
+    _show_help() {
+        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
+        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        echo "NAME"
+        echo "  $SCRIPT_NAME - find an IP address in SPF DNS records"
+        echo "SYNOPSIS"
+        echo "  $SCRIPT_NAME ${s}domain${r} ${s}ip${r}"
+        echo "  $SCRIPT_NAME -h"
+        echo "DESCRIPTION"
+        echo "  Looks up the SPF (TXT) record for ${s}domain${r} via Google DNS, then"
+        echo "  recursively follows include: directives until it finds the given IP."
+        echo "  Prints the include chain and highlights the matching record."
+        echo "OPTIONS"
+        echo "  ${s}domain${r}       Domain whose SPF record is the starting point"
+        echo "  ${s}ip${r}           IP address to search for (literal or /32)"
+        echo "  -h, --help   Show this help message"
+        echo "DEPENDENCIES"
+        echo "  dig, tput"
+        echo "CAVEATS"
+        echo "  - Only include: directives are followed; redirect= is not recursed"
+        echo "    into (e.g. Gmail uses redirect=_spf.google.com, so this script"
+        echo "    won't walk that chain)."
+        echo "  - The 10-lookup RFC 7208 limit is ignored; this may query more"
+        echo "    domains than a real mail server would evaluate."
+        echo "  - Matching is literal string match, not CIDR. A query for"
+        echo "    198.51.100.42 will NOT match ip4:198.51.100.0/24 even though"
+        echo "    that range covers the IP. Pass the exact literal (or /32 form)"
+        echo "    that appears in the record."
+    }
+
+    __unset() {
+        unset -f __unset _show_help _error get_spf_record find_include_directive_recursive
+    }
+    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
+
+    case "$1" in
+        -h|--help) _show_help; return 0 ;;
+    esac
+
+    local domain="$1"
+    local ip="$2"
+
+    if [ -z "$domain" ]; then
+        _error "domain is required. Run \`$SCRIPT_NAME -h\` for usage."
+        return 2
+    fi
+    if [ -z "$ip" ]; then
+        _error "ip is required. Run \`$SCRIPT_NAME -h\` for usage."
+        return 2
+    fi
+
+    local spf_record; spf_record="$(get_spf_record "$domain")"
+
+    if [ "$spf_record" ]; then
+        if ! find_include_directive_recursive "$spf_record" "$ip"; then
+            echo "IP $ip not found in $domain's SPF records"
+        fi
+    else
+        echo "No SPF record found for $domain" >&2
+    fi
+}
+
+_spf_find_ip "$@"
+__spf_find_ip_rc=$?
+unset -f _spf_find_ip
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __spf_find_ip_rc; return $__spf_find_ip_rc"
+fi
+eval "unset __spf_find_ip_rc; exit $__spf_find_ip_rc"

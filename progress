@@ -1,44 +1,21 @@
-#!/usr/bin/env bash
-
-###################################################
-# Progress bar utility
-#
-# Renders a single-line progress bar with percentage completion
+#!/bin/bash
+# progress - render a single-line progress bar with percentage completion
 #
 # Usage:
-#   progress [OPTIONS] CURRENT MAX
-#
-# Positional arguments:
-#   CURRENT   Current progress value (integer, clamped to 0..MAX)
-#   MAX       Maximum value representing 100% (positive integer)
+#   progress [options] <current> <max>
+#   progress -h
 #
 # Options:
-#   -w, --width N
-#       Width of the progress bar itself, not the total line width
-#       The bar is automatically clamped so the rendered line never wraps
-#
-#   -p, --progress-char CHAR
-#       Character used for the completed portion of the bar
-#
-#   -r, --remaining-char CHAR
-#       Character used for the remaining portion of the bar
-#
-#   --stderr
-#       Force progress output to stderr
-#
-#   --stdout
-#       Force progress output to stdout
-#
-#   -h, --help
-#       Show this help and exit
-#
-# Output behavior:
-#   - By default, progress output prefers stderr so stdout remains clean
-#   - Interactive redraws (\r) are only used when the chosen output stream is a TTY
-#   - In non-TTY contexts, output is emitted only once at completion
-###################################################
+#   -w, --width N           Width of the progress bar (default 50)
+#   -p, --progress-char C   Character for completed portion (default #)
+#   -r, --remaining-char C  Character for remaining portion (default space)
+#   --stderr                Force output to stderr
+#   --stdout                Force output to stdout
+#   -h, --help              Show help message
 
 _progress() {
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="progress" ;; esac
     local current=""
     local max=""
     local bar_width=50
@@ -47,51 +24,49 @@ _progress() {
     local interactive=false
     local out_mode="auto" # auto (prefer stderr), stderr, stdout
 
-    _usage() {
-        cat <<'EOF'
-Progress bar utility
-
-Renders a single-line progress bar with percentage completion
-
-Usage:
-  progress [OPTIONS] CURRENT MAX
-
-Positional arguments:
-  CURRENT   Current progress value (integer, clamped to 0..MAX)
-  MAX       Maximum value representing 100% (positive integer)
-
-Options:
-  -w, --width N
-      Width of the progress bar itself, not the total line width
-      The bar is automatically clamped so the rendered line never wraps
-
-  -p, --progress-char CHAR
-      Character used for the completed portion of the bar
-
-  -r, --remaining-char CHAR
-      Character used for the remaining portion of the bar
-
-  --stderr
-      Force progress output to stderr
-
-  --stdout
-      Force progress output to stdout
-
-  -h, --help
-      Show this help and exit
-
-Output behavior:
-  - By default, progress output prefers stderr so stdout remains clean
-  - Interactive redraws (\r) are only used when the chosen output stream is a TTY
-  - In non-TTY contexts, output is emitted only once at completion
-EOF
+    _show_help() {
+        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
+        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        echo "NAME"
+        echo "  $SCRIPT_NAME - render a single-line progress bar with percentage completion"
+        echo "SYNOPSIS"
+        echo "  $SCRIPT_NAME [${s}options${r}] ${s}current${r} ${s}max${r}"
+        echo "  $SCRIPT_NAME -h"
+        echo "DESCRIPTION"
+        echo "  Renders a single-line progress bar showing ${s}current${r}/${s}max${r} as a"
+        echo "  percentage. Designed for shell loops. Output defaults to stderr so"
+        echo "  stdout stays clean for pipelines. In a TTY, the bar redraws in place"
+        echo "  via carriage return; in a non-TTY context, only the 100% completion"
+        echo "  line is emitted."
+        echo ""
+        echo "  The bar width is automatically clamped to fit the terminal so the"
+        echo "  rendered line never wraps. Terminal width is detected in this order:"
+        echo "  stty size, tput cols, \$COLUMNS, falling back to 80 columns."
+        echo "OPTIONS"
+        echo "  CURRENT                   Current progress value (integer, clamped to 0..MAX)"
+        echo "  MAX                       Maximum value representing 100% (positive integer)"
+        echo "  -w, --width ${s}N${r}             Bar width in characters (default 50)"
+        echo "  -p, --progress-char ${s}C${r}    Character for the completed portion (default #)"
+        echo "  -r, --remaining-char ${s}C${r}   Character for the remaining portion (default space)"
+        echo "  --stderr                  Force output to stderr"
+        echo "  --stdout                  Force output to stdout"
+        echo "  -h, --help                Show this help message"
+        echo "EXAMPLES"
+        echo "  for i in {1..10}; do $SCRIPT_NAME \"\$i\" 10; sleep 0.1; done"
+        echo "  $SCRIPT_NAME --width 30 --progress-char '=' --remaining-char '.' 50 100"
+        echo "  $SCRIPT_NAME --stdout 100 100"
+        echo "CAVEATS"
+        echo "  In non-TTY contexts, output is suppressed until ${s}current${r} == ${s}max${r}"
+        echo "  to avoid spamming logs or pipelines."
+        echo "DEPENDENCIES"
+        echo "  stty, tput"
     }
 
     # Parse options
     while [ $# -gt 0 ]; do
         case "$1" in
             -h|--help)
-                _usage
+                _show_help
                 return 0
             ;;
             --stderr)
@@ -230,7 +205,12 @@ EOF
         fi
     }
 
-    local out_fd="$(_select_out_fd)"
+    __unset() {
+        unset -f __unset _show_help _select_out_fd _is_tty_fd _get_term_cols _print_on_fd
+    }
+    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
+
+    local out_fd; out_fd="$(_select_out_fd)"
 
     # Interactive mode depends on the chosen output stream being a TTY
     if _is_tty_fd "$out_fd"; then
@@ -241,7 +221,7 @@ EOF
     # Rendered format: "[" + bar + "] " + "%3d%%"
     # Fixed overhead = 1 + 2 + 5 = 8
     if [ "$interactive" = true ]; then
-        local term_cols="$(_get_term_cols)"
+        local term_cols; term_cols="$(_get_term_cols)"
         local fixed_width=8
         local max_width=$((term_cols - fixed_width))
         [ "$max_width" -lt 1 ] && max_width=1
@@ -276,12 +256,12 @@ EOF
             _print_on_fd "$out_fd" "[%s%s] %3d%%\n" "$filled" "$empty" "$progress"
         fi
     fi
-
-    unset -f _usage
-    unset -f _select_out_fd
-    unset -f _is_tty_fd
-    unset -f _get_term_cols
-    unset -f _print_on_fd
 }
 
 _progress "$@"
+__progress_rc=$?
+unset -f _progress
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __progress_rc; return $__progress_rc"
+fi
+eval "unset __progress_rc; exit $__progress_rc"

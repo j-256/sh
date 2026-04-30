@@ -1,27 +1,58 @@
-#!/usr/bin/env bash
-
-######################################################################
-# Swaps two files by renaming them with `mv`.                        #
-######################################################################
-# Usage:                                                             #
-#   swap <file1> <file2>                                             #
-######################################################################
-# Exit Status Codes:                                                 #
-#   0  Success                                                       #
-#   1  Not enough arguments                                          #
-#   2  First file does not exist                                     #
-#   3  First file is a directory                                     #
-#   4  Second file does not exist                                    #
-#   5  Second file is a directory                                    #
-#   6  Failed to move the first file to a temporary location         #
-#   7  Failed to move the second file to the first file location     #
-#   8  Failed to move the temporary file to the second file location #
-######################################################################
-# TODO: -v support
+#!/bin/bash
+# swap - swap two files by renaming via a temp file
+#
+# Usage:
+#   swap <file1> <file2>
+#
+# Options:
+#   -h, --help     Show help message
 
 _swap() {
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="swap" ;; esac
+
+    _show_help() {
+        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
+        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        echo "NAME"
+        echo "  $SCRIPT_NAME - swap two files by renaming"
+        echo "SYNOPSIS"
+        echo "  $SCRIPT_NAME ${s}file1${r} ${s}file2${r}"
+        echo "  $SCRIPT_NAME -h"
+        echo "DESCRIPTION"
+        echo "  Atomically swaps two files using mv and a temp file at"
+        echo "  /tmp/temp-swap-${s}basename${r} (falls back to"
+        echo "  /tmp/temp-swap-${s}basename${r}-\$\$-\$RANDOM on collision)."
+        echo "  Directories are not supported. On partial failure,"
+        echo "  attempts to restore the original state (see EXIT STATUS)."
+        echo "EXIT STATUS"
+        echo "  0  Success"
+        echo "  1  Not enough arguments"
+        echo "  2  First file does not exist"
+        echo "  3  First file is a directory"
+        echo "  4  Second file does not exist"
+        echo "  5  Second file is a directory"
+        echo "  6  Failed to move first file to temp (no restore needed: files untouched)"
+        echo "  7  Failed to move second file to first (restore attempted: temp -> first)"
+        echo "  8  Failed to move temp to second (no restore attempted: second already moved)"
+    }
+
+    _error() { echo "[$SCRIPT_NAME] ERROR: $*" >&2; }
+
+    __unset() {
+        unset -f __unset _show_help _error
+    }
+    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
+
+    case "$1" in
+        -h|--help)
+            _show_help
+            return 0
+            ;;
+    esac
+
     if [ $# -lt 2 ]; then
-        echo "ERROR: Must provide two files to swap. You specified $#." >&2
+        _error "Must provide two files to swap. You specified $#."
         return 1
     fi
     local file1="$1"
@@ -29,19 +60,19 @@ _swap() {
 
     # Validate first file
     if [ ! -e "$file1" ]; then
-        echo "ERROR: File '$file1' does not exist." >&2
+        _error "File '$file1' does not exist."
         return 2
     elif [ -d "$file1" ]; then
-        echo "ERROR: '$file1' is a directory." >&2
+        _error "'$file1' is a directory."
         return 3
     fi
 
     # Validate second file
     if [ ! -e "$file2" ]; then
-        echo "ERROR: File '$file2' does not exist." >&2
+        _error "File '$file2' does not exist."
         return 4
     elif [ -d "$file2" ]; then
-        echo "ERROR: '$file2' is a directory." >&2
+        _error "'$file2' is a directory."
         return 5
     fi
 
@@ -54,19 +85,19 @@ _swap() {
 
     # Perform the swap using `mv`. Return distinct codes for each failure point.
     if ! mv "$file1" "$temp_file"; then # file1 -> temp
-        echo "ERROR: Failed to move '$file1' to temporary file '$temp_file'." >&2
+        _error "Failed to move '$file1' to temporary file '$temp_file'."
         return 6
     fi
     if ! mv "$file2" "$file1"; then # file2 -> file1
-        echo "ERROR: Failed to move '$file2' to '$file1'." >&2
+        _error "Failed to move '$file2' to '$file1'."
         # Move failed - Attempt to restore the original file
         if ! mv "$temp_file" "$file1"; then
-            echo "ERROR: Failed to restore '$temp_file' to '$file1'." >&2
+            _error "Failed to restore '$temp_file' to '$file1'."
         fi
         return 7
     fi
     if ! mv "$temp_file" "$file2"; then # temp -> file2
-        echo "ERROR: Failed to move temporary file to '$file2'." >&2
+        _error "Failed to move temporary file to '$file2'."
         return 8
     fi
 
@@ -75,3 +106,9 @@ _swap() {
 }
 
 _swap "$@"
+__swap_rc=$?
+unset -f _swap
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __swap_rc; return $__swap_rc"
+fi
+eval "unset __swap_rc; exit $__swap_rc"

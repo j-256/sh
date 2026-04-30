@@ -1,17 +1,51 @@
-#!/usr/bin/env bash
-
-#########################################################################
-# Prints a base64-encoded DKIM public key given the selector and domain #
-# Raw DNS response printed to stderr, key printed to stdout             #
-#########################################################################
-# Usage:                                                                #
-#   dkim-pubkey <selector> <domain>                                     #
-# Example:                                                              #
-#   dkim-pubkey dkim-prd gmail.com                                      #
-#   -> DNS TXT dkim-prd._domainkey.gmail.com, formatted                 #
-#########################################################################
+#!/bin/bash
+# dkim-pubkey - print base64-encoded DKIM public key for a domain
+#
+# Usage:
+#   dkim-pubkey <selector> <domain>
+#   dkim-pubkey -h
+#
+# Queries the TXT record at <selector>._domainkey.<domain>, prints the raw
+# DNS response to stderr, and extracts the base64 public key (the p= value)
+# to stdout.
 
 _dkim_pubkey() {
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="dkim-pubkey" ;; esac
+
+    _show_help() {
+        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
+        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        echo "NAME"
+        echo "  $SCRIPT_NAME - print base64-encoded DKIM public key for a domain"
+        echo "SYNOPSIS"
+        echo "  $SCRIPT_NAME ${s}selector${r} ${s}domain${r}"
+        echo "  $SCRIPT_NAME -h"
+        echo "DESCRIPTION"
+        echo "  Queries DNS TXT record at ${s}selector${r}._domainkey.${s}domain${r},"
+        echo "  prints the raw response to stderr, and extracts the base64"
+        echo "  public key (the p= value) to stdout."
+        echo "EXAMPLE"
+        echo "  $SCRIPT_NAME dkim-prd gmail.com"
+        echo "CAVEATS"
+        echo "  Selector must be known in advance; check SPF/DMARC records,"
+        echo "  email headers, or the domain's DNS provider."
+        echo "DEPENDENCIES"
+        echo "  dig"
+    }
+
+    __unset() {
+        unset -f __unset _show_help
+    }
+    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
+
+    case "$1" in
+        -h|--help)
+            _show_help
+            return 0
+            ;;
+    esac
+
     local selector="${1:?"not enough arguments: selector and domain required"}"
     local domain="${2:?"not enough arguments: domain required"}"
     local dns_hostname="$selector._domainkey.$domain"
@@ -23,7 +57,18 @@ _dkim_pubkey() {
     fi
     echo "$dns_response" >&2
     echo >&2
-    echo "$dns_response" | sed 's/^.*p=//; s/"$//; s/" "//g'
+    local pubkey; pubkey="$(echo "$dns_response" | sed 's/^.*p=//; s/"$//; s/" "//g')"
+    if [ -z "$pubkey" ]; then
+        echo "ERROR: record found but key is empty (p= value missing)" >&2
+        return 2
+    fi
+    echo "$pubkey"
 }
 
 _dkim_pubkey "$@"
+__dkim_pubkey_rc=$?
+unset -f _dkim_pubkey
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __dkim_pubkey_rc; return $__dkim_pubkey_rc"
+fi
+eval "unset __dkim_pubkey_rc; exit $__dkim_pubkey_rc"

@@ -1,16 +1,18 @@
 #!/bin/bash
+# Compatible with macOS /bin/bash 3.2 (no Bash 4+ features)
 # pin-dns
 #
 # NAME
 #     pin-dns - curl wrapper to override DNS resolution for a hostname (CDN bypass / origin pinning)
 #
 # SYNOPSIS
-#     pin-dns HOSTNAME [TARGET] [PATH] [CURL_OPTS...]
-#     pin-dns --host HOSTNAME [--target TARGET] [--path PATH] [--resolver DNS_SERVER_IP] [--scheme SCHEME] [--port PORT]
-#               [--dry-run] [--no-silent] [--help] [--] [CURL_OPTS...]
+#     pin-dns [PIN_DNS_OPTS...] [CURL_OPTS...] URL [TARGET] [CURL_OPTS...] [PIN_DNS_OPTS...]
+#     pin-dns [PIN_DNS_OPTS...] HOSTNAME [TARGET] [PATH_OR_URL] [CURL_OPTS...]
+#     pin-dns [PIN_DNS_OPTS...] --host HOSTNAME [--target TARGET] [--path PATH_OR_URL] [--resolver DNS_SERVER_IP] [--scheme SCHEME] [--port PORT]
+#               [--dry-run] [--no-silent] [--curlrc] [--help] [--] [CURL_OPTS...]
 #
 # DESCRIPTION
-#     pin-dns makes it easy to send a request to https://HOSTNAME/PATH while forcing curl to connect
+#     pin-dns makes it easy to send a request to SCHEME://HOSTNAME/PATH while forcing curl to connect
 #     to a chosen IP address (usually resolved from a CDN CNAME/edge hostname), without modifying
 #     system DNS or /etc/hosts.
 #
@@ -21,8 +23,14 @@
 #       - A hostname (e.g. commcloud.prod-xxxx-site-com.cc-ecdn.net) which pin-dns will resolve to an IP via dig; or
 #       - An IP literal (IPv4 or IPv6), used directly.
 #
-#     If TARGET is omitted, pin-dns behaves like a convenience curl wrapper:
-#         curl "https://HOSTNAME/PATH"
+# DROP-IN CURL USAGE
+#     The simplest workflow is: take a curl command, replace "curl" with "pin-dns", and add a target.
+#     A bare hostname or IP anywhere in the args is recognized as the target.
+#     You can also use --target explicitly. pin-dns options may appear anywhere before --.
+#
+#         curl -s https://example.com/path -H "Test: Nice"
+#         pin-dns https://example.com/path -H "Test: Nice" cdn.edge.com
+#         pin-dns -s https://example.com/path -H "Test: Nice" --target cdn.edge.com
 #
 # POSITIONAL PARAMETERS
 #     HOSTNAME
@@ -32,30 +40,42 @@
 #         Optional. Hostname or IP to map HOSTNAME to (for curl --resolve).
 #         If a hostname is provided, pin-dns resolves it using dig and uses the last returned IP.
 #
-#     PATH
-#         Optional. Path (and optional querystring). Examples:
+#     PATH_OR_URL
+#         Optional. Request path (and optional querystring), or a full URL, or HOST/PATH.
+#         Examples:
 #             /on/demandware.store/Sites-RefArch-Site
-#             /some/path?q=stuff&q2=morestuff
-#         If omitted, "/" is used.
+#             some/path?q=stuff&q2=morestuff
+#             ?q=stuff
+#             https://ecom-dev.somesite.com/on/demandware.store/Sites-RefArch-Site?q=1
+#             ecom-dev.somesite.com/on/demandware.store/Sites-RefArch-Site?q=1
+#
+#         If PATH_OR_URL includes a scheme+host (http/https URL), or looks like HOST/PATH (e.g. contains a dot or "localhost"),
+#         pin-dns strips the host portion and uses only the path/query.
+#
+#         If the extracted URL host differs from both HOSTNAME and TARGET (when TARGET is a hostname), pin-dns warns but proceeds.
+#
+#         If omitted, "/" is used. If a path is provided without a leading "/", pin-dns adds it.
 #
 # OPTIONS
 #     --host HOSTNAME
-#         Same as positional HOSTNAME. Useful for readability in scripts.
+#         Explicit HOSTNAME. Overrides any host inferred from a URL argument.
 #
 #     --target TARGET
-#         Same as positional TARGET. Accepts either a hostname or an IP.
+#         Hostname or IP to map HOSTNAME to (for curl --resolve). May appear anywhere before --.
+#         Also supports: --target=VALUE
+#         Required when using curl's --url (positional target detection cannot see inside --url).
 #
-#     --path PATH
-#         Same as positional PATH.
+#     --path PATH_OR_URL
+#         Path (or full URL). Also supports: --path=VALUE
 #
 #     --resolver DNS_SERVER_IP
 #         If provided, passes @DNS_SERVER_IP to dig to select a specific DNS server.
 #
 #     --scheme SCHEME
-#         Default: https. Common values: https, http
+#         Default: https. URL arguments may be used to infer scheme unless --scheme is set.
 #
 #     --port PORT
-#         Default: 443. This is the port used in curl --resolve "HOSTNAME:PORT:IP".
+#         Default: 443. URL arguments may be used to infer port unless --port is set.
 #
 #     --dry-run
 #         Do not execute curl. Print the resolved mapping and the curl command to stderr.
@@ -63,32 +83,38 @@
 #     --no-silent
 #         Do not add curl -sS by default.
 #
+#     -q, --quiet
+#         Suppress pin-dns informational and warning messages (errors are still shown).
+#         Note: curl also has -q/--disable; to pass that to curl, use --curlrc and place curl -q after --:
+#             pin-dns --curlrc ... -- -q
+#
+#     --curlrc
+#         Allow curl to read ~/.curlrc (and other curlrc locations). By default pin-dns disables curlrc by injecting
+#         curl's -q as the first curl argument to keep behavior deterministic across machines.
+#
 #     -h, --help
 #         Show this help text.
 #
-# NOTE
-#     Only the options listed in this OPTIONS section are interpreted by pin-dns.
-#     Any other -/-- flags you pass (for example -L, --header, --resolve) are
-#     forwarded directly to curl unchanged.
+# ARGUMENT HANDLING AND --
+#     pin-dns does not parse curl options. It collects them and forwards them to curl unchanged.
 #
-# PASSING CURL OPTIONS
-#     You may pass curl options in two ways:
+#     - pin-dns options may appear anywhere before -- (including at the end for drop-in curl usage).
+#     - Everything after -- is passed to curl verbatim, and pin-dns options after -- are not parsed.
 #
-#     1) After the positional parameters:
-#            pin-dns HOST TARGET PATH -I -v
+# WARNINGS THAT PREVENT MISUSE
+#     1) "pin-dns-looking token as curl operand"
+#        If a token like --target appears immediately after a curl option that consumes the next token (e.g. -H),
+#        pin-dns treats it as curl data (because curl is consuming it) and warns, since pinning would not occur.
+#        Fix: move the pin-dns option, or use --target=VALUE, or use --.
 #
-#     2) Explicitly separated with -- (useful if you prefer a clear separation,
-#        or when you need to pass a non-option argument that begins with '-'):
-#            pin-dns HOST TARGET PATH -- -H "X-Foo: bar" -I -v
-#
-#     In normal usage you do not need -- just to pass curl options; any -/-- flag
-#     that is not one of pin-dns' own options is passed straight through to curl.
+#     2) "useless -s / -S"
+#        pin-dns adds curl -sS by default. Passing curl -s/-S/--silent/--show-error usually changes nothing.
+#        Fix: use --no-silent if you want pin-dns to stop adding -sS.
 #
 # USER-AGENT
-#     pin-dns attempts to set a realistic Chrome User-Agent by reading Chrome's
-#     Info.plist. If that fails, it falls back to "sfcc-test" and logs the
-#     fallback to stderr. You can override this by passing your own
-#     -A/--user-agent or -H "User-Agent: ..." to curl.
+#     pin-dns attempts to set a realistic Chrome User-Agent by reading Chrome's Info.plist.
+#     If that fails, it falls back to "sfcc-test" and logs the fallback to stderr.
+#     You can override this by passing your own -A/--user-agent or -H "User-Agent: ..." to curl.
 #
 # ENVIRONMENT
 #     PIN_DNS_CHROME_APP
@@ -104,6 +130,7 @@
 _pin_dns() {
     local SCRIPT_PATH="${BASH_SOURCE[0]}"
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "$SCRIPT_PATH")"
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="pin-dns" ;; esac
 
     _is_tty() { [ -t 2 ]; }
 
@@ -124,6 +151,9 @@ _pin_dns() {
     }
 
     _warn() {
+        if [ -n "$quiet" ]; then
+            return 0
+        fi
         if _is_tty; then
             _c_yellow; _c_bold
             printf '%s\n' "[WRN] $*"
@@ -134,6 +164,9 @@ _pin_dns() {
     }
 
     _info() {
+        if [ -n "$quiet" ]; then
+            return 0
+        fi
         if _is_tty; then
             _c_dim
             printf '%s\n' "[INF] $*"
@@ -144,18 +177,19 @@ _pin_dns() {
     }
 
     _print_help() {
-        # Keep this closely aligned with the header comment
-        cat >&2 <<'EOF'
+        # Keep this closely aligned with the header comment.
+        cat >&2 <<EOF
 NAME
-    pin-dns - curl wrapper to override DNS resolution for a hostname (CDN bypass / origin pinning)
+    $SCRIPT_NAME - curl wrapper to override DNS resolution for a hostname (CDN bypass / origin pinning)
 
 SYNOPSIS
-    pin-dns HOSTNAME [TARGET] [PATH] [CURL_OPTS...]
-    pin-dns --host HOSTNAME [--target TARGET] [--path PATH] [--resolver DNS_SERVER_IP] [--scheme SCHEME] [--port PORT]
-              [--dry-run] [--no-silent] [--help] [--] [CURL_OPTS...]
+    $SCRIPT_NAME [PIN_DNS_OPTS...] [CURL_OPTS...] URL [TARGET] [CURL_OPTS...] [PIN_DNS_OPTS...]
+    $SCRIPT_NAME [PIN_DNS_OPTS...] HOSTNAME [TARGET] [PATH_OR_URL] [CURL_OPTS...]
+    $SCRIPT_NAME [PIN_DNS_OPTS...] --host HOSTNAME [--target TARGET] [--path PATH_OR_URL] [--resolver DNS_SERVER_IP] [--scheme SCHEME] [--port PORT]
+              [--dry-run] [--no-silent] [--curlrc] [--help] [--] [CURL_OPTS...]
 
 DESCRIPTION
-    pin-dns makes it easy to send a request to https://HOSTNAME/PATH while forcing curl to connect
+    $SCRIPT_NAME makes it easy to send a request to SCHEME://HOSTNAME/PATH while forcing curl to connect
     to a chosen IP address (usually resolved from a CDN CNAME/edge hostname), without modifying
     system DNS or /etc/hosts.
 
@@ -163,11 +197,17 @@ DESCRIPTION
         curl --resolve "HOSTNAME:PORT:IP" "SCHEME://HOSTNAME/PATH"
 
     TARGET may be either:
-      - A hostname (e.g. commcloud.prod-xxxx-site-com.cc-ecdn.net) which pin-dns will resolve to an IP via dig; or
+      - A hostname (e.g. commcloud.prod-xxxx-site-com.cc-ecdn.net) which $SCRIPT_NAME will resolve to an IP via dig; or
       - An IP literal (IPv4 or IPv6), used directly.
 
-    If TARGET is omitted, pin-dns behaves like a convenience curl wrapper:
-        curl "https://HOSTNAME/PATH"
+DROP-IN CURL USAGE
+    Take a curl command, replace "curl" with "$SCRIPT_NAME", and add a target.
+    A bare hostname or IP anywhere in the args is recognized as the target.
+    You can also use --target explicitly.
+
+        curl -s https://example.com/path -H "Test: Nice"
+        $SCRIPT_NAME https://example.com/path -H "Test: Nice" cdn.edge.com
+        $SCRIPT_NAME -s https://example.com/path -H "Test: Nice" --target cdn.edge.com
 
 POSITIONAL PARAMETERS
     HOSTNAME
@@ -175,32 +215,33 @@ POSITIONAL PARAMETERS
 
     TARGET
         Optional. Hostname or IP to map HOSTNAME to (for curl --resolve).
-        If a hostname is provided, pin-dns resolves it using dig and uses the last returned IP.
+        If a hostname is provided, $SCRIPT_NAME resolves it using dig and uses the last returned IP.
 
-    PATH
-        Optional. Path (and optional querystring). Examples:
-            /on/demandware.store/Sites-RefArch-Site
-            /some/path?q=stuff&q2=morestuff
-        If omitted, "/" is used.
+    PATH_OR_URL
+        Optional. Request path (and optional querystring), or a full URL, or HOST/PATH.
+        If PATH_OR_URL includes a scheme+host (http/https URL), or looks like HOST/PATH, $SCRIPT_NAME strips the host portion
+        and uses only the path/query. If omitted, "/" is used. If missing a leading "/", $SCRIPT_NAME adds it.
 
 OPTIONS
     --host HOSTNAME
-        Same as positional HOSTNAME. Useful for readability in scripts.
+        Explicit HOSTNAME. Overrides any host inferred from a URL argument.
 
     --target TARGET
-        Same as positional TARGET. Accepts either a hostname or an IP.
+        Hostname or IP to map HOSTNAME to (for curl --resolve). May appear anywhere before --.
+        Also supports: --target=VALUE
+        Required when using curl's --url (positional target detection cannot see inside --url).
 
-    --path PATH
-        Same as positional PATH.
+    --path PATH_OR_URL
+        Path (or full URL). Also supports: --path=VALUE
 
     --resolver DNS_SERVER_IP
         If provided, passes @DNS_SERVER_IP to dig to select a specific DNS server.
 
     --scheme SCHEME
-        Default: https. Common values: https, http
+        Default: https. URL arguments may be used to infer scheme unless --scheme is set.
 
     --port PORT
-        Default: 443. This is the port used in curl --resolve "HOSTNAME:PORT:IP".
+        Default: 443. URL arguments may be used to infer port unless --port is set.
 
     --dry-run
         Do not execute curl. Print the resolved mapping and the curl command to stderr.
@@ -208,32 +249,37 @@ OPTIONS
     --no-silent
         Do not add curl -sS by default.
 
+    -q, --quiet
+        Suppress $SCRIPT_NAME informational and warning messages (errors are still shown).
+        Note: to pass curl -q/--disable, use --curlrc and place curl -q after --:
+            $SCRIPT_NAME --curlrc ... -- -q
+
+    --curlrc
+        Allow curl to read ~/.curlrc. By default $SCRIPT_NAME disables curlrc by injecting curl -q first.
+
     -h, --help
         Show this help text.
 
-NOTE
-    Only the options listed in this OPTIONS section are interpreted by pin-dns.
-    Any other -/-- flags you pass (for example -L, --header, --resolve) are
-    forwarded directly to curl unchanged.
+ARGUMENT HANDLING AND --
+    $SCRIPT_NAME does not parse curl options. It collects them and forwards them to curl unchanged.
 
-PASSING CURL OPTIONS
-    You may pass curl options in two ways:
+    - $SCRIPT_NAME options may appear anywhere before -- (including at the end for drop-in curl usage).
+    - Everything after -- is passed to curl verbatim, and $SCRIPT_NAME options after -- are not parsed.
 
-    1) After the positional parameters:
-           pin-dns HOST TARGET PATH -I -v
+WARNINGS THAT PREVENT MISUSE
+    1) "$SCRIPT_NAME-looking token as curl operand"
+       If a token like --target appears immediately after a curl option that consumes the next token (e.g. -H),
+       $SCRIPT_NAME treats it as curl data (because curl is consuming it) and warns, since pinning would not occur.
+       Fix: move the $SCRIPT_NAME option, or use --target=VALUE, or use --.
 
-    2) Explicitly separated with -- (useful if you prefer a clear separation,
-       or when you need to pass a non-option argument that begins with '-'):
-           pin-dns HOST TARGET PATH -- -H "X-Foo: bar" -I -v
-
-    In normal usage you do not need -- just to pass curl options; any -/-- flag
-    that is not one of pin-dns' own options is passed straight through to curl.
+    2) "useless -s / -S"
+       $SCRIPT_NAME adds curl -sS by default. Passing curl -s/-S/--silent/--show-error usually changes nothing.
+       Fix: use --no-silent if you want $SCRIPT_NAME to stop adding -sS.
 
 USER-AGENT
-    pin-dns attempts to set a realistic Chrome User-Agent by reading Chrome's
-    Info.plist. If that fails, it falls back to "sfcc-test" and logs the
-    fallback to stderr. You can override this by passing your own
-    -A/--user-agent or -H "User-Agent: ..." to curl.
+    $SCRIPT_NAME attempts to set a realistic Chrome User-Agent by reading Chrome's Info.plist.
+    If that fails, it falls back to "sfcc-test" and logs the fallback to stderr.
+    You can override this by passing your own -A/--user-agent or -H "User-Agent: ..." to curl.
 
 ENVIRONMENT
     PIN_DNS_CHROME_APP
@@ -257,25 +303,29 @@ EOF
         local b=""
         local c=""
         local d=""
+
         case "$ip" in
             *[!0-9.]*|'') return 1 ;;
         esac
+
         local IFS="."
         read -r a b c d <<EOF
 $ip
 EOF
         [ -n "$a" ] && [ -n "$b" ] && [ -n "$c" ] && [ -n "$d" ] || return 1
+
         [ "$a" -ge 0 ] 2>/dev/null && [ "$a" -le 255 ] || return 1
         [ "$b" -ge 0 ] 2>/dev/null && [ "$b" -le 255 ] || return 1
         [ "$c" -ge 0 ] 2>/dev/null && [ "$c" -le 255 ] || return 1
         [ "$d" -ge 0 ] 2>/dev/null && [ "$d" -le 255 ] || return 1
+
         return 0
     }
 
     _is_ipv6() {
         local ip="$1"
         case "$ip" in
-            \[*\]) ip="${ip#[}"; ip="${ip%]}" ;;
+            \[*\]) ip="${ip#[}"; ip="${ip%]}";;
         esac
         case "$ip" in
             *:*) ;;
@@ -293,27 +343,392 @@ EOF
         return 1
     }
 
+    _looks_like_host() {
+        local h="$1"
+        local inner=""
+
+        if [ -z "$h" ]; then
+            return 1
+        fi
+
+        case "$h" in
+            \[*\])
+                inner="${h#[}"
+                inner="${inner%]}"
+                [ -n "$inner" ] || return 1
+                _is_ipv6 "$inner" && return 0
+                return 1
+                ;;
+        esac
+
+        case "$h" in
+            *"@"*)
+                h="${h##*@}"
+                ;;
+        esac
+
+        case "$h" in
+            *:*)
+                case "$h" in
+                    *:*:*) ;;
+                    *)
+                        local left="${h%%:*}"
+                        local right="${h#*:}"
+                        case "$right" in
+                            *[!0-9]*|'') ;;
+                            *) h="$left" ;;
+                        esac
+                        ;;
+                esac
+                ;;
+        esac
+
+        [ "$h" = "localhost" ] && return 0
+        case "$h" in
+            *.*) return 0 ;;
+        esac
+        _is_ipv4 "$h" && return 0
+        return 1
+    }
+
+    _host_for_compare() {
+        local h="$1"
+        local inner=""
+
+        if [ -z "$h" ]; then
+            return 0
+        fi
+
+        case "$h" in
+            \[*\])
+                inner="${h#[}"
+                inner="${inner%]}"
+                h="$inner"
+                ;;
+        esac
+
+        case "$h" in
+            *:*)
+                case "$h" in
+                    *:*:*) ;;
+                    *) h="${h%%:*}" ;;
+                esac
+                ;;
+        esac
+
+        LC_ALL=C printf '%s' "$h" | tr '[:upper:]' '[:lower:]'
+    }
+
+    _is_http_url() {
+        case "$1" in
+            http://*|https://*) return 0 ;;
+        esac
+        return 1
+    }
+
+    _parse_http_url() {
+        # Outputs: scheme host port path
+        local in="$1"
+        local __out_scheme="$2"
+        local __out_host="$3"
+        local __out_port="$4"
+        local __out_path="$5"
+
+        local scheme=""
+        local rest=""
+        local hostport=""
+        local path=""
+        local host=""
+        local port=""
+
+        case "$in" in
+            http://*)
+                scheme="http"
+                rest="${in#http://}"
+                ;;
+            https://*)
+                scheme="https"
+                rest="${in#https://}"
+                ;;
+            *)
+                scheme=""
+                rest="$in"
+                ;;
+        esac
+
+        hostport="$rest"
+        path=""
+
+        case "$rest" in
+            */*)
+                hostport="${rest%%/*}"
+                path="/${rest#*/}"
+                ;;
+            *\?*)
+                hostport="${rest%%\?*}"
+                path="/?${rest#*\?}"
+                ;;
+            *\#*)
+                hostport="${rest%%\#*}"
+                path="/#${rest#*\#}"
+                ;;
+            *)
+                hostport="$rest"
+                path="/"
+                ;;
+        esac
+
+        case "$hostport" in
+            *"@"*)
+                hostport="${hostport##*@}"
+                ;;
+        esac
+
+        case "$hostport" in
+            \[*\]*)
+                host="${hostport#\[}"
+                host="${host%%\]*}"
+                port=""
+                case "$hostport" in
+                    \[*\]:*)
+                        port="${hostport##*:}"
+                        ;;
+                esac
+                ;;
+            *)
+                host="$hostport"
+                port=""
+                case "$hostport" in
+                    *:*)
+                        local left="${hostport%%:*}"
+                        local right="${hostport#*:}"
+                        case "$right" in
+                            *[!0-9]*|'')
+                                host="$hostport"
+                                port=""
+                                ;;
+                            *)
+                                host="$left"
+                                port="$right"
+                                ;;
+                        esac
+                        ;;
+                esac
+                ;;
+        esac
+
+        if [ -z "$port" ]; then
+            if [ "$scheme" = "http" ]; then
+                port="80"
+            elif [ "$scheme" = "https" ]; then
+                port="443"
+            else
+                port=""
+            fi
+        fi
+
+        printf -v "$__out_scheme" '%s' "$scheme"
+        printf -v "$__out_host" '%s' "$host"
+        printf -v "$__out_port" '%s' "$port"
+        printf -v "$__out_path" '%s' "$path"
+    }
+
+    _normalize_path_or_url() {
+        # Accepts:
+        #   - /path, path, ?q=1
+        #   - http(s)://host/path
+        #   - host/path (host-like prefix)
+        # Outputs:
+        #   out_host (maybe empty), out_path (always begins with /)
+        local in="$1"
+        local __out_host_var="$2"
+        local __out_path_var="$3"
+
+        local out_host=""
+        local out_path=""
+        local tmp=""
+        local pre=""
+        local rest=""
+        local scheme_removed=""
+        local hostpart=""
+        local pathpart=""
+
+        if [ -z "$in" ]; then
+            in="/"
+        fi
+
+        case "$in" in
+            http://*|https://*)
+                tmp="$in"
+                scheme_removed="${tmp#http://}"
+                if [ "$scheme_removed" = "$tmp" ]; then
+                    scheme_removed="${tmp#https://}"
+                fi
+
+                hostpart="${scheme_removed%%/*}"
+                pathpart=""
+                if [ "$hostpart" = "$scheme_removed" ]; then
+                    case "$scheme_removed" in
+                        *\?*)
+                            hostpart="${scheme_removed%%\?*}"
+                            pathpart="/?${scheme_removed#*\?}"
+                            ;;
+                        *\#*)
+                            hostpart="${scheme_removed%%\#*}"
+                            pathpart="/#${scheme_removed#*\#}"
+                            ;;
+                        *)
+                            pathpart="/"
+                            ;;
+                    esac
+                else
+                    pathpart="/${scheme_removed#*/}"
+                fi
+
+                out_host="$hostpart"
+                out_path="$pathpart"
+                ;;
+            /*|\?*|\#*)
+                out_host=""
+                out_path="$in"
+                ;;
+            *)
+                case "$in" in
+                    */*)
+                        pre="${in%%/*}"
+                        rest="${in#*/}"
+                        if _looks_like_host "$pre"; then
+                            out_host="$pre"
+                            out_path="/$rest"
+                        else
+                            out_host=""
+                            out_path="/$in"
+                        fi
+                        ;;
+                    *)
+                        out_host=""
+                        out_path="/$in"
+                        ;;
+                esac
+                ;;
+        esac
+
+        case "$out_host" in
+            *"@"*)
+                out_host="${out_host##*@}"
+                ;;
+        esac
+
+        if [ -z "$out_path" ]; then
+            out_path="/"
+        fi
+
+        case "$out_path" in
+            /*) ;;
+            \?*|\#*) out_path="/$out_path" ;;
+            *) out_path="/$out_path" ;;
+        esac
+
+        printf -v "$__out_host_var" '%s' "$out_host"
+        printf -v "$__out_path_var" '%s' "$out_path"
+    }
+
+    # MAINTENANCE NOTE:
+    # This list is used to protect curl operands from being misinterpreted as pin-dns options.
+    # If you find a curl option missing here, pin-dns may wrongly interpret the next token as a pin-dns option.
+    _curl_opt_consumes_next() {
+        local a="$1"
+        case "$a" in
+            -H|--header|-A|--user-agent|-d|--data|--data-raw|--data-binary|--data-urlencode|-F|--form|-e|--referer|-u|--user|-x|--proxy|-b|--cookie|-c|--cookie-jar|-o|--output|-D|--dump-header|-T|--upload-file|-X|--request|--url|--resolve|--connect-to|-K|--config|--cacert|--capath|--cert|--cert-type|--key|--key-type|--pass|--ciphers|--interface|--dns-servers|--range|-r|--max-time|-m|--connect-timeout|--retry|--retry-delay|--retry-max-time|--limit-rate|--local-port|--unix-socket|--stderr|--proxy-user|--proxy-password|--mail-from|--mail-rcpt|--request-target)
+                return 0
+                ;;
+            --header=*|--user-agent=*|--data=*|--data-raw=*|--data-binary=*|--data-urlencode=*|--form=*|--referer=*|--user=*|--proxy=*|--cookie=*|--cookie-jar=*|--output=*|--dump-header=*|--upload-file=*|--request=*|--url=*|--resolve=*|--connect-to=*|--config=*|--cacert=*|--capath=*|--cert=*|--cert-type=*|--key=*|--key-type=*|--pass=*|--ciphers=*|--interface=*|--dns-servers=*|--range=*|--max-time=*|--connect-timeout=*|--retry=*|--retry-delay=*|--retry-max-time=*|--limit-rate=*|--local-port=*|--unix-socket=*|--stderr=*|--proxy-user=*|--proxy-password=*|--mail-from=*|--mail-rcpt=*|--request-target=*)
+                return 1
+                ;;
+            -H*|-A*|-d*|-F*|-e*|-u*|-x*|-b*|-c*|-o*|-D*|-T*|-X*|-K*|-m*|-r*)
+                return 1
+                ;;
+        esac
+        return 1
+    }
+
+    # MAINTENANCE NOTE:
+    # This is used ONLY for the "pin-dns-looking token as curl operand" warning.
+    # If you add a new pin-dns option, update BOTH:
+    #   - the pin-dns option parser (search for "PIN-DNS OPTION PARSER")
+    #   - this helper (so warnings stay accurate)
+    _looks_like_pin_dns_option_token() {
+        local a="$1"
+        case "$a" in
+            -h|--help|-q|--quiet|--curlrc|--dry-run|--no-silent)
+                return 0
+                ;;
+            --host|--host=*|--target|--target=*|--path|--path=*|--resolver|--resolver=*|--scheme|--scheme=*|--port|--port=*)
+                return 0
+                ;;
+        esac
+        return 1
+    }
+
+    _short_opts_contains_silent() {
+        # Detects curl -s/-S inside combined short options (e.g. -sS, -skS).
+        local a="$1"
+        case "$a" in
+            --*) return 1 ;;
+            -*) ;;
+            *) return 1 ;;
+        esac
+        case "$a" in
+            -*s*|-*S*) return 0 ;;
+        esac
+        return 1
+    }
+
+    _curl_args_has_silent_controls() {
+        # Detect curl flags that try to control silence; used for the "useless -s / -S" warning.
+        local a=""
+        for a in "$@"; do
+            case "$a" in
+                --silent|--show-error) return 0 ;;
+            esac
+            if _short_opts_contains_silent "$a"; then
+                return 0
+            fi
+        done
+        return 1
+    }
+
     _get_user_agent() {
         local chrome_app_default="/Applications/Google Chrome.app"
         local chrome_app="${PIN_DNS_CHROME_APP:-$chrome_app_default}"
+        local info_plist=""
+        local chrome_version=""
+        local ua_version=""
+
         if ! [ -d "$chrome_app" ]; then
             _error "Google Chrome not found at '$chrome_app'."
             return 1
         fi
-        local info_plist="$chrome_app/Contents/Info.plist"
-        local chrome_version; chrome_version="$(defaults read "$info_plist" CFBundleShortVersionString 2>/dev/null)"
+
+        info_plist="$chrome_app/Contents/Info.plist"
+        chrome_version="$(defaults read "$info_plist" CFBundleShortVersionString 2> /dev/null)"
         if [ -z "$chrome_version" ]; then
             _error "Unable to determine Chrome version (failed to read $info_plist)."
             return 1
         fi
-        local ua_version="${chrome_version%%.*}.0.0.0"
+
+        ua_version="${chrome_version%%.*}.0.0.0"
         echo "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/$ua_version Safari/537.36"
     }
 
     _curl_args_has_user_agent() {
-        local i=1
-        while [ "$i" -le "$#" ]; do
-            local a; a="$(eval "printf %s \"\${$i}\"")"
+        local a=""
+        local h=""
+
+        while [ "$#" -gt 0 ]; do
+            a="$1"
+            shift
+
             case "$a" in
                 -A|--user-agent)
                     return 0
@@ -322,21 +737,26 @@ EOF
                     return 0
                     ;;
                 -H|--header)
-                    local j=$((i + 1))
-                    if [ "$j" -le "$#" ]; then
-                        local h; h="$(eval "printf %s \"\${$j}\"")"
-                        case "$h" in
-                            [Uu]ser-[Aa]gent:*) return 0 ;;
-                        esac
-                    fi
+                    [ "$#" -gt 0 ] || return 1
+                    h="$1"
+                    shift
+                    case "$h" in
+                        [Uu]ser-[Aa]gent:*) return 0 ;;
+                    esac
+                    ;;
+                --header=*)
+                    h="${a#*=}"
+                    case "$h" in
+                        [Uu]ser-[Aa]gent:*) return 0 ;;
+                    esac
                     ;;
                 -H*)
-                    case "$a" in
-                        -H[Uu]ser-[Aa]gent:*) return 0 ;;
+                    h="${a#-H}"
+                    case "$h" in
+                        [Uu]ser-[Aa]gent:*) return 0 ;;
                     esac
                     ;;
             esac
-            i=$((i + 1))
         done
         return 1
     }
@@ -344,6 +764,9 @@ EOF
     _resolve_target_to_ip() {
         local target="$1"
         local resolver="$2"
+        local dig_out=""
+        local ip=""
+        local dig_rc=0
 
         if _is_ip "$target"; then
             printf '%s\n' "$target"
@@ -355,20 +778,71 @@ EOF
             return 3
         fi
 
-        local dig_out=""
         if [ -n "$resolver" ]; then
             dig_out="$(dig @"$resolver" +short "$target" 2>/dev/null)"
+            dig_rc=$?
         else
             dig_out="$(dig +short "$target" 2>/dev/null)"
+            dig_rc=$?
         fi
 
-        local ip; ip="$(printf '%s\n' "$dig_out" | tail -n 1)"
+        if [ "$dig_rc" -ne 0 ]; then
+            _error "dig failed (exit $dig_rc) while resolving TARGET '$target'."
+            return 3
+        fi
+
+        ip="$(printf '%s\n' "$dig_out" | tail -n 1)"
         if [ -z "$ip" ]; then
             _error "dig returned no results for TARGET '$target'."
             return 4
         fi
 
         printf '%s\n' "$ip"
+        return 0
+    }
+
+    _extract_first_curl_disable_flag() {
+        # Extracts the first occurrence of curl -q/--disable from curl_args and removes ALL occurrences.
+        # Prints the extracted token to stdout on success.
+        local token=""
+        local found=""
+        local -a new=()
+        local a=""
+
+        for a in "${curl_args[@]}"; do
+            if [ "$a" = "-q" ] || [ "$a" = "--disable" ]; then
+                if [ -z "$found" ]; then
+                    token="$a"
+                    found="1"
+                fi
+                continue
+            fi
+            new+=("$a")
+        done
+
+        curl_args=("${new[@]}")
+
+        if [ -n "$found" ]; then
+            printf '%s\n' "$token"
+            return 0
+        fi
+
+        return 1
+    }
+
+    _strip_curl_disable_flags() {
+
+        local -a new=()
+        local a=""
+
+        for a in "${curl_args[@]}"; do
+            if [ "$a" = "-q" ] || [ "$a" = "--disable" ]; then
+                continue
+            fi
+            new+=("$a")
+        done
+
+        curl_args=("${new[@]}")
         return 0
     }
 
@@ -387,17 +861,29 @@ EOF
         unset -f _is_ipv4
         unset -f _is_ipv6
         unset -f _is_ip
+        unset -f _looks_like_host
+        unset -f _host_for_compare
+        unset -f _is_http_url
+        unset -f _parse_http_url
+        unset -f _normalize_path_or_url
+        unset -f _curl_opt_consumes_next
+        unset -f _looks_like_pin_dns_option_token
+        unset -f _short_opts_contains_silent
+        unset -f _curl_args_has_silent_controls
         unset -f _get_user_agent
         unset -f _curl_args_has_user_agent
         unset -f _resolve_target_to_ip
+        unset -f _extract_first_curl_disable_flag
+        unset -f _strip_curl_disable_flags
         unset -f __unset
     }
 
-    # Unset helper functions before returning, via trap
+    # Unset helper functions before returning, via trap.
     # shellcheck disable=2329 # "This function is never invoked. Check usage (or ignored if invoked indirectly)."
     trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
     local host=""
+    local host_set_explicit=""
     local target=""
     local path=""
     local resolver=""
@@ -405,7 +891,14 @@ EOF
     local port="443"
     local dry_run=""
     local no_silent=""
+    local quiet=""
+    local allow_curlrc=""
+    local scheme_set_explicit=""
+    local port_set_explicit=""
 
+    local -a pre_args=()
+    local -a post_args=()
+    local -a rest_pre_args=()
     local -a curl_args=()
 
     if ! _cmd_exists curl; then
@@ -413,13 +906,37 @@ EOF
         return 3
     fi
 
+    # Split args on explicit -- (everything after is curl-only; pin-dns options after -- are not parsed).
     while [ "$#" -gt 0 ]; do
-        local arg="$1"
-
-        if [ "$arg" = "--" ]; then
+        if [ "$1" = "--" ]; then
             shift
-            curl_args+=("$@")
+            post_args+=("$@")
             break
+        fi
+        pre_args+=("$1")
+        shift
+    done
+
+    # PIN-DNS OPTION PARSER (may appear anywhere before --)
+    # MAINTENANCE NOTE:
+    # If you add a new pin-dns option, update BOTH:
+    #   - this case statement
+    #   - _looks_like_pin_dns_option_token (for accurate operand warnings)
+    local expect_curl_operand=""
+    local expect_curl_operand_for=""
+    local i=0
+    while [ "$i" -lt "${#pre_args[@]}" ]; do
+        local arg="${pre_args[$i]}"
+
+        if [ -n "$expect_curl_operand" ]; then
+            if _looks_like_pin_dns_option_token "$arg"; then
+                _warn "Token '$arg' looks like a $SCRIPT_NAME option but is being used as the operand to curl option '$expect_curl_operand_for'; it will be passed to curl unchanged. If you intended $SCRIPT_NAME, move it, use --target=VALUE (or similar), or use --."
+            fi
+            rest_pre_args+=("$arg")
+            expect_curl_operand=""
+            expect_curl_operand_for=""
+            i=$((i + 1))
+            continue
         fi
 
         case "$arg" in
@@ -427,98 +944,343 @@ EOF
                 _print_help
                 return 0
                 ;;
-            --host)
-                shift
-                if [ "$#" -lt 1 ]; then _error "Missing value for --host."; return 2; fi
-                host="$1"
-                shift
+            -q|--quiet)
+                quiet="1"
+                i=$((i + 1))
                 continue
                 ;;
-            --target)
-                shift
-                if [ "$#" -lt 1 ]; then _error "Missing value for --target."; return 2; fi
-                target="$1"
-                shift
-                continue
-                ;;
-            --path)
-                shift
-                if [ "$#" -lt 1 ]; then _error "Missing value for --path."; return 2; fi
-                path="$1"
-                shift
-                continue
-                ;;
-            --resolver)
-                shift
-                if [ "$#" -lt 1 ]; then _error "Missing value for --resolver."; return 2; fi
-                resolver="$1"
-                shift
-                continue
-                ;;
-            --scheme)
-                shift
-                if [ "$#" -lt 1 ]; then _error "Missing value for --scheme."; return 2; fi
-                scheme="$1"
-                shift
-                continue
-                ;;
-            --port)
-                shift
-                if [ "$#" -lt 1 ]; then _error "Missing value for --port."; return 2; fi
-                port="$1"
-                shift
+            --curlrc)
+                allow_curlrc="1"
+                i=$((i + 1))
                 continue
                 ;;
             --dry-run)
                 dry_run="1"
-                shift
+                i=$((i + 1))
                 continue
                 ;;
             --no-silent)
                 no_silent="1"
-                shift
+                i=$((i + 1))
                 continue
                 ;;
-            -*)
-                # Unknown option: treat as the start of curl arguments
-                curl_args+=("$@")
-                break
+            --host=*)
+                host="${arg#*=}"
+                host_set_explicit="1"
+                i=$((i + 1))
+                continue
                 ;;
-            *)
-                if [ -z "$host" ]; then
-                    host="$arg"
-                    shift
-                    continue
+            --target=*)
+                target="${arg#*=}"
+                i=$((i + 1))
+                continue
+                ;;
+            --path=*)
+                path="${arg#*=}"
+                i=$((i + 1))
+                continue
+                ;;
+            --resolver=*)
+                resolver="${arg#*=}"
+                i=$((i + 1))
+                continue
+                ;;
+            --scheme=*)
+                scheme="${arg#*=}"
+                scheme_set_explicit="1"
+                i=$((i + 1))
+                continue
+                ;;
+            --port=*)
+                port="${arg#*=}"
+                port_set_explicit="1"
+                i=$((i + 1))
+                continue
+                ;;
+            --host|--target|--path|--resolver|--scheme|--port)
+                local opt="$arg"
+                i=$((i + 1))
+                if [ "$i" -ge "${#pre_args[@]}" ]; then
+                    _error "Missing value for $opt."
+                    return 2
                 fi
-                if [ -z "$target" ]; then
-                    target="$arg"
-                    shift
-                    continue
-                fi
-                if [ -z "$path" ]; then
-                    path="$arg"
-                    shift
-                    continue
-                fi
-                curl_args+=("$@")
-                break
+                local val="${pre_args[$i]}"
+                case "$opt" in
+                    --host) host="$val"; host_set_explicit="1" ;;
+                    --target) target="$val" ;;
+                    --path) path="$val" ;;
+                    --resolver) resolver="$val" ;;
+                    --scheme) scheme="$val"; scheme_set_explicit="1" ;;
+                    --port) port="$val"; port_set_explicit="1" ;;
+                esac
+                i=$((i + 1))
+                continue
                 ;;
         esac
+
+        rest_pre_args+=("$arg")
+        if _curl_opt_consumes_next "$arg"; then
+            expect_curl_operand="1"
+            expect_curl_operand_for="$arg"
+        fi
+        i=$((i + 1))
     done
 
+    # Combine pre and post curl args
+    curl_args=("${rest_pre_args[@]}" "${post_args[@]}")
+
+    # WARNING: useless -s / -S (only warn when pin-dns is still adding -sS)
+    if [ -z "$no_silent" ] && _curl_args_has_silent_controls "${curl_args[@]}"; then
+        _warn "You passed curl -s/-S/--silent/--show-error, but $SCRIPT_NAME already adds curl -sS by default; use --no-silent if you want $SCRIPT_NAME to stop adding -sS."
+    fi
+
+
+    # Determine whether we are in positional mode (HOSTNAME [TARGET] [PATH_OR_URL]) or URL/drop-in mode.
+    # Rule: if the first non-option token (excluding curl option operands) looks like a hostname (not a URL), treat as positional.
+    local positional_mode=""
     if [ -z "$host" ]; then
-        _error "HOSTNAME is required."
+        local expect_op=""
+        local first_free=""
+        local a=""
+
+        for a in "${rest_pre_args[@]}"; do
+            if [ -n "$expect_op" ]; then
+                expect_op=""
+                continue
+            fi
+
+            case "$a" in
+                -*)
+                    if _curl_opt_consumes_next "$a"; then
+                        expect_op="1"
+                    fi
+                    continue
+                    ;;
+            esac
+
+            first_free="$a"
+            break
+        done
+
+        if [ -n "$first_free" ] && ! _is_http_url "$first_free" && _looks_like_host "$first_free"; then
+            positional_mode="1"
+        fi
+    fi
+
+    # If positional mode, consume HOSTNAME [TARGET] [PATH_OR_URL] from rest_pre_args (not from post_args).
+    if [ -n "$positional_mode" ]; then
+        local host_pos=""
+        local target_pos=""
+        local path_pos=""
+        local pos_i=0
+        local expect_op=""
+        local -a keep_pre=()
+        local a=""
+
+        for a in "${rest_pre_args[@]}"; do
+            if [ -n "$expect_op" ]; then
+                keep_pre+=("$a")
+                expect_op=""
+                continue
+            fi
+
+            case "$a" in
+                -*)
+                    keep_pre+=("$a")
+                    if _curl_opt_consumes_next "$a"; then
+                        expect_op="1"
+                    fi
+                    continue
+                    ;;
+            esac
+
+            if [ "$pos_i" -eq 0 ]; then
+                host_pos="$a"
+                pos_i=$((pos_i + 1))
+                continue
+            fi
+
+            if [ "$pos_i" -eq 1 ]; then
+                target_pos="$a"
+                pos_i=$((pos_i + 1))
+                continue
+            fi
+
+            if [ "$pos_i" -eq 2 ]; then
+                path_pos="$a"
+                pos_i=$((pos_i + 1))
+                continue
+            fi
+
+            keep_pre+=("$a")
+        done
+
+        if [ -z "$host" ] && [ -n "$host_pos" ]; then
+            host="$host_pos"
+        fi
+
+        if [ -z "$target" ] && [ -n "$target_pos" ]; then
+            target="$target_pos"
+        fi
+
+        if [ -z "$path" ] && [ -n "$path_pos" ]; then
+            path="$path_pos"
+        fi
+
+        rest_pre_args=("${keep_pre[@]}")
+        curl_args=("${rest_pre_args[@]}" "${post_args[@]}")
+    else
+        # URL/drop-in mode: if no --target was set, look for a lone free token that looks like
+        # a hostname or IP (not an HTTP URL). This supports: pin-dns https://example.com cdn.edge.com
+        # If multiple host-like free tokens exist, it's ambiguous -- require explicit --target.
+        if [ -z "$target" ]; then
+            local _utc="" # candidate value
+            local _uti="-1" # candidate index in rest_pre_args
+            local _utn="0" # count of host-like free tokens
+            local expect_op=""
+            local idx=0
+            local a=""
+            for a in "${rest_pre_args[@]}"; do
+                if [ -n "$expect_op" ]; then
+                    expect_op=""
+                    idx=$((idx + 1))
+                    continue
+                fi
+                case "$a" in
+                    -*)
+                        if _curl_opt_consumes_next "$a"; then
+                            expect_op="1"
+                        fi
+                        idx=$((idx + 1))
+                        continue
+                        ;;
+                esac
+                if ! _is_http_url "$a" && _looks_like_host "$a"; then
+                    _utn=$((_utn + 1))
+                    if [ "$_utn" -eq 1 ]; then
+                        _utc="$a"
+                        _uti="$idx"
+                    fi
+                    if [ "$_utn" -gt 1 ]; then
+                        break
+                    fi
+                fi
+                idx=$((idx + 1))
+            done
+            if [ "$_utn" -eq 1 ]; then
+                target="$_utc"
+                local -a new_rest=()
+                idx=0
+                for a in "${rest_pre_args[@]}"; do
+                    if [ "$idx" -ne "$_uti" ]; then
+                        new_rest+=("$a")
+                    fi
+                    idx=$((idx + 1))
+                done
+                rest_pre_args=("${new_rest[@]}")
+            fi
+        fi
+        curl_args=("${rest_pre_args[@]}" "${post_args[@]}")
+    fi
+
+    # Infer host/scheme/port/path from the first http(s) URL argument, if present.
+    local url_token=""
+    local url_scheme=""
+    local url_host=""
+    local url_port=""
+    local url_path=""
+
+    local url_index="-1"
+    for i in "${!curl_args[@]}"; do
+        if _is_http_url "${curl_args[$i]}"; then
+            url_index="$i"
+            url_token="${curl_args[$i]}"
+            break
+        fi
+    done
+
+    local host_set_from_url=""
+    if [ "$url_index" -ne -1 ]; then
+        _parse_http_url "$url_token" url_scheme url_host url_port url_path
+
+        if [ -n "$url_host" ]; then
+            if [ -z "$host" ]; then
+                host="$url_host"
+                host_set_from_url="1"
+            else
+                if [ -n "$host_set_explicit" ]; then
+                    local hc1; hc1="$(_host_for_compare "$host")"
+                    local hc2; hc2="$(_host_for_compare "$url_host")"
+                    if [ "$hc1" != "$hc2" ]; then
+                        _warn "URL host '$url_host' does not match --host '$host'; using --host '$host' anyway."
+                    fi
+                fi
+            fi
+        fi
+
+        if [ -z "$scheme_set_explicit" ] && [ -n "$url_scheme" ]; then
+            if [ -n "$host_set_from_url" ] || [ -z "$host" ] || [ "$(_host_for_compare "$host")" = "$(_host_for_compare "$url_host")" ]; then
+                scheme="$url_scheme"
+            fi
+        fi
+
+        if [ -z "$port_set_explicit" ] && [ -n "$url_port" ]; then
+            if [ -n "$host_set_from_url" ] || [ -z "$host" ] || [ "$(_host_for_compare "$host")" = "$(_host_for_compare "$url_host")" ]; then
+                port="$url_port"
+            fi
+        fi
+
+        if [ -z "$path" ] || [ "$path" = "/" ]; then
+            if [ -n "$url_path" ]; then
+                path="$url_path"
+            fi
+        fi
+    fi
+
+    if [ -z "$path" ]; then
+        path="/"
+    fi
+
+    local path_url_host=""
+    _normalize_path_or_url "$path" path_url_host path
+
+    if [ -n "$path_url_host" ]; then
+        local pu; pu="$(_host_for_compare "$path_url_host")"
+        local hh; hh="$(_host_for_compare "$host")"
+        local tt=""
+
+        if [ -n "$target" ] && ! _is_ip "$target"; then
+            tt="$(_host_for_compare "$target")"
+        else
+            tt=""
+        fi
+
+        if [ -n "$hh" ] && [ "$pu" != "$hh" ] && { [ -z "$tt" ] || [ "$pu" != "$tt" ]; }; then
+            if [ -n "$tt" ]; then
+                _warn "PATH_OR_URL host '$path_url_host' does not match HOSTNAME '$host' or TARGET '$target'; using HOSTNAME '$host' anyway."
+            else
+                _warn "PATH_OR_URL host '$path_url_host' does not match HOSTNAME '$host'; using HOSTNAME '$host' anyway."
+            fi
+        fi
+    fi
+
+    if [ -z "$host" ]; then
+        _error "Unable to determine HOSTNAME. Provide a URL (e.g. https://example.com) or use --host HOSTNAME."
         _print_help
         return 2
     fi
 
-    if [ -z "$path" ]; then path="/"; fi
+    if [ -z "$scheme" ]; then
+        scheme="https"
+    fi
 
-    case "$path" in
-        /*) ;;
-        \?*) path="/$path" ;;
-        *) path="/$path" ;;
-    esac
+    if [ -z "$port" ]; then
+        if [ "$scheme" = "http" ]; then
+            port="80"
+        else
+            port="443"
+        fi
+    fi
 
     local url="${scheme}://${host}${path}"
 
@@ -544,9 +1306,28 @@ EOF
         fi
     fi
 
+    # curl -q/--disable must be the very first curl argument to reliably disable curlrc.
+    # Default: pin-dns disables curlrc by injecting curl -q first.
+    # If --curlrc is set, we do NOT inject curl -q; however, if the user provided curl -q/--disable, we promote it to the first curl arg.
+    local curl_disable_token=""
+    if [ -n "$allow_curlrc" ]; then
+        curl_disable_token="$(_extract_first_curl_disable_flag 2>/dev/null)" || curl_disable_token=""
+    else
+        _strip_curl_disable_flags
+    fi
+
     local -a cmd=()
 
     cmd+=("curl")
+
+    if [ -z "$allow_curlrc" ]; then
+        cmd+=("-q")
+    else
+        if [ -n "$curl_disable_token" ]; then
+            cmd+=("$curl_disable_token")
+        fi
+    fi
+
     if [ -z "$no_silent" ]; then
         cmd+=("-sS")
     fi
@@ -585,6 +1366,12 @@ EOF
         _info "dig resolver: ${resolver}"
     fi
 
+    if [ -n "$allow_curlrc" ]; then
+        _info "curlrc enabled (--curlrc)"
+    else
+        _info "curlrc disabled (curl -q)"
+    fi
+
     if [ -n "$dry_run" ]; then
         _info "Dry run: curl command follows"
         printf '%s' "[CMD] " >&2
@@ -604,7 +1391,20 @@ EOF
     fi
 
     "${cmd[@]}"
-    return $?
+    local curl_rc=$?
+    if [ "$curl_rc" -eq 126 ] || [ "$curl_rc" -eq 127 ]; then
+        _error "curl failed to execute (exit $curl_rc)."
+        return 3
+    fi
+    return "$curl_rc"
 }
+
 _pin_dns "$@"
+__pin_dns_rc=$?
 unset -f _pin_dns
+# Propagate exit status whether executed or sourced.
+# Use BASH_SOURCE vs $0 instead of a `return || exit` chain so we don't lose $__pin_dns_rc.
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __pin_dns_rc; return $__pin_dns_rc"
+fi
+eval "unset __pin_dns_rc; exit $__pin_dns_rc"

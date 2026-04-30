@@ -1,37 +1,173 @@
-#!/usr/bin/env bash
-
-#################################################################################################
-# "Explodes" a directory, moving its contents up one level and deleting the now-empty directory #
-#################################################################################################
-# Usage:                                                                                        #
-#   explode <directory>                                                                         #
-# Exit Codes:                                                                                   #
-#   1: mv failed                                                                                #
-#   2: rmdir failed                                                                             #
-#################################################################################################
+#!/bin/bash
+# explode - Move a directory's contents up one level, then remove the empty directory
+#
+# Usage:
+#   explode [options] <directory>
+#
+# Options:
+#   -f, --force    Overwrite existing files at the destination
+#   -n, --dryrun   Show what would happen without making changes
+#   -v, --verbose  List each item as it is moved
+#   -h, --help     Display this help message
 
 _explode() {
-    local dir="$1"
-    # Validate input directory exists and is not a file
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="explode" ;; esac
+
+    _show_help() {
+        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
+        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        echo "NAME"
+        echo "  $SCRIPT_NAME - move a directory's contents up one level, then remove it"
+        echo "SYNOPSIS"
+        echo "  $SCRIPT_NAME [${s}options${r}] <${s}directory${r}>"
+        echo "  $SCRIPT_NAME -h"
+        echo "DESCRIPTION"
+        echo "  Moves every item in ${s}directory${r} into its parent, then removes the"
+        echo "  now-empty ${s}directory${r}. Aborts without changes if any items would"
+        echo "  collide with existing files, unless --force is given."
+        echo "OPTIONS"
+        echo "  -f, --force    Overwrite existing files at the destination"
+        echo "  -n, --dryrun   Show what would happen without making changes"
+        echo "  -v, --verbose  List each item as it is moved"
+        echo "  -h, --help     Display this help message"
+        echo "EXIT STATUS"
+        echo "  0   Success (or help/dryrun completed)"
+        echo "  1   Usage error, collision without --force, or a move failed"
+        echo "  2   Directory removal failed (items remain after attempted moves)"
+    }
+    _error() { echo "[$SCRIPT_NAME] ERROR: $*" >&2; }
+
+    __unset() {
+        unset -f __unset _show_help _error
+    }
+    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
+
+    local force=false
+    local dryrun=false
+    local verbose=false
+    local dir
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -f|--force)
+                force=true
+                shift
+                ;;
+            -n|--dryrun|--dry-run)
+                dryrun=true
+                shift
+                ;;
+            -v|--verbose)
+                verbose=true
+                shift
+                ;;
+            -h|--help)
+                _show_help
+                return 0
+                ;;
+            --)
+                shift
+                [ $# -gt 0 ] && dir="$1"
+                break
+                ;;
+            -*)
+                _error "Unknown option '$1'."
+                return 1
+                ;;
+            *)
+                if [ -n "$dir" ]; then
+                    _error "Multiple directories specified."
+                    return 1
+                fi
+                dir="$1"
+                shift
+                ;;
+        esac
+    done
+
+    if [ -z "$dir" ]; then
+        _error "No directory specified."
+        _show_help >&2
+        return 1
+    fi
     if [ ! -e "$dir" ]; then
-        echo "ERROR: $dir does not exist." >&2
+        _error "$dir does not exist."
         return 1
     fi
     if [ ! -d "$dir" ]; then
-        echo "ERROR: $dir is not a directory." >&2
+        _error "$dir is not a directory."
         return 1
     fi
-    # Move all files and directories up one level
-    if ! find "$dir" -mindepth 1 -maxdepth 1 -exec mv -n {} "$dir/.." \;; then
-        echo "ERROR: Failed to move all files and directories." >&2
+
+    local dest; dest="$(dirname "$dir")"
+
+    # Check for collisions
+    # -d '' delimits on null byte, pairing with find -print0 for safe filename handling
+    local collisions=()
+    local item
+    while IFS= read -r -d '' item; do
+        local base; base="$(basename "$item")"
+        if [ -e "$dest/$base" ]; then
+            collisions+=("$base")
+        fi
+    done < <(find "$dir" -mindepth 1 -maxdepth 1 -print0)
+
+    if [ ${#collisions[@]} -gt 0 ] && ! $force; then
+        _error "Aborting -- the following items already exist in $dest:"
+        local c
+        for c in "${collisions[@]}"; do
+            echo "  $c" >&2
+        done
         return 1
     fi
-    # Remove the target directory
+
+    if $dryrun; then
+        if [ ${#collisions[@]} -gt 0 ]; then
+            echo "Would overwrite (--force):"
+            local c
+            for c in "${collisions[@]}"; do
+                echo "  $c"
+            done
+        fi
+        echo "Would move to $dest:"
+        find "$dir" -mindepth 1 -maxdepth 1 -exec basename {} \; | sort
+        echo "Would remove: $dir"
+        return 0
+    fi
+
+    # Move contents
+    local mv_flags="-n"
+    $force && mv_flags="-f"
+    local failed=false
+    while IFS= read -r -d '' item; do
+        if $verbose; then
+            echo "$(basename "$item") -> $dest/"
+        fi
+        if ! mv "$mv_flags" "$item" "$dest/"; then
+            _error "Failed to move $item"
+            failed=true
+        fi
+    done < <(find "$dir" -mindepth 1 -maxdepth 1 -print0)
+
+    if $failed; then
+        _error "Some items failed to move. Directory not removed."
+        return 1
+    fi
+
+    # Remove the now-empty directory
     if ! rmdir "$dir"; then
-        local num_files; num_files="$(find "$dir" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')"
-        echo "WARNING: Failed to remove $dir after exploding. There are $num_files files remaining." >&2
+        local num_remaining
+        num_remaining="$(find "$dir" -mindepth 1 -maxdepth 1 -print0 | tr -cd '\0' | wc -c | tr -d ' ')"
+        _error "Failed to remove $dir ($num_remaining items remaining)."
         return 2
     fi
 }
 
 _explode "$@"
+__explode_rc=$?
+unset -f _explode
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __explode_rc; return $__explode_rc"
+fi
+eval "unset __explode_rc; exit $__explode_rc"

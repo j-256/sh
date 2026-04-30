@@ -1,0 +1,142 @@
+#!/bin/bash
+# bak - move file to file.bak, rotating any existing backup chain
+#
+# Usage:
+#   bak [options] [--] [file ...]
+#
+# Options:
+#   -v, --verbose  Print filenames as they are backed up
+#   -d, --dry-run  Simulate actions without making changes
+#   -h, --help     Show help message
+#
+# Backs up files by moving (renaming) them from "file.ext"->"file.ext.bak",
+# "file.ext.bak"->"file.ext.bak.bak", etc. which ensures the file with a single
+# ".bak" is always the most recent version.
+
+_bak() {
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="bak" ;; esac
+    local args=() # Positional args
+    local verbose=false
+    local dry_run=false
+
+    # Print usage (help) info
+    _show_help() {
+        # Underline only if output is a terminal (not a pipe or file)
+        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
+        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        echo "NAME"
+        echo "  $SCRIPT_NAME - move ${s}file${r} to ${s}file.bak${r}"
+        echo "SYNOPSIS"
+        echo "  $SCRIPT_NAME [-v | -d] [--] [${s}file${r} ${s}...${r}]"
+        echo "  $SCRIPT_NAME -h"
+        echo "OPTIONS"
+        echo "  -v, --verbose      Print filenames as they are backed up"
+        echo "  -d, --dry-run      Simulate actions without making changes"
+        echo "  -h, --help         Show this help message"
+    }
+
+    # True if verbose flag is set
+    _verbose() { [ "$verbose" = true ]; }
+
+    # True if dry-run flag is set
+    _dry_run() { [ "$dry_run" = true ]; }
+
+    # Recursive backup function which ultimately calls mv
+    _backup() {
+        local file="$1"
+
+        # Helper function to handle dry-run and verbose output
+        _move_file() {
+            local src="$1"
+            local dest="$2"
+            if [ ! -e "$src" ]; then
+                echo "$SCRIPT_NAME: $src: No such file" >&2
+                return 1
+            fi
+            if _dry_run; then
+                echo "$SCRIPT_NAME: Would move: $src -> $dest"
+            else
+                if _verbose; then
+                    echo "$SCRIPT_NAME: Moving $src -> $dest"
+                fi
+                mv "$src" "$dest"
+            fi
+        }
+
+        # If neither the file nor its backup exists, error out
+        if [ ! -e "$file" ] && [ ! -e "$file.bak" ]; then
+            echo "$SCRIPT_NAME: $file: No such file" >&2
+            return 1
+        fi
+
+        # If a backup already exists, recursively rotate it
+        if [ -e "$file.bak" ]; then
+            _backup "$file.bak" || return 1
+        fi
+
+        # Move the original file to its backup
+        _move_file "$file" "$file.bak" || return 1
+    }
+
+    # Clean up inner functions when returning
+    __unset() {
+        unset -f __unset _show_help _verbose _dry_run _backup _move_file
+    }
+    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
+
+    # Parse parameters
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -v|--verbose)
+                verbose=true
+                shift
+                ;;
+            -d|--dry-run)
+                dry_run=true
+                shift
+                ;;
+            -h|--help)
+                _show_help
+                return 0
+                ;;
+            # End of options, parse remainder as positional
+            --)
+                shift # discard --
+                while [ $# -gt 0 ]; do
+                    args+=("$1")
+                    shift
+                done
+                ;;
+            # Unknown option
+            -*)
+                echo "$SCRIPT_NAME: illegal option -- $1" >&2
+                return 1
+                ;;
+            # Positional argument
+            *)
+                args+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    # Show help if no filenames provided
+    if [ ${#args[@]} -eq 0 ]; then
+        _show_help
+        return 0
+    fi
+
+    # Process each argument
+    for f in "${args[@]}"; do
+        _backup "$f"
+    done
+}
+
+_bak "$@"
+__bak_rc=$?
+unset -f _bak
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __bak_rc; return $__bak_rc"
+fi
+eval "unset __bak_rc; exit $__bak_rc"

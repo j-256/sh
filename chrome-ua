@@ -1,0 +1,208 @@
+#!/bin/bash
+# chrome-ua - print a realistic Chrome User-Agent string (local install or latest stable)
+#
+# Usage:
+#   chrome-ua [--platform mac|win|linux] [--app PATH]
+#   chrome-ua --latest [--platform mac|win|linux]
+#   chrome-ua -h
+
+_chrome_ua() {
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="chrome-ua" ;; esac
+
+    _error() { echo "[$SCRIPT_NAME] ERROR: $*" >&2; }
+    _warn()  { echo "[$SCRIPT_NAME] WARN: $*" >&2; }
+
+    _show_help() {
+        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
+        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        echo "NAME"
+        echo "  $SCRIPT_NAME - print a realistic Chrome User-Agent string"
+        echo "SYNOPSIS"
+        echo "  $SCRIPT_NAME [--platform mac|win|linux] [--app ${s}path${r}]"
+        echo "  $SCRIPT_NAME --latest [--platform mac|win|linux]"
+        echo "  $SCRIPT_NAME -h"
+        echo "DESCRIPTION"
+        echo "  Emits a Chrome UA string. By default, reads the installed Chrome's"
+        echo "  major version from its Info.plist (macOS only) and formats a UA"
+        echo "  matching Chrome's reduced-UA policy (major version only, frozen"
+        echo "  platform string per OS family)."
+        echo ""
+        echo "  With --latest, fetches the current stable Chrome major version"
+        echo "  from Google's Version History API instead -- no local install"
+        echo "  required, no platform restriction."
+        echo ""
+        echo "  Default platform shape is Mac. Override with --platform to emit"
+        echo "  a Windows or Linux UA shape (and, with --latest, to fetch that"
+        echo "  platform's current version from the API)."
+        echo ""
+        echo "  Fallback chain for the default mode:"
+        echo "    1. Read local Chrome (via \`defaults\`, macOS)"
+        echo "    2. If that fails and curl is available, auto-fetch latest"
+        echo "       (unless CHROME_UA_OFFLINE is set)"
+        echo "    3. If that also fails or is blocked, use a pinned major"
+        echo "       version (goes stale over time; update periodically)"
+        echo ""
+        echo "  Useful for bot-filtered endpoints:"
+        echo "    curl -A \"\$($SCRIPT_NAME)\" https://example.com"
+        echo "OPTIONS"
+        echo "  --latest                     Fetch the latest stable Chrome version from Google's API"
+        echo "  --platform ${s}mac${r}|${s}win${r}|${s}linux${r}   UA shape and (with --latest) API path (default: mac)"
+        echo "  --app ${s}path${r}                   Path to Chrome.app for local mode"
+        echo "                               (default: /Applications/Google Chrome.app)"
+        echo "  -h, --help                   Show this help message"
+        echo "ENVIRONMENT"
+        echo "  CHROME_UA_OFFLINE  If set (any non-empty value), disables the"
+        echo "                        automatic network fallback when local read"
+        echo "                        fails. Does NOT affect explicit --latest."
+        echo "EXIT STATUS"
+        echo "  0   Success (always, when flags are valid -- the script always"
+        echo "      emits something, falling back to a pinned version with a"
+        echo "      warning if needed)"
+        echo "  2   Usage error"
+        echo "DEPENDENCIES"
+        echo "  defaults (macOS, for local mode), curl (for --latest or auto"
+        echo "  network fallback), jq (for --latest or auto network fallback)"
+    }
+
+    __unset() {
+        unset -f __unset _show_help _error _warn _ua_for _fetch_latest_major
+    }
+    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
+
+    # Pinned fallback major version -- used when both local read and network
+    # fetch fail (or when network is disabled via CHROME_UA_OFFLINE).
+    # Update periodically (last set: 2026-04, Chrome stable 148).
+    local fallback_major="148"
+
+    # UA shape per platform -- frozen by Chrome's reduced-UA policy, regardless
+    # of actual OS version or Chrome version.
+    # https://developer.chrome.com/docs/privacy-security/user-agent-client-hints#user-agent-reduction
+    _ua_for() {
+        local plat="$1"
+        local major="$2"
+        case "$plat" in
+            mac)   printf 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/%s.0.0.0 Safari/537.36\n' "$major" ;;
+            win)   printf 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/%s.0.0.0 Safari/537.36\n' "$major" ;;
+            linux) printf 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/%s.0.0.0 Safari/537.36\n' "$major" ;;
+        esac
+    }
+
+    # Fetch latest stable Chrome major version from Google's Version History API.
+    # Args: platform (mac|win|linux)
+    # Prints major version to stdout on success; returns non-zero on failure.
+    _fetch_latest_major() {
+        local plat="$1"
+        command -v curl >/dev/null 2>&1 || return 1
+        command -v jq >/dev/null 2>&1 || return 1
+        local url="https://versionhistory.googleapis.com/v1/chrome/platforms/$plat/channels/stable/versions?pageSize=1"
+        local body; body="$(curl -sS --max-time 5 "$url" 2>/dev/null)" || return 1
+        local ver; ver="$(printf '%s' "$body" | jq -r '.versions[0].version // empty' 2>/dev/null)"
+        [ -n "$ver" ] || return 1
+        printf '%s\n' "${ver%%.*}"
+    }
+
+    local mode="local"
+    local platform="mac"
+    local app="/Applications/Google Chrome.app"
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -h|--help)
+                _show_help
+                return 0
+                ;;
+            --latest)
+                mode="latest"
+                shift
+                ;;
+            --platform)
+                shift
+                if [ $# -eq 0 ] || [ -z "$1" ]; then
+                    _error "--platform requires a value (mac|win|linux)"
+                    return 2
+                fi
+                platform="$1"
+                shift
+                ;;
+            --platform=*)
+                platform="${1#*=}"
+                shift
+                ;;
+            --app)
+                shift
+                if [ $# -eq 0 ] || [ -z "$1" ]; then
+                    _error "--app requires a path"
+                    return 2
+                fi
+                app="$1"
+                shift
+                ;;
+            --app=*)
+                app="${1#*=}"
+                shift
+                ;;
+            *)
+                _error "unknown argument '$1'"
+                return 2
+                ;;
+        esac
+    done
+
+    case "$platform" in
+        mac|win|linux) ;;
+        *)
+            _error "invalid --platform '$platform' (valid: mac|win|linux)"
+            return 2
+            ;;
+    esac
+
+    local major=""
+
+    if [ "$mode" = "latest" ]; then
+        # Explicit --latest: fetch from API. Env var does NOT block this.
+        if major="$(_fetch_latest_major "$platform")" && [ -n "$major" ]; then
+            _ua_for "$platform" "$major"
+            return 0
+        fi
+        _warn "failed to fetch latest Chrome version from Google's API; using pinned major=$fallback_major"
+        _ua_for "$platform" "$fallback_major"
+        return 0
+    fi
+
+    # Default mode: read local Chrome, fall back to network, then to pinned.
+    if [ ! -d "$app" ]; then
+        _warn "Chrome app not found at '$app'"
+    else
+        local plist="$app/Contents/Info.plist"
+        local version; version="$(defaults read "$plist" CFBundleShortVersionString 2>/dev/null)"
+        if [ -n "$version" ]; then
+            major="${version%%.*}"
+            _ua_for "$platform" "$major"
+            return 0
+        fi
+        _warn "unable to read Chrome version from '$plist'"
+    fi
+
+    # Local read failed. Try network fallback unless env var blocks it.
+    if [ -z "${CHROME_UA_OFFLINE:-}" ]; then
+        if major="$(_fetch_latest_major "$platform")" && [ -n "$major" ]; then
+            _warn "local read failed; fetched latest Chrome major=$major from Google's API"
+            _ua_for "$platform" "$major"
+            return 0
+        fi
+    fi
+
+    # Network also failed or blocked: pinned fallback.
+    _warn "using pinned fallback major=$fallback_major (update periodically)"
+    _ua_for "$platform" "$fallback_major"
+    return 0
+}
+
+_chrome_ua "$@"
+__chrome_ua_rc=$?
+unset -f _chrome_ua
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __chrome_ua_rc; return $__chrome_ua_rc"
+fi
+eval "unset __chrome_ua_rc; exit $__chrome_ua_rc"

@@ -1,46 +1,145 @@
-#!/usr/bin/env bash
-#! tested in: GNU bash, version 5.2.26(1)-release (x86_64-apple-darwin23.2.0) | older versions and other shells will work but not guaranteed
-
-#################################################################################
-# Backs up tracked and untracked changes to a new branch, pushes it to a remote #
-# (default "origin"), and deletes the temporary branch.                         #
-#################################################################################
-# Usage:                                                                        #
-#   git-backup <repo_directory> [remote_name]                                   #
-#################################################################################
+#!/bin/bash
+# git-backup - Stash work in progress and push it as a timestamped backup branch
+#
+# Usage:
+#   git-backup [--dry-run] <repo_directory> [remote]
+#   git-backup -h
+#
+# Options:
+#   -n, --dry-run    Print the commands that would run; make no changes
+#   repo_directory   Path to the git repository
+#   remote           Remote name (default: origin)
+#   -h, --help       Show help message
 
 _git_backup() {
-    # Directory of the Git repository
-    local repo_dir="${1:?"no directory provided"}"
-    # Name of remote to push to - git defaults to "origin" so we do too
-    local remote="${2:-"origin"}"
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="git-backup" ;; esac
+
+    _show_help() {
+        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
+        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        echo "NAME"
+        echo "  $SCRIPT_NAME - back up git changes to a timestamped remote branch"
+        echo "SYNOPSIS"
+        echo "  $SCRIPT_NAME [--dry-run] ${s}repo_directory${r} [${s}remote${r}]"
+        echo "  $SCRIPT_NAME -h"
+        echo "DESCRIPTION"
+        echo "  Stashes all tracked and untracked changes, creates a timestamped branch"
+        echo "  (backup-YYYY-MM-DD-HHMM.SS, UTC), commits everything, pushes to the"
+        echo "  remote, then restores the original branch and working state. The temporary"
+        echo "  local branch is deleted after pushing; the remote branch persists."
+        echo ""
+        echo "  Pushes immediately without confirmation -- the backup branch is named"
+        echo "  uniquely by timestamp and won't overwrite or interfere with your main"
+        echo "  work. Use --dry-run first if you want to see what would happen."
+        echo ""
+        echo "  If \`git stash apply\` hits conflicts, the script auto-resolves them by"
+        echo "  keeping the stashed version (\`git checkout --theirs\`). See CAVEATS."
+        echo "OPTIONS"
+        echo "  -n, --dry-run      Print the commands that would run, make no changes"
+        echo "  ${s}repo_directory${r}   Path to the git repository (e.g. . for CWD)"
+        echo "  ${s}remote${r}           Remote name (default: origin)"
+        echo "  -h, --help         Show this help message"
+        echo "PRECONDITIONS"
+        echo "  - ${s}repo_directory${r} is an accessible git working tree"
+        echo "  - ${s}remote${r} is configured in that repo and you have push access"
+        echo "EXIT STATUS"
+        echo "  0   Success"
+        echo "  1   Runtime failure (git command failed)"
+        echo "  2   Usage / precondition error (remote missing, bad args)"
+        echo "DEPENDENCIES"
+        echo "  git"
+        echo "CAVEATS"
+        echo "  Conflict auto-resolution uses \`git checkout --theirs\` (keep stashed"
+        echo "  side). This is destructive for the 'ours' side of any conflict --"
+        echo "  review the backup branch after a conflict-resolved run."
+        echo ""
+        echo "  Backup branches persist on the remote and are not auto-pruned. Clean"
+        echo "  them up periodically with: git push ${s}remote${r} --delete backup-YYYY-...."
+    }
 
     _failed() {
         echo "ERROR: \`$1\` failed" >&2
     }
 
-    local timestamp="$(TZ=Etc/UTC date +"%Y-%m-%d-%H%M.%S")"
+    _error() { echo "[$SCRIPT_NAME] ERROR: $*" >&2; }
+
+    # Clean up inner functions on return
+    __unset() {
+        unset -f __unset _show_help _failed _error
+    }
+    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
+
+    # Parse args: collect flags, then positional
+    local dry_run=0
+    local positional=()
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -h|--help) _show_help; return 0 ;;
+            -n|--dry-run) dry_run=1; shift ;;
+            --) shift; while [ $# -gt 0 ]; do positional+=("$1"); shift; done ;;
+            -*)
+                _error "unknown option: $1. Run \`$SCRIPT_NAME -h\` for usage."
+                return 2
+                ;;
+            *) positional+=("$1"); shift ;;
+        esac
+    done
+
+    if [ "${#positional[@]}" -eq 0 ]; then
+        _error "no directory provided. Run \`$SCRIPT_NAME -h\` for usage."
+        return 2
+    fi
+
+    # Directory of the Git repository
+    local repo_dir="${positional[0]}"
+    # Name of remote to push to - git defaults to "origin" so we do too
+    local remote="${positional[1]:-"origin"}"
+
+    local timestamp; timestamp="$(TZ=Etc/UTC date +"%Y-%m-%d-%H%M.%S")"
     local backup_name="backup-$timestamp"
+
+    if [ "$dry_run" -eq 1 ]; then
+        echo "[DRY RUN] would back up $repo_dir to $remote as branch $backup_name"
+        echo "[DRY RUN] cd \"$repo_dir\""
+        echo "[DRY RUN] git remote get-url \"$remote\"   # (pre-flight check)"
+        echo "[DRY RUN] git stash save --include-untracked \"$backup_name\""
+        echo "[DRY RUN] git checkout -b \"$backup_name\""
+        echo "[DRY RUN] git stash apply   # (auto-resolves conflicts with --theirs)"
+        echo "[DRY RUN] git add ."
+        echo "[DRY RUN] git commit -m \"Backup $timestamp\""
+        echo "[DRY RUN] git push \"$remote\" \"$backup_name\""
+        echo "[DRY RUN] git checkout -"
+        echo "[DRY RUN] git stash apply"
+        echo "[DRY RUN] git branch -D \"$backup_name\""
+        return 0
+    fi
+
     echo "Starting git repo backup $timestamp"
 
     # Change to the repository directory
     if ! cd "$repo_dir"; then
         echo "Failed to change to directory \"$repo_dir\"" >&2
-        unset -f _failed
         return 1
+    fi
+
+    # Pre-flight: the named remote must exist. Without this, `git push` later
+    # produces a raw git error that doesn't say which side (tooling or config)
+    # is at fault.
+    if ! git remote get-url "$remote" >/dev/null 2>&1; then
+        _error "remote '$remote' not configured in '$repo_dir'. Run \`$SCRIPT_NAME -h\` for usage."
+        return 2
     fi
 
     # Stash any uncommitted changes and untracked files
     if ! git stash save --include-untracked "$backup_name"; then
         _failed "git stash save --include-untracked \"$backup_name\""
-        unset -f _failed
         return 1
     fi
 
     # Create and switch to new branch for backup
     if ! git checkout -b "$backup_name"; then
         _failed "git checkout -b \"$backup_name\""
-        unset -f _failed
         return 1
     fi
 
@@ -48,7 +147,6 @@ _git_backup() {
     local stash_apply_output
     if ! stash_apply_output="$(git stash apply 2>&1)"; then
         _failed "git stash apply"
-        unset -f _failed
         return 1
     fi
     if echo "$stash_apply_output" | tee /dev/stdout | grep -q 'CONFLICT'; then
@@ -58,7 +156,6 @@ _git_backup() {
             echo "Resolving conflict in $file"
             if ! git checkout --theirs "$file"; then
                 _failed "git checkout --theirs \"$file\""
-                unset -f _failed
                 return 1
             fi
             git add "$file"
@@ -69,47 +166,44 @@ _git_backup() {
     # Add all changes to the index
     if ! git add .; then
         _failed "git add ."
-        unset -f _failed
         return 1
     fi
 
     # Commit the changes
     if ! git commit -m "Backup $timestamp"; then
         _failed "git commit -m \"Backup $timestamp\""
-        unset -f _failed
         return 1
     fi
 
     # Push the changes to the remote repository
     if ! git push "$remote" "$backup_name"; then
         _failed "git push \"$remote\" \"$backup_name\""
-        unset -f _failed
         return 1
     fi
 
     # Switch back to the original branch
     if ! git checkout -; then
        _failed "git checkout -"
-       unset -f _failed
        return 1
     fi
 
     # Restore changes to original branch
     if ! git stash apply; then
         _failed "git stash apply"
-        unset -f _failed
         return 1
     fi
 
     # Delete the backup branch locally, now that it has been pushed to the remote repository
     if ! git branch -D "$backup_name"; then
         _failed "git branch -D \"$backup_name\""
-        unset -f _failed
         return 1
     fi
-
-    # Clean up local function
-    unset -f _failed
 }
 
 _git_backup "$@"
+__git_backup_rc=$?
+unset -f _git_backup
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __git_backup_rc; return $__git_backup_rc"
+fi
+eval "unset __git_backup_rc; exit $__git_backup_rc"

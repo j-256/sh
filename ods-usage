@@ -1,32 +1,82 @@
-#!/usr/bin/env bash
-#! tested in: GNU bash, version 5.2.26(1)-release (x86_64-apple-darwin23.2.0) | older versions and other shells will work but not guaranteed
-
-######################################################################################################################
-# Calculates On-Demand Sandbox credits used and summarizes usage, provided a getRealmUsage response from the ODS API #
-######################################################################################################################
-# Usage:                                                                                                             #
-#   ods-usage [api_response]                                                                                         #
-# Provide JSON response from getRealmUsage as the argument, or run with no arguments to pull from clipboard          #
-######################################################################################################################
-# Example Output:                                                                                                    #
-#   Sandbox Counts                                                                                                   #
-#   created: 9                                                                                                       #
-#   active:  8                                                                                                       #
-#   deleted: 0                                                                                                       #
-#   Uptime & Downtime                                                                                                #
-#   min up:   1389                                                                                                   #
-#   > medium: 1389                                                                                                   #
-#   min down: 194006                                                                                                 #
-#   Credits Used                                                                                                     #
-#   up:    1389                                                                                                      #
-#   down:  58201                                                                                                     #
-#   total: 59590                                                                                                     #
-#############################################################################################################################
-# https://admin.dx.commercecloud.salesforce.com/#/Realms/getRealmUsage                                                      #
-# https://admin.dx.commercecloud.salesforce.com/api/v1/realms/xxxx/usage?from=2020-01-01&to=2020-02-01&detailedReport=false #
-#############################################################################################################################
+#!/bin/bash
+# ods-usage - calculate On-Demand Sandbox credits used from a getRealmUsage response
+#
+# Usage:
+#   ods-usage [api_response]
+#   ods-usage -h
+#
+# Options:
+#   api_response   JSON response from getRealmUsage (ODS API). If omitted,
+#                  the script pulls JSON from the clipboard via pbpaste.
+#   -h, --help     Show help message
+#
+# Example Output:
+#   Sandbox Counts
+#   created: 9
+#   active:  8
+#   deleted: 0
+#   Uptime & Downtime
+#   min up:   1389
+#   > medium: 1389
+#   min down: 194006
+#   Credits Used
+#   up:    1389
+#   down:  58201
+#   total: 59590
+#
+# References:
+#   https://admin.dx.commercecloud.salesforce.com/#/Realms/getRealmUsage
+#   https://admin.dx.commercecloud.salesforce.com/api/v1/realms/xxxx/usage?from=2020-01-01&to=2020-02-01&detailedReport=false
 
 _ods_usage() {
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="ods-usage" ;; esac
+
+    _error() { echo "[$SCRIPT_NAME] ERROR: $*" >&2; }
+
+    _show_help() {
+        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
+        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        echo "NAME"
+        echo "  $SCRIPT_NAME - calculate On-Demand Sandbox credits used from an ODS API response"
+        echo "SYNOPSIS"
+        echo "  $SCRIPT_NAME [${s}api_response${r}]"
+        echo "  $SCRIPT_NAME -h"
+        echo "DESCRIPTION"
+        echo "  Parses a getRealmUsage JSON response from the Salesforce B2C Commerce"
+        echo "  On-Demand Sandbox (ODS) API and summarizes sandbox counts, uptime/"
+        echo "  downtime by profile, and credits used. Credit multipliers:"
+        echo "    medium=1, large=2, xlarge=4 (per minute up)"
+        echo "    stopped=0.3 (per minute down, all profiles)"
+        echo ""
+        echo "  Primary workflow: copy the JSON response from the ODS API Swagger UI"
+        echo "  (https://admin.dx.commercecloud.salesforce.com/#/Realms/getRealmUsage),"
+        echo "  then run \`$SCRIPT_NAME\` with no arguments -- it will read JSON from"
+        echo "  the clipboard via pbpaste. You can also pass the JSON as an argument."
+        echo "INPUT"
+        echo "  Expects JSON with these required fields under .data:"
+        echo "    createdSandboxes, activeSandboxes, deletedSandboxes,"
+        echo "    minutesUp, minutesDown, minutesUpByProfile[]"
+        echo "OPTIONS"
+        echo "  ${s}api_response${r}   JSON response (if omitted, read from clipboard via pbpaste)"
+        echo "  -h, --help     Show this help message"
+        echo "DEPENDENCIES"
+        echo "  jq, pbpaste (macOS clipboard; required for clipboard mode), tput"
+        echo "EXAMPLES"
+        echo "  $SCRIPT_NAME '{\"data\":{\"createdSandboxes\":9,...}}'"
+        echo "  $SCRIPT_NAME                 # reads JSON from clipboard (macOS)"
+        echo "  pbpaste | xargs -0 $SCRIPT_NAME   # explicit clipboard pipe"
+    }
+
+    __unset() {
+        unset -f __unset _show_help _error _jq
+    }
+    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
+
+    case "$1" in
+        -h|--help) _show_help; return 0 ;;
+    esac
+
     # Define one of two versions of a jq helper function, to pipe the input JSON and specify raw output each time
     # Helper will use input if arguments are provided, otherwise it will pull from the clipboard
     if [ $# -gt 0 ]; then
@@ -47,6 +97,14 @@ _ods_usage() {
             echo "ERROR: No arguments provided and clipboard does not contain valid JSON" >&2
             return 1
         fi
+    fi
+
+    # Validate required fields exist before processing. Missing fields would
+    # otherwise print "null" and leak jq errors to stderr while exiting 0.
+    local check; check="$(_jq '.data | has("createdSandboxes") and has("activeSandboxes") and has("deletedSandboxes") and has("minutesUp") and has("minutesDown")')"
+    if [ "$check" != "true" ]; then
+        _error "input JSON is missing required fields (expected .data.createdSandboxes, .data.activeSandboxes, .data.deletedSandboxes, .data.minutesUp, .data.minutesDown)"
+        return 1
     fi
 
     # If output is being piped or redirected, do not print control characters for text formatting
@@ -96,9 +154,12 @@ _ods_usage() {
     echo "up:    $credits_used_up"
     echo "down:  $credits_used_down"
     echo "total: $credits_used_total"
-
-    # Clean up inner function(s) to avoid bleeding into outer scope
-    unset -f _jq
 }
 
 _ods_usage "$@"
+__ods_usage_rc=$?
+unset -f _ods_usage
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __ods_usage_rc; return $__ods_usage_rc"
+fi
+eval "unset __ods_usage_rc; exit $__ods_usage_rc"

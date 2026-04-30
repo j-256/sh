@@ -1,23 +1,23 @@
-#!/usr/bin/env bash
-
-####################################################################################################
-# Extracts a snippet of lines between start and end patterns from files or piped/redirected input  #
-####################################################################################################
-# Usage:                                                                                           #
-#   snippet -s pattern [-e pattern] [-f num] [-l num] [file ...]                                   #
-#   snippet -s pattern [-e pattern] [-t num] [file ...]                                            #
-#   snippet [-h]                                                                                   #
-# Options:                                                                                         #
-#   -s, --start pattern       Specify the pattern indicating the beginning of the desired snippet. #
-#   -e, --end pattern         Specify the pattern indicating the end of the desired snippet.       #
-#                             If not provided, reads to end of input.                              #
-#   -f, --trim-first num      Exclude the first num lines of the snippet.                          #
-#   -l, --trim-last num       Exclude the last num lines of the snippet.                           #
-#   -t, --trim num            Exclude the first and last num lines of the snippet.                 #
-#   -h, --help                Show this help message.                                              #
-####################################################################################################
+#!/bin/bash
+# snippet - extract lines between start and end patterns from files or stdin
+#
+# Usage:
+#   snippet -s pattern [-e pattern] [-f num] [-l num] [file ...]
+#   snippet -s pattern [-e pattern] [-t num] [file ...]
+#   snippet [-h]
+#
+# Options:
+#   -s, --start pattern       Pattern indicating the beginning of the desired snippet.
+#   -e, --end pattern         Pattern indicating the end of the desired snippet.
+#                             If not provided, reads to end of input.
+#   -f, --trim-first num      Exclude the first num lines of the snippet.
+#   -l, --trim-last num       Exclude the last num lines of the snippet.
+#   -t, --trim num            Exclude the first and last num lines of the snippet.
+#   -h, --help                Show this help message.
 
 _snippet() {
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="snippet" ;; esac
     local args=() # positional args
     local start_pattern
     local end_pattern
@@ -30,9 +30,9 @@ _snippet() {
         local s; [ -t 1 ] && s="$(tput smul)"
         local r; [ -t 1 ] && r="$(tput rmul)"
         echo "Usage:"
-        echo "  snippet -s ${s}pattern${r} [-e ${s}pattern${r}] [-f ${s}num${r}] [-l ${s}num${r}] [${s}file${r} ${s}...${r}]"
-        echo "  snippet -s ${s}pattern${r} [-e ${s}pattern${r}] [-t ${s}num${r}] [${s}file${r} ${s}...${r}]"
-        echo "  snippet [-h]"
+        echo "  $SCRIPT_NAME -s ${s}pattern${r} [-e ${s}pattern${r}] [-f ${s}num${r}] [-l ${s}num${r}] [${s}file${r} ${s}...${r}]"
+        echo "  $SCRIPT_NAME -s ${s}pattern${r} [-e ${s}pattern${r}] [-t ${s}num${r}] [${s}file${r} ${s}...${r}]"
+        echo "  $SCRIPT_NAME [-h]"
         echo "Options:"
         echo "  -s, --start ${s}pattern${r}   Specify the pattern indicating the beginning of the desired snippet."
         echo "  -e, --end ${s}pattern${r}     Specify the pattern indicating the end of the desired snippet."
@@ -70,7 +70,10 @@ _snippet() {
         fi
     }
     # Unset helper functions before returning
-    trap 'unset -f _show_help _dropfirst _droplast; trap - RETURN' RETURN
+    __unset() {
+        unset -f __unset _show_help _dropfirst _droplast
+    }
+    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
     # Just print help if no arguments are provided
     if [ $# -eq 0 ]; then
@@ -178,3 +181,9 @@ _snippet() {
 }
 
 _snippet "$@"
+__snippet_rc=$?
+unset -f _snippet
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __snippet_rc; return $__snippet_rc"
+fi
+eval "unset __snippet_rc; exit $__snippet_rc"

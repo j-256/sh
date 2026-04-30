@@ -1,0 +1,174 @@
+#!/bin/bash
+# gen-catalog - Generate SFCC (Demandware) catalog XML for testing
+#
+# Usage:
+#   gen-catalog <base_count> <variants_per_base> [catalog_id]
+#   gen-catalog -h
+#
+# Options:
+#   base_count          Number of base products to generate (positive integer)
+#   variants_per_base   Number of variants per base product (positive integer)
+#   catalog_id          Catalog ID (default: test-catalog)
+#   -h, --help          Show help message
+
+_gen_catalog() {
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="gen-catalog" ;; esac
+
+    _show_help() {
+        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
+        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        echo "NAME"
+        echo "  $SCRIPT_NAME - generate SFCC catalog XML"
+        echo "SYNOPSIS"
+        echo "  $SCRIPT_NAME ${s}base_count${r} ${s}variants_per_base${r} [${s}catalog_id${r}]"
+        echo "  $SCRIPT_NAME -h"
+        echo "DESCRIPTION"
+        echo "  Generates a Demandware/SFCC catalog XML document with the specified number"
+        echo "  of base products, each with the given number of variants. Output is written"
+        echo "  to stdout."
+        echo "OPTIONS"
+        echo "  ${s}base_count${r}          Number of base products to generate"
+        echo "  ${s}variants_per_base${r}   Number of variants per base product"
+        echo "  ${s}catalog_id${r}          Catalog ID (default: test-catalog)"
+        echo "  -h, --help          Show this help message"
+    }
+
+    main() {
+        local base_count="$1"
+        local variants_per_base="$2"
+        local catalog_id="$3"
+
+        if [ ! "$base_count" ] || [ ! "$variants_per_base" ]; then
+            echo "Usage: $SCRIPT_NAME BASE_COUNT VARIANTS_PER_BASE [CATALOG_ID]" >&2
+            return 1
+        fi
+
+        case "$base_count" in
+            *[!0-9]*)
+                echo "BASE_COUNT must be a positive integer" >&2
+                return 1
+                ;;
+        esac
+
+        case "$variants_per_base" in
+            *[!0-9]*)
+                echo "VARIANTS_PER_BASE must be a positive integer" >&2
+                return 1
+                ;;
+        esac
+
+        if [ "$base_count" -le 0 ] || [ "$variants_per_base" -le 0 ]; then
+            echo "BASE_COUNT and VARIANTS_PER_BASE must be greater than zero" >&2
+            return 1
+        fi
+
+        if [ ! "$catalog_id" ]; then
+            catalog_id="test-catalog"
+        fi
+
+        print_header "$catalog_id"
+        print_all_in_order "$base_count" "$variants_per_base"
+        print_footer
+    }
+
+    print_header() {
+        local catalog_id="$1"
+
+        echo '<?xml version="1.0" encoding="UTF-8"?>'
+        echo '<catalog xmlns="http://www.demandware.com/xml/impex/catalog/2006-10-31"'
+        echo '         xmlns:xml="http://www.w3.org/XML/1998/namespace"'
+        echo "         catalog-id=\"$catalog_id\">"
+        echo '    <header/>'
+    }
+
+    print_footer() {
+        echo '</catalog>'
+    }
+
+    print_all_in_order() {
+        local base_count="$1"
+        local variants_per_base="$2"
+
+        _print_base() {
+            local base_id="$1"
+            local variants_per_base="$2"
+
+            echo "    <product product-id=\"$base_id\">"
+            echo "        <display-name xml:lang=\"en\">$base_id</display-name>"
+            echo '        <variations>'
+            echo '            <variants>'
+
+            local i=1
+            while [ "$i" -le "$variants_per_base" ]; do
+                local num
+                num="$(printf '%03d' "$i")"
+                local vid="$base_id-VAR-$num"
+
+                if [ "$i" -eq 1 ]; then
+                    echo "                <variant product-id=\"$vid\" default=\"true\"/>"
+                else
+                    echo "                <variant product-id=\"$vid\"/>"
+                fi
+
+                i=$((i + 1))
+            done
+
+            echo '            </variants>'
+            echo '        </variations>'
+            echo '    </product>'
+        }
+
+        _print_variants() {
+            local base_id="$1"
+            local variants_per_base="$2"
+
+            local i=1
+            while [ "$i" -le "$variants_per_base" ]; do
+                local num
+                num="$(printf '%03d' "$i")"
+                local vid="$base_id-VAR-$num"
+
+                echo "    <product product-id=\"$vid\">"
+                echo "        <display-name xml:lang=\"en\">$base_id Variant $num</display-name>"
+                echo '    </product>'
+
+                i=$((i + 1))
+            done
+        }
+
+        # Ordered output:
+        # BASE1
+        # BASE1 variants
+        # BASE2
+        # BASE2 variants
+        local b=1
+        while [ "$b" -le "$base_count" ]; do
+            local base_id="BASE$b"
+
+            _print_base "$base_id" "$variants_per_base"
+            _print_variants "$base_id" "$variants_per_base"
+
+            b=$((b + 1))
+        done
+    }
+
+    __unset() {
+        unset -f __unset _show_help main print_header print_footer print_all_in_order _print_base _print_variants
+    }
+    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
+
+    case "$1" in
+        -h|--help) _show_help; return 0 ;;
+    esac
+
+    main "$@"
+}
+
+_gen_catalog "$@"
+__gen_catalog_rc=$?
+unset -f _gen_catalog
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __gen_catalog_rc; return $__gen_catalog_rc"
+fi
+eval "unset __gen_catalog_rc; exit $__gen_catalog_rc"

@@ -1,50 +1,126 @@
-#!/usr/bin/env bash
-
-########################################################################
-# Renames new macOS screenshots to contain the timestamp only          #
-# "Screenshot 2025-08-04 at 12.05.57.png" -> "2025-08-04 12.05.57.png" #
-########################################################################
-# Usage:                                                               #
-#   screenshot-rename [--help|-h] [--utc|-u]                           #
-# Options:                                                             #
-#   --help, -h    Show this help message and exit                      #
-#   --utc, -u     Use UTC timezone instead of local time               #
-########################################################################
-# Dependencies:                                                        #
-#   fswatch - file change monitor                                      #
-########################################################################
+#!/bin/bash
+# screenshot-rename - watch for new macOS screenshots and rename them to a timestamp-only format
+#
+# Usage:
+#   screenshot-rename [--path PATH] [--format FORMAT] [--utc]
+#   screenshot-rename -h
+#
+# Options:
+#   --path PATH      Directory to watch (default: macOS configured screenshot
+#                    location from `defaults read com.apple.screencapture location`,
+#                    falling back to ~/Desktop)
+#   --format FORMAT  strftime format for the new filename (default: "%Y-%m-%d %H.%M.%S")
+#   -u, --utc        Use UTC timezone instead of local time
+#   -h, --help       Show help message
 
 _screenshot_rename() {
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="screenshot-rename" ;; esac
+
+    _error() { echo "[$SCRIPT_NAME] ERROR: $*" >&2; }
+
+    _show_help() {
+        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
+        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        echo "NAME"
+        echo "  $SCRIPT_NAME - watch for new macOS screenshots and rename them"
+        echo "SYNOPSIS"
+        echo "  $SCRIPT_NAME [--path ${s}path${r}] [--format ${s}format${r}] [--utc]"
+        echo "  $SCRIPT_NAME -h"
+        echo "DESCRIPTION"
+        echo "  Runs as a watcher indefinitely (Ctrl-C to stop). Monitors the"
+        echo "  configured directory (default: ~/Desktop, or the macOS screenshot"
+        echo "  location if different) for new Screenshot files and renames them"
+        echo "  to a timestamp-only format."
+        echo ""
+        echo "  Before: Screenshot 2025-08-04 at 12.05.57.png"
+        echo "  After:  2025-08-04 12.05.57.png"
+        echo ""
+        echo "  The timestamp is captured at the moment of rename, not parsed from"
+        echo "  the original filename. If a file with the same timestamp already"
+        echo "  exists, a counter is appended (-1, -2, ...)."
+        echo "OPTIONS"
+        echo "  --path ${s}path${r}      Directory to watch"
+        echo "                   (default: macOS screenshot location, or ~/Desktop)"
+        echo "  --format ${s}format${r}  strftime format for new filenames"
+        echo "                   (default: \"%Y-%m-%d %H.%M.%S\")"
+        echo "  -u, --utc        Use UTC instead of local time"
+        echo "  -h, --help       Show this help message"
+        echo "EXAMPLES"
+        echo "  $SCRIPT_NAME"
+        echo "  $SCRIPT_NAME --utc"
+        echo "  $SCRIPT_NAME --path ~/Pictures/Screenshots"
+        echo "  $SCRIPT_NAME --format \"%Y%m%d-%H%M%S\""
+        echo "DEPENDENCIES"
+        echo "  fswatch, defaults (macOS)"
+    }
+
+    __unset() {
+        unset -f __unset _show_help _error
+    }
+    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
+
     local use_utc=false
+    local watch_dir=""
+    local fmt="%Y-%m-%d %H.%M.%S"
 
     while [ "$#" -gt 0 ]; do
         case "$1" in
-            --utc|-u) use_utc=true ;;
-            --help|-h)
-                echo "Usage:"
-                echo "  screenshot-rename [--help|-h] [--utc|-u]"
-                echo "Options:"
-                echo "  --help, -h    Show this help message and exit"
-                echo "  --utc, -u     Use UTC timezone instead of local time"
-                return 0
+            --utc|-u) use_utc=true; shift ;;
+            --path)
+                shift
+                if [ $# -eq 0 ] || [ -z "$1" ]; then
+                    _error "--path requires a directory"
+                    return 2
+                fi
+                watch_dir="$1"
+                shift
                 ;;
-            --) shift; break ;;  # explicitly stop option parsing
-            -*) echo "Unknown option: $1" >&2; return 2 ;;
-            *) echo "Unexpected argument: $1" >&2; return 2 ;;
+            --path=*)
+                watch_dir="${1#*=}"
+                shift
+                ;;
+            --format)
+                shift
+                if [ $# -eq 0 ] || [ -z "$1" ]; then
+                    _error "--format requires a strftime pattern"
+                    return 2
+                fi
+                fmt="$1"
+                shift
+                ;;
+            --format=*)
+                fmt="${1#*=}"
+                shift
+                ;;
+            --help|-h) _show_help; return 0 ;;
+            --) shift; break ;;
+            -*) _error "Unknown option: $1"; return 2 ;;
+            *) _error "Unexpected argument: $1"; return 2 ;;
         esac
-        shift
     done
 
     if ! command -v fswatch >/dev/null 2>&1; then
-        echo "Error: fswatch is not installed. Please install it to use this script." >&2
+        _error "fswatch is not installed. Please install it to use this script."
         return 1
     fi
 
-    echo "Watching for new screenshots on the Desktop..."
+    # Determine watch directory: --path wins. Otherwise, try the macOS-configured
+    # screenshot location; fall back to ~/Desktop if that fails or isn't a dir.
+    if [ -z "$watch_dir" ]; then
+        watch_dir="$(defaults read com.apple.screencapture location 2>/dev/null)"
+        # Expand ~/ if present (defaults may return "~/Desktop" literally)
+        watch_dir="${watch_dir/#\~/$HOME}"
+        if [ -z "$watch_dir" ] || [ ! -d "$watch_dir" ]; then
+            watch_dir="$HOME/Desktop"
+        fi
+    fi
+
+    echo "Watching for new screenshots in: $watch_dir"
     local path
-    fswatch -0 "$HOME/Desktop" | while IFS= read -r -d '' path; do
+    fswatch -0 "$watch_dir" | while IFS= read -r -d '' path; do
         case "$path" in
-            "$HOME"/Desktop/Screenshot\ *.png)
+            "$watch_dir"/Screenshot\ *.png)
                 # We get multiple lines for a single screenshot, so the file may already be moved
                 [ -f "$path" ] || continue
                 printf %s "Renaming screenshot: $path"
@@ -52,16 +128,16 @@ _screenshot_rename() {
                 # Choose time zone
                 local timestamp
                 if [ "$use_utc" = true ]; then
-                    timestamp="$(TZ=Etc/UTC date '+%Y-%m-%d %H.%M.%S')"
+                    timestamp="$(TZ=Etc/UTC date "+$fmt")"
                 else
-                    timestamp="$(TZ=/etc/localtime date '+%Y-%m-%d %H.%M.%S')"
+                    timestamp="$(TZ=/etc/localtime date "+$fmt")"
                 fi
 
-                local dest="$HOME/Desktop/$timestamp.png"
+                local dest="$watch_dir/$timestamp.png"
                 # In case two renames are attempted at the same time, ensure unique names
                 local i=1
                 while [ -e "$dest" ]; do
-                    dest="$HOME/Desktop/$timestamp-$i.png"
+                    dest="$watch_dir/$timestamp-$i.png"
                     i=$((i + 1))
                 done
                 echo " -> $(basename "$dest")"
@@ -72,3 +148,9 @@ _screenshot_rename() {
 }
 
 _screenshot_rename "$@"
+__screenshot_rename_rc=$?
+unset -f _screenshot_rename
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __screenshot_rename_rc; return $__screenshot_rename_rc"
+fi
+eval "unset __screenshot_rename_rc; exit $__screenshot_rename_rc"

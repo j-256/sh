@@ -1,20 +1,60 @@
-#!/usr/bin/env bash
-#! tested in: GNU bash, version 5.2.26(1)-release (x86_64-apple-darwin23.2.0) | older versions and other shells will work but not guaranteed
-
-###########################################################################################################################
-# Updates Cloudflare DNS to use the current machine's outbound IP address. Deletes all existing A records for the domain. #
-# Run periodically from host to achieve basic Dynamic DNS capabilities.                                                   #
-###########################################################################################################################
-# Usage:                                                                                                                  #
-#   cf-ddns <api_token> <domain_name>                                                                                     #
-# Required API token permissions: Zone.Zone, Zone.DNS                                                                     #
-###########################################################################################################################
+#!/bin/bash
+# cf-ddns - update Cloudflare DNS to this machine's outbound IP
+#
+# Usage:
+#   cf-ddns <api_token> <domain>
+#   cf-ddns -h
+#
+# Updates Cloudflare DNS to use the current machine's outbound IP address.
+# Deletes all existing A records for the domain and creates a new one.
+# Run periodically from host to achieve basic Dynamic DNS capabilities.
+# Required API token permissions: Zone.Zone, Zone.DNS
 
 _cf_ddns() {
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="cf-ddns" ;; esac
     local -r API_VERSION="v4"
     local -r API_BASE="https://api.cloudflare.com/client/$API_VERSION"
     local -r A_RECORD_TTL=60
     local -r CURL_LOG_FILE="/tmp/curl.$$.log"
+
+    # Clean up inner functions on return
+    __unset() {
+        unset -f __unset _show_help _msg _info _warn _error _dbg _exception _curl _get_zones _get_dns_records _delete_dns_record _create_dns_record _outgoing_ip _api_success
+    }
+    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
+
+    _show_help() {
+        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
+        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        echo "NAME"
+        echo "  $SCRIPT_NAME - update Cloudflare DNS to this machine's outbound IP"
+        echo "SYNOPSIS"
+        echo "  $SCRIPT_NAME ${s}api_token${r} ${s}domain${r}"
+        echo "  $SCRIPT_NAME -h"
+        echo "DESCRIPTION"
+        echo "  Detects the machine's outbound IP via api.ipify.org, compares it to the"
+        echo "  domain's current A record (via Google DNS), and updates Cloudflare if they"
+        echo "  differ. All existing A records for the domain are deleted first."
+        echo "  Run periodically from the host to achieve basic Dynamic DNS."
+        echo "OPTIONS"
+        echo "  -h, --help   Show this help message"
+        echo "ENVIRONMENT"
+        echo "  DDNS_DEBUG   Set to any value to enable verbose curl/debug output"
+        echo "DEPENDENCIES"
+        echo "  curl, jq, dig"
+        echo "EXTERNAL SERVICES"
+        echo "  api.ipify.org   used to detect this machine's public IP"
+        echo "  8.8.8.8         Google DNS (TCP), used to resolve the domain's current A record"
+        echo "  If either endpoint is unreachable (firewall, restricted network), the"
+        echo "  script will fail -- make sure outbound access to both is permitted."
+        echo "API TOKEN PERMISSIONS"
+        echo "  Zone.Zone, Zone.DNS"
+    }
+
+    case "$1" in
+        -h|--help) _show_help; return 0 ;;
+    esac
 
     # Check for jq dependency
     if ! command -v jq >/dev/null 2>&1; then
@@ -65,6 +105,7 @@ _cf_ddns() {
     _curl() {
         local method="${1:?"HTTP method is required"}" && shift
         local path="${1:?"API path is required"}" && shift
+        # shellcheck disable=SC2094 # both writes are append-only; nothing reads the file in this pipeline
         curl -v -sSf -X "$method" \
             --url "$API_BASE/${path#/}" \
             -H "Authorization: Bearer $api_token" \
@@ -188,21 +229,13 @@ _cf_ddns() {
     fi
     ###\### ###/###
 
-    # Unset local functions to avoid bleeding into global scope (not relevant if run as executable) #\
-    unset -f _msg
-    unset -f _info
-    unset -f _warn
-    unset -f _error
-    unset -f _dbg
-    unset -f _exception
-    unset -f _curl
-    unset -f _get_zones
-    unset -f _get_dns_records
-    unset -f _delete_dns_record
-    unset -f _create_dns_record
-    unset -f _outgoing_ip
-    unset -f _api_success #/
 }
 
 # Call main function, passing script arguments
 _cf_ddns "$@"
+__cf_ddns_rc=$?
+unset -f _cf_ddns
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __cf_ddns_rc; return $__cf_ddns_rc"
+fi
+eval "unset __cf_ddns_rc; exit $__cf_ddns_rc"

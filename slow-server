@@ -1,29 +1,47 @@
-#!/usr/bin/env bash
-
-############################################################################
-# Starts a web server (using socat) on the given port (default 8080) which #
-# returns 200 OK after waiting for n milliseconds                          #
-# e.g. curl http://localhost:8080/2500 # Responds after ~2.5 seconds       #
-############################################################################
-# Usage:                                                                   #
-#   slow-server [port]                                                     #
-############################################################################
-# Dependencies:                                                            #
-#   socat - upgraded netcat/nc, used as a simple server                    #
-#   sleep - must support fractional seconds on your system                 #
-############################################################################
+#!/bin/bash
+# slow-server - start a web server that responds after a configurable delay
+#
+# Usage:
+#   slow-server [port]
+#   slow-server -h
+#
+# Options:
+#   port         Port to listen on (default: 8080)
+#   -h, --help   Show help message
+#
+# Starts a socat-based HTTP server where the last path segment of each request
+# is the delay in milliseconds. Requests without a numeric path return 404.
+# e.g. `curl http://localhost:8080/2500` responds after ~2.5 seconds.
 
 _slow_server() {
-    # Function arguments
-    local port="${1:-8080}"
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="slow-server" ;; esac
 
-    # Check for socat dependency
-    if ! command -v socat >/dev/null 2>&1; then
-        echo "ERROR: Missing dependency: socat" >&2
-        return 1
-    fi
+    _show_help() {
+        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
+        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        echo "NAME"
+        echo "  $SCRIPT_NAME - start a web server that responds after a configurable delay"
+        echo "SYNOPSIS"
+        echo "  $SCRIPT_NAME [${s}port${r}]"
+        echo "  $SCRIPT_NAME -h"
+        echo "DESCRIPTION"
+        echo "  Starts a socat-based HTTP server on the given port (default 8080)."
+        echo "  The last path segment of each request is the delay in milliseconds."
+        echo "  Requests without a numeric path return 404."
+        echo "EXAMPLES"
+        echo "  $SCRIPT_NAME 3000"
+        echo "  curl http://localhost:3000/2500   # responds after ~2.5 seconds"
+        echo "OPTIONS"
+        echo "  ${s}port${r}   Port to listen on (default: 8080)"
+        echo "  -h, --help   Show this help message"
+        echo "DEPENDENCIES"
+        echo "  socat, sleep (must support fractional seconds)"
+    }
 
-    # Function invoked by socat below on each request
+    # Function invoked by socat below on each request. Defined inside the wrapper
+    # so __unset can clean it up in the parent shell; exported for socat's
+    # SYSTEM: subshell to see it.
     #shellcheck disable=SC2317 # "Command appears to be unreachable. Check usage (or ignore if invoked indirectly)."
     _slow_response() {
         _is_number() {
@@ -34,14 +52,16 @@ _slow_server() {
                     return 0 ;; # is a number
             esac
         }
-        local method path version
-        read method path version
+        local method
+        local path
+        local _version
+        read -r method path _version
         local last; last="$(basename "$path")"
         printf %s "$method $path ($last)" >&2
         # Ignore other paths, return not found
         if ! _is_number "$last"; then
             echo " [ignored]" >&2 # append to previous line
-            echo "HTTP/1.1 404 Not Found\r\n"
+            printf 'HTTP/1.1 404 Not Found\r\n\r\n'
             return 0
         else
             local delay_ms="$last"
@@ -49,17 +69,43 @@ _slow_server() {
         fi
         local seconds="$((delay_ms / 1000)).$((delay_ms % 1000))"
         sleep "$seconds"
-        local response="HTTP/1.1 200 OK\r\n\r\n$last"
-        echo "$response"
+        printf 'HTTP/1.1 200 OK\r\n\r\n%s\n' "$last"
         echo "Done: $method $path ($delay_ms)" >&2
         unset -f _is_number
     }
+
+    __unset() {
+        unset -f __unset _show_help _slow_response
+    }
+    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
+
+    case "$1" in
+        -h|--help) _show_help; return 0 ;;
+    esac
+
+    # Function arguments
+    local port="${1:-8080}"
+
+    # Check for socat dependency
+    if ! command -v socat >/dev/null 2>&1; then
+        echo "ERROR: Missing dependency: socat" >&2
+        return 1
+    fi
+
     export -f _slow_response # exported for socat
 
     # Start simple server
     echo "Starting server at http://localhost:$port"
     socat "TCP-LISTEN:$port,fork,reuseaddr" "SYSTEM:_slow_response"
-    unset -f _slow_response # unset exported function when server closes
+    # The __unset RETURN trap handles cleanup of _slow_response in this shell.
+    # Child sockets in flight may still have the exported function, but those
+    # processes die with the server.
 }
 
 _slow_server "$@"
+__slow_server_rc=$?
+unset -f _slow_server
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __slow_server_rc; return $__slow_server_rc"
+fi
+eval "unset __slow_server_rc; exit $__slow_server_rc"

@@ -1,10 +1,17 @@
-#!/usr/bin/env bash
-
-###################################################################################
-# Applies different colors to portions of provided URL, for increased readability #
-###################################################################################
+#!/bin/bash
+# colorize-url - apply ANSI colors to URL components
+#
+# Usage:
+#   colorize-url <url>
+#   colorize-url -h
+#
+# Parses a URL into protocol, hostname, path, query parameters, and fragment,
+# then prints it with each component in a distinct color for readability.
+# Query string keys and values are colored separately.
 
 _colorize_url() {
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="colorize-url" ;; esac
     #/# Internal Functions #\#
     # Prints the nonprinting character for the requested ANSI color
     _color() {
@@ -45,9 +52,34 @@ _colorize_url() {
         [ "${string#*"$substring"}" != "$string" ]
     }
 
+    _error() { echo "[$SCRIPT_NAME] ERROR: $*" >&2; }
+
     # Clean up internal functions when finished
-    trap 'unset -f _color _contains; trap - RETURN' RETURN
+    __unset() {
+        unset -f __unset _show_help _color _contains _error
+    }
+    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
     #\# Internal Functions #/#
+
+    _show_help() {
+        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
+        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        echo "NAME"
+        echo "  $SCRIPT_NAME - apply ANSI colors to URL components"
+        echo "SYNOPSIS"
+        echo "  $SCRIPT_NAME ${s}url${r}"
+        echo "  $SCRIPT_NAME -h"
+        echo "DESCRIPTION"
+        echo "  Parses a URL into protocol, hostname, path, query parameters, and fragment,"
+        echo "  then prints it with each component in a distinct color for readability."
+        echo "  Query string keys and values are colored separately."
+        echo "OPTIONS"
+        echo "  -h, --help   Show this help message"
+    }
+
+    case "$1" in
+        -h|--help) _show_help; return 0 ;;
+    esac
 
     #/# Color Control Characters #\#
     local c_protocol; c_protocol="$(_color bright black)" # gray
@@ -66,8 +98,14 @@ _colorize_url() {
     # User input
     local url="$1"
     if [ -z "$url" ]; then
-        echo "ERROR: No URL provided" >&2
+        _error "No URL provided. Run \`$SCRIPT_NAME -h\` for usage."
         return 1
+    fi
+    # Require an explicit protocol (e.g. https://). Parsing relies on '://' as
+    # the first delimiter; without it, results are silently wrong.
+    if ! _contains "$url" "://"; then
+        _error "URL must include protocol (e.g. https://...). Run \`$SCRIPT_NAME -h\` for usage."
+        return 2
     fi
 
     # Check whether URL has a path, query string, and/or hash (fragment)
@@ -166,3 +204,9 @@ _colorize_url() {
 }
 
 _colorize_url "$@"
+__colorize_url_rc=$?
+unset -f _colorize_url
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __colorize_url_rc; return $__colorize_url_rc"
+fi
+eval "unset __colorize_url_rc; exit $__colorize_url_rc"

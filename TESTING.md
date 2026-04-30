@@ -1,0 +1,296 @@
+# Testing
+
+Standards for test files in this repository.
+
+## Principles
+
+- Every script gets a `<name>.test.sh` in the same directory
+- Tests are self-contained, network-free, and runnable with bash 3.2+
+- No external dependencies beyond bash builtins and standard POSIX tools (mktemp, cat, mkdir, chmod, etc.)
+- All external commands the script-under-test calls (curl, dig, jq, etc.) are shimmed
+- Each test case gets a fresh temp directory for isolation
+- Test files do NOT follow CONVENTIONS.md -- they use a simpler structure
+
+## File Structure
+
+```bash
+#!/bin/bash
+# script-name.test.sh - Tests for script-name
+# shellcheck source-path=SCRIPTDIR disable=SC2329
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=test-helpers.sh
+source "$SCRIPT_DIR/test-helpers.sh"
+
+UNDER_TEST="$SCRIPT_DIR/script-name"
+
+# --- shims ---
+
+write_shims() {
+    cat > "$SHIM_DIR/curl" <<'SHIM'
+#!/bin/bash
+printf '%s\n' "$@" > "$TEST_DIR/curl.args"
+exit 0
+SHIM
+    chmod +x "$SHIM_DIR/curl"
+}
+
+# --- test cases ---
+
+test_help_output() {
+    run_script --help
+    assert_rc "help exits 0" 0
+    assert_err_contains "help has NAME" "NAME"
+}
+
+test_missing_arg() {
+    run_script
+    assert_rc "missing arg exits 2" 2
+}
+
+# --- run ---
+
+run_tests "$@"
+```
+
+### Key points
+
+- `UNDER_TEST` -- absolute path to the script being tested
+- `write_shims` -- defined in the test file, called by the helpers during setup. Omit if the script has no external dependencies
+- Each test case is a function prefixed with `test_`
+- `run_tests "$@"` (from helpers) discovers and runs all `test_` functions
+
+## test-helpers.sh
+
+Shared file that every test sources. Provides:
+
+### Setup and teardown
+
+`run_tests` is the entry point. It:
+
+1. Parses flags (`-v` for verbose)
+2. Creates a root temp directory
+3. Discovers all functions matching `test_*`
+4. For each test function:
+   a. Creates `$TEST_DIR` (a fresh subdirectory) and `$SHIM_DIR` (for shimmed executables)
+   b. Calls `write_shims` if defined
+   c. Runs the test function
+   d. Tracks pass/fail
+5. Cleans up the root temp directory
+6. Prints summary and exits 0 (all passed) or 1 (any failed)
+
+### Running the script under test
+
+`run_script [args...]` runs `$UNDER_TEST` with:
+
+- `TEST_DIR` exported so shims can reference it (e.g. to write arg logs)
+- `PATH` prefixed by `$SHIM_DIR` so shims shadow real commands
+- stdout captured to `$TEST_DIR/stdout`
+- stderr captured to `$TEST_DIR/stderr`
+- Exit code stored in `$TEST_DIR/rc`
+
+### Sourced scripts
+
+Some scripts must be sourced (`.  script`) rather than executed. Their purpose is to mutate the caller's shell state -- set a variable, change the environment, define a function -- and executing them in a subshell loses that side effect. `prompt` is the canonical example.
+
+Two runners handle this:
+
+- `run_script_sourced [args...]` -- sources `$UNDER_TEST` in a fresh subshell. stdout/stderr/rc captured the same way as `run_script`. Use for argument validation, `--help`, or any code path where you only care about output and exit code.
+- `run_script_sourced_capture "VAR1 VAR2 ..." [args...]` -- sources the script, then writes the final values of the named variables to `$TEST_DIR/captured` as `NAME=VALUE` lines. Pair with `assert_captured`.
+
+Both runners set `$0="bash"` inside the subshell so the script's sourced-vs-executed check (typically `$0 != bash`) passes. The invocation shape is `/bin/bash -c '...' bash "$UNDER_TEST" "$@"` -- note the literal `bash` positional.
+
+Feed input on stdin by piping to the runner, same as any other command:
+
+```bash
+test_default_on_empty_input() {
+    printf '\n' | run_script_sourced_capture "ANSWER" ANSWER "Continue? " "yes"
+    assert_rc "empty input exits 0" 0
+    assert_captured "default used when empty" ANSWER "yes"
+}
+```
+
+See `prompt.test.sh` for the reference implementation.
+
+### Assertions
+
+All assertions take a label as the first argument. On failure, they print `[FAIL] label: details` to stderr and return 1. On success, they print `[OK] label` only if `-v` was passed.
+
+- `assert_rc "label" <expected>` -- check exit code from last `run_script`
+- `assert_eq "label" "got" "want"` -- exact string match
+- `assert_contains "label" "haystack" "needle"` -- substring match
+- `assert_not_contains "label" "haystack" "needle"` -- substring absence
+- `assert_file_exists "label" "path"` -- check that a file is present at path
+- `assert_captured "label" VAR "expected"` -- check a variable value from last `run_script_sourced_capture`
+
+### Output helpers
+
+- `get_stdout` -- prints captured stdout from last `run_script`
+- `get_stderr` -- prints captured stderr from last `run_script`
+- `get_rc` -- prints captured exit code from last `run_script`
+
+These read from `$TEST_DIR/stdout`, `$TEST_DIR/stderr`, `$TEST_DIR/rc`.
+
+Convenience wrappers for common patterns:
+
+- `assert_stdout_contains "label" "needle"` -- shorthand for `assert_contains "label" "$(get_stdout)" "needle"`
+- `assert_stdout_not_contains "label" "needle"` -- shorthand for `assert_not_contains "label" "$(get_stdout)" "needle"`
+- `assert_err_contains "label" "needle"` -- shorthand for `assert_contains "label" "$(get_stderr)" "needle"`
+- `assert_err_not_contains "label" "needle"` -- shorthand for `assert_not_contains "label" "$(get_stderr)" "needle"`
+
+### Verbosity
+
+- Default: only `[FAIL]` lines print, plus a summary with total/pass/fail counts
+- `-v`: `[OK]` lines also print
+
+## Writing Shims
+
+Shims are defined in the test file's `write_shims` function because shim behavior is script-specific. Each shim is a small executable written to `$SHIM_DIR`.
+
+### Basic pattern
+
+A shim should log its args so tests can assert on what the script passed to the external command:
+
+```bash
+write_shims() {
+    cat > "$SHIM_DIR/curl" <<'SHIM'
+#!/bin/bash
+printf '%s\n' "$@" > "$TEST_DIR/curl.args"
+exit 0
+SHIM
+    chmod +x "$SHIM_DIR/curl"
+}
+```
+
+Then in a test case:
+
+```bash
+test_passes_correct_flags() {
+    run_script "https://example.com"
+    assert_rc "exits 0" 0
+    assert_contains "adds -sS" "$(cat "$TEST_DIR/curl.args")" "-sS"
+}
+```
+
+### Default behavior
+
+Shims should succeed silently by default. Special behavior (simulate failure, empty output, etc.) is handled in two ways:
+
+**Override per test case** -- rewrite the shim before calling `run_script`. Since test cases run sequentially, this is safe:
+
+```bash
+test_curl_failure() {
+    cat > "$SHIM_DIR/curl" <<'SHIM'
+#!/bin/bash
+echo "curl: connection refused" >&2
+exit 7
+SHIM
+    chmod +x "$SHIM_DIR/curl"
+
+    run_script "https://example.com"
+    assert_rc "curl failure exits 3" 3
+}
+```
+
+**Trigger via argument** -- the shim inspects its args to decide behavior:
+
+```bash
+# In write_shims:
+cat > "$SHIM_DIR/dig" <<'SHIM'
+#!/bin/bash
+printf '%s\n' "$@" > "$TEST_DIR/dig.args"
+for a in "$@"; do
+    case "$a" in
+        *noresult*) exit 0 ;; # return nothing
+    esac
+done
+printf '%s\n' "192.0.2.11"
+exit 0
+SHIM
+chmod +x "$SHIM_DIR/dig"
+```
+
+## test-runner.sh
+
+An aggregate runner that finds and runs all test files. Lives in the same directory. Unlike test files, this follows CONVENTIONS.md since it is a tool.
+
+- Globs `*.test.sh` in its own directory
+- Runs each file, captures its exit code
+- Accepts an optional pattern to filter which tests to run (e.g. `test-runner.sh pin-dns`)
+- Prints a final summary: which files passed, which failed
+- Exits 0 if all passed, 1 if any failed
+
+## What to Test
+
+### Always test
+
+- **`--help` exits 0** and output includes expected sections (NAME, SYNOPSIS, etc.)
+- **Argument validation** -- missing required args, invalid values, unknown flags. Assert on specific exit codes where the script defines them
+- **Core behavior** -- happy path with valid args. Assert on stdout/stderr and exit code. For scripts that modify files, assert on filesystem state in the temp dir
+- **Exit codes** -- each distinct exit code the script uses should have at least one test case
+
+### Test when relevant
+
+- **Edge cases** -- empty input, paths with spaces, missing dependencies (shim exits 127)
+- **Flag interactions** -- flags that modify each other's behavior (e.g. `--quiet` suppressing warnings)
+
+### Don't test
+
+- **Bash itself** -- if the script calls `mkdir -p`, don't test that `mkdir -p` works. Test the script's logic and decisions, not the tools it delegates to
+
+## Gotchas
+
+### Real commands shadowed by shims
+
+When a test removes a shim to simulate "command not found", the real command (if installed) is still on `$PATH`. To truly simulate a missing dependency, restrict PATH to only `$SHIM_DIR`:
+
+```bash
+test_fswatch_missing() {
+    rm "$SHIM_DIR/fswatch"
+    # Restrict PATH so real fswatch is not found
+    env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR" \
+        /bin/bash "$UNDER_TEST" >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
+    printf '%s\n' "$?" > "$TEST_DIR/rc"
+    assert_rc "no fswatch exits 1" 1
+}
+```
+
+### `read` inside `find | while` pipes
+
+If the script under test calls `read` (e.g. for interactive prompts) inside a `find ... | while read` pipe, stdin is connected to the find output, not the user's input. Piping input via `printf 's\n' | run_script -i` will not reach the inner `read`. Interactive tests for scripts with this pattern are not feasible -- test non-interactive code paths instead.
+
+Scripts that use `while read ... done < <(find ...)` (process substitution) do not have this problem.
+
+### Scripts that write to CWD
+
+If the script writes output files to the current working directory, override `run_script` to cd into `$TEST_DIR`:
+
+```bash
+run_script() {
+    ( cd "$TEST_DIR" || exit 1
+      env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR:$PATH" \
+          /bin/bash "$UNDER_TEST" "$@"
+    ) >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
+    printf '%s\n' "$?" > "$TEST_DIR/rc"
+}
+```
+
+### Recursive shims
+
+A shim must never call itself. For example, a `cat` shim that uses `cat` internally will recurse infinitely. Either delegate to the real binary via absolute path (`exec /bin/cat "$@"`) or avoid using the shimmed command name inside the shim.
+
+### Interactive scripts (stdin)
+
+For scripts that read from stdin (e.g. `read -r input`), feed input via a custom runner:
+
+```bash
+run_script_with_input() {
+    local input="$1"
+    shift
+    printf '%s' "$input" | env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR:$PATH" \
+        /bin/bash "$UNDER_TEST" "$@" >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
+    printf '%s\n' "$?" > "$TEST_DIR/rc"
+}
+```
+
+Or redirect from a file: `exec < "$TEST_DIR/input.txt"` in a subshell wrapper

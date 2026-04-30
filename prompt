@@ -1,70 +1,222 @@
-#!/usr/bin/env bash
-#! tested in: GNU bash, version 5.2.26(1)-release (x86_64-apple-darwin23.2.0) | older versions and other shells will work but not guaranteed
-# Major caveat: Because of the placeholder logic, the first character entered cannot be backspaced
+#!/bin/bash
+# prompt - interactive prompt with default value and placeholder
+#
+# Usage:
+#   . prompt <variable> [prompt] [default] [placeholder]
+#   . prompt -h
+#
+# Must be sourced, not executed. Prompts the user for input and stores the
+# result (or default, if user presses Enter without typing) in the named
+# variable in the caller's shell. If placeholder is provided, it is shown in
+# gray and disappears on the first keypress; any "%DEFAULT%" inside the
+# placeholder is replaced with the default value. If no placeholder is given,
+# the default value is shown as the placeholder.
 
-#########################################################################################################
-# Prompts the user for input and save it to a variable, with an optional default value and placeholder. #
-# If placeholder is not provided, default value is used.                                                #
-# Any occurrences of "%DEFAULT%" in the placeholder are replaced by the provided default value.         #
-# Due to the nature of the script, it can only be source'd into the current environment, not executed.  #
-# Usage:                                                                                                #
-#   . prompt <variable> [default] [placeholder]                                                         #
-#########################################################################################################
-# Considered supporting POSIX sh, but reading a single character for the fancy placeholder functionality
-#  introduces a level of complexity which isn't worth it unless the extra compatibility is actually needed
+# Allow --help even when executed -- otherwise a stranger running `prompt --help`
+# (natural) would only see the "must be sourced" rejection and never the help.
+case "$1" in
+    -h|--help)
+        _SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+        case "$_SCRIPT_NAME" in ""|bash|sh|zsh|dash) _SCRIPT_NAME="prompt" ;; esac
+        cat <<PROMPT_HELP
+NAME
+  $_SCRIPT_NAME - interactive prompt with default value and placeholder
+SYNOPSIS
+  . $_SCRIPT_NAME variable [prompt] [default] [placeholder]
+  . $_SCRIPT_NAME -h
+DESCRIPTION
+  Must be sourced (not executed) because $_SCRIPT_NAME sets a variable in your
+  shell; an executed script runs in a subprocess that dies immediately,
+  losing the assignment. Prompts the user for input and stores the result
+  (or default, if user presses Enter without typing) in the named variable
+  in the caller's shell.
 
-# Do nothing if the script was executed instead of sourced
-# $0 is /path/to/bash or -bash if sourced and ZSH_EVAL_CONTEXT contains "file" if sourced
+  If placeholder is provided, it is shown in gray and disappears on the
+  first keypress; any "%DEFAULT%" inside the placeholder is replaced with
+  the default value. If no placeholder is given, the default value is shown
+  as the placeholder.
+
+  When stdin is not a terminal (e.g. piped input), the placeholder
+  rendering is skipped and a plain line read is performed; defaults still
+  apply.
+OPTIONS
+  variable     Shell variable name to store the result in
+  prompt       Text to display before input (e.g. "Name: ")
+  default      Value used when the user presses Enter without typing
+  placeholder  Gray hint text (defaults to default if omitted)
+  -h, --help   Show this help message
+DEPENDENCIES
+  tput, stty
+PROMPT_HELP
+        unset _SCRIPT_NAME
+        exit 0
+        ;;
+esac
+
+# Do nothing if the script was executed instead of sourced.
+# $0 is /path/to/bash or -bash when sourced by bash; ZSH_EVAL_CONTEXT contains
+# "file" when sourced by zsh. Either indicates a sourced context.
 _basename="${0##*'/'}"
-if { [ "$BASH_VERSION" ] && [ "${_basename#'-'}" != "bash" ]; } || { [ "$ZSH_VERSION" ] && [ "${ZSH_EVAL_CONTEXT#*"file"}" = "$ZSH_EVAL_CONTEXT" ]; } then
-    echo "This script must be sourced to work correctly."
+if { [ "$BASH_VERSION" ] && [ "${_basename#'-'}" != "bash" ]; } || { [ "$ZSH_VERSION" ] && [ "${ZSH_EVAL_CONTEXT#*"file"}" = "$ZSH_EVAL_CONTEXT" ]; }; then
+    printf '%s\n' \
+        "$_basename: must be sourced, not executed." \
+        "Try: . $_basename VAR \"Prompt text: \" [default] [placeholder]" \
+        "     . $_basename --help" >&2
+    unset _basename
     exit 1
 fi
 unset _basename
 
 _prompt() {
-    local -r zsh="$ZSH_VERSION" # truthy if shell is zsh, falsy otherwise - we essentially assume bash
-    local VARNAME="${1:?"variable name is required"}"
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="prompt" ;; esac
+
+    _show_help() {
+        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
+        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        echo "NAME"
+        echo "  $SCRIPT_NAME - interactive prompt with default value and placeholder"
+        echo "SYNOPSIS"
+        echo "  . $SCRIPT_NAME ${s}variable${r} [${s}prompt${r}] [${s}default${r}] [${s}placeholder${r}]"
+        echo "  . $SCRIPT_NAME -h"
+        echo "DESCRIPTION"
+        echo "  Prompts the user for input with an optional gray placeholder that"
+        echo "  disappears on the first keypress. Stores the result (or default)"
+        echo "  in the named ${s}variable${r}. Must be sourced (not executed) because"
+        echo "  prompt sets a variable in your shell; an executed script runs in a"
+        echo "  subprocess that dies immediately, losing the assignment."
+        echo "  Any \"%DEFAULT%\" in ${s}placeholder${r} is replaced with ${s}default${r}."
+        echo "  When stdin is not a terminal (e.g. piped input), the placeholder"
+        echo "  rendering is skipped and a plain line read is performed; defaults"
+        echo "  still apply."
+        echo "OPTIONS"
+        echo "  ${s}variable${r}     Shell variable name to store the result in"
+        echo "  ${s}prompt${r}       Text to display before input (e.g. \"Name: \")"
+        echo "  ${s}default${r}      Value used when the user presses Enter without typing"
+        echo "  ${s}placeholder${r}  Gray hint text (defaults to ${s}default${r} if omitted)"
+        echo "  -h, --help     Show this help message"
+        echo "DEPENDENCIES"
+        echo "  tput, stty"
+    }
+
+    # _saved_stty is captured later, after we confirm we're on a TTY. The restore
+    # runs from the RETURN trap so every exit path -- normal, signal, or error --
+    # gets the terminal back, with no subprocess races in the signal handler.
+    local _saved_stty=""
+    _prompt_restore() {
+        [ "$_saved_stty" ] && stty "$_saved_stty" 2>/dev/null
+    }
+
+    __unset() {
+        unset -f __unset _show_help _prompt_restore
+    }
+    trap '_prompt_restore; __unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
+
+    case "$1" in
+        -h|--help) _show_help; return 0 ;;
+    esac
+
+    # Called with no args -- show help (useful reminder; no args can't mean anything)
+    if [ $# -eq 0 ]; then
+        _show_help
+        return 0
+    fi
+
+    local VARNAME="$1"
     local PROMPT="$2"
     local DEFAULT="$3"
-    local PLACEHOLDER=""
-    # if provided, set placeholder to the 4th parameter, substituting the special string "%DEFAULT%" with $DEFAULT 
+    local PLACEHOLDER
+    # If the 4th arg is given, use it (substituting %DEFAULT%); otherwise fall back to default value.
     if [ "$4" ]; then
         PLACEHOLDER="${4//"%DEFAULT%"/"$DEFAULT"}"
-    # ... otherwise, set placeholder to default value
     else
         PLACEHOLDER="$DEFAULT"
     fi
 
-    # Display prompt in default color and placeholder in gray
-    printf "%s\e[90m%s\e[0m" "$PROMPT" "$PLACEHOLDER"
-    # Move the cursor back to the end of the prompt
-    # `tput cub 0` still moves the cursor back one, so only run if necessary
-    if [ ${#PLACEHOLDER} -ne 0 ]; then
-        tput cub ${#PLACEHOLDER}
+    # Non-TTY fallback: stdin isn't a terminal, so raw-mode rendering is meaningless.
+    # Print the prompt (no placeholder) and do a plain line read. Defaults still apply.
+    if [ ! -t 0 ]; then
+        printf "%s" "$PROMPT"
+        local _input
+        IFS= read -r _input
+        # shellcheck disable=SC2034 # used via eval below
+        _input="${_input:-"$DEFAULT"}"
+        eval "$VARNAME"'="$_input"'
+        return 0
     fi
 
-    # Read the first character to detect when the user starts typing
-    local first_char
-    if [ "$zsh" ]; then
-        IFS= read -r -k1 first_char
-    else
-        IFS= read -r -N 1 first_char
-    fi
+    # TTY path: raw-mode loop with inline-ghost placeholder.
+    # Save stty, then IGNORE SIGINT/SIGTERM entirely (trap ''). Reasoning: if we
+    # let bash's outer interactive shell see the signal, readline's signal-cleanup
+    # path runs *after* our RETURN trap's stty restore and clobbers it with its
+    # own cached tty state, leaving the terminal in raw mode. Ignoring the signal
+    # here keeps the shell out of the picture. The RETURN trap still handles the
+    # normal path restore on every exit. Trade-off: Ctrl-C during prompt is a
+    # no-op; user must press Enter (accepting default) to dismiss.
+    _saved_stty="$(stty -g 2>/dev/null)"
+    trap '' INT
+    trap '' TERM
 
-    local input
-    # If the input character is not empty or just a newline, read the entire line
-    if [ "$first_char" ] && [ "$first_char" != $'\n' ]; then
-        # Clear the rest of the line, read a line of input, and prepend the initial character
-        tput el
-        local line; IFS= read -r line
-        #shellcheck disable=SC2034 # $input is used in eval below
-        input="$first_char$line"
-    fi
+    stty -echo -icanon min 1 time 0 2>/dev/null
 
-    # Store the line input by the user, or the default value if none was provided, to the provided variable name
-    eval "$VARNAME"'="${input:-"$DEFAULT"}"'
-    #declare -g "$VARNAME"="${input:-"$DEFAULT"}" # eval version seems to have better compatibility
+    # Render prompt + gray placeholder, then move cursor back to the end of the prompt text.
+    printf "%s\033[90m%s\033[0m" "$PROMPT" "$PLACEHOLDER"
+    [ ${#PLACEHOLDER} -ne 0 ] && tput cub ${#PLACEHOLDER}
+
+    local _input=""
+    local _ch
+    local _placeholder_cleared=0
+    while IFS= read -r -n 1 _ch; do
+        # Enter: read -n 1 returns empty on newline delimiter.
+        if [ -z "$_ch" ]; then
+            break
+        fi
+
+        case "$_ch" in
+            $'\b'|$'\177')
+                # Backspace / DEL: only delete if we actually have input buffered.
+                if [ -n "$_input" ]; then
+                    _input="${_input%?}"
+                    # Erase one cell: back up, overwrite with space, back up again.
+                    printf '\b \b'
+                fi
+                ;;
+            $'\033')
+                # ESC sequence (arrow keys, etc.): read and discard the next 2 bytes.
+                # Covers CSI sequences like ESC [ A. Lone ESC will block waiting for 2 bytes,
+                # but plain Escape isn't a natural gesture in a text prompt.
+                local _drop
+                IFS= read -r -n 1 _drop 2>/dev/null
+                IFS= read -r -n 1 _drop 2>/dev/null
+                ;;
+            *)
+                # First printable keypress: clear the gray placeholder.
+                if [ "$_placeholder_cleared" -eq 0 ] && [ ${#PLACEHOLDER} -ne 0 ]; then
+                    tput el
+                    _placeholder_cleared=1
+                fi
+                _input+="$_ch"
+                printf "%s" "$_ch"
+                ;;
+        esac
+    done
+
+    # Terminate the input line visually (read consumed the newline, but the cursor is still on the prompt row).
+    printf '\n'
+
+    _prompt_restore
+    trap - INT
+    trap - TERM
+
+    # shellcheck disable=SC2034 # used via eval below
+    _input="${_input:-"$DEFAULT"}"
+    eval "$VARNAME"'="$_input"'
 }
 
 _prompt "$@"
+__prompt_rc=$?
+unset -f _prompt
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __prompt_rc; return $__prompt_rc"
+fi
+eval "unset __prompt_rc; exit $__prompt_rc"

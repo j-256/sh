@@ -1,33 +1,50 @@
 #!/bin/bash
+# generate-p12 - generate a PKCS#12 client certificate for SFCC mTLS code uploads
 # Tested in GNU bash, version 3.2.57(1)-release (2007) (x86_64-apple-darwin23)
-
-##############################################################################################
-# Generates a .p12 client certificate for Salesforce B2C Commerce stg code upload MFA        #
-##############################################################################################
-# Usage:                                                                                     #
-#   generate-p12 [cert_bundle_directory]                                                     #
-# Run from the directory the cert bundle was unzipped to or provide that path as an argument #
-##############################################################################################
+#
+# Usage:
+#   generate-p12 [cert_bundle_directory]
+#   generate-p12 -h
+#
+# Run from the directory the cert bundle was unzipped to or provide that path
+# as an argument. Requires a CA cert bundle downloaded from Salesforce Business
+# Manager (Global Preferences -> Keys & Certificates -> MFA Certificates).
 
 _generate_p12() {
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="generate-p12" ;; esac
 
     _show_help() {
         local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
         local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
         echo "NAME"
-        echo "  generate-p12 - generate .p12 client certificate for staging MFA"
+        echo "  $SCRIPT_NAME - generate a PKCS#12 client certificate for SFCC mTLS code uploads"
         echo "SYNOPSIS"
-        echo "  generate-p12 [${s}cert_bundle_directory${r}]"
-        echo "  generate-p12 -h"
+        echo "  $SCRIPT_NAME [${s}cert_bundle_directory${r}]"
+        echo "  $SCRIPT_NAME -h"
         echo "DESCRIPTION"
-        echo "  Interactive script that generates a PKCS#12 (.p12) client"
-        echo "  certificate for Salesforce B2C Commerce staging code upload"
-        echo "  MFA. Run from the directory the cert bundle was unzipped to,"
-        echo "  or provide that path as an argument."
+        echo "  Generates a PKCS#12 (.p12) client certificate for Salesforce"
+        echo "  Commerce Cloud (SFCC) B2C Commerce. The generated .p12 is used"
+        echo "  for mutual-TLS (mTLS) client authentication when uploading code"
+        echo "  to staging instances."
         echo ""
-        echo "  Prompts for: hostname, cert expiration, CSR fields, and an"
-        echo "  export password to encrypt the .p12 file."
+        echo "  Note: 'MFA' in SFCC parlance refers to mTLS client-certificate"
+        echo "  auth, not two-factor authentication."
+        echo ""
+        echo "  Interactive. Run from the directory the cert bundle was unzipped"
+        echo "  to, or provide that path as an argument. Prompts for: hostname,"
+        echo "  cert expiration, CSR fields, and an export password to encrypt"
+        echo "  the .p12 file."
+        echo "PRECONDITIONS"
+        echo "  Requires a CA cert bundle downloaded from Salesforce Business"
+        echo "  Manager (Global Preferences -> Keys & Certificates -> MFA"
+        echo "  Certificates). The bundle should contain files of the form:"
+        echo "    <hostname>_NN.crt   CA certificate"
+        echo "    <hostname>_NN.key   CA private key"
+        echo "    <hostname>_NN.txt   CA password"
+        echo "    <hostname>.srl      CA serial number"
+        echo "  where NN is a two-digit suffix (_01, _02, ...). The highest"
+        echo "  complete suffix is selected automatically."
         echo "DEPENDENCIES"
         echo "  openssl"
     }
@@ -149,6 +166,11 @@ _generate_p12() {
         return 1
     fi
 
+    # Announce the auto-selected suffix so the user sees which bundle was chosen.
+    # Use printf directly rather than _echo/_color -- _color reads stdin when
+    # stdin isn't a TTY, and we can't have it consuming the pending years prompt.
+    printf "${default_color}%s${reset}\n" "Using cert bundle suffix _${ca_suffix} (from ${hostname}_${ca_suffix}.crt, ${hostname}_${ca_suffix}.key, ${hostname}_${ca_suffix}.txt)"
+
     # Assemble cert bundle filenames
     local ca_cert_filename="$wd/${hostname}_${ca_suffix}.crt"
     local ca_key_filename="$wd/${hostname}_${ca_suffix}.key"
@@ -239,7 +261,7 @@ EOF
 _generate_p12 "$@"
 __generate_p12_rc=$?
 unset -f _generate_p12
-if [ "${BASH_SOURCE[0]}" != "$0" ]; then
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __generate_p12_rc; return $__generate_p12_rc"
 fi
 eval "unset __generate_p12_rc; exit $__generate_p12_rc"

@@ -1,18 +1,19 @@
-#!/usr/bin/env bash
-
-###################################################################################################################
-# Prints a random string according to the options provided and stores it to the variable $LASTPASS for reference. #
-###################################################################################################################
-# Usage:                                                                                                          #
-#   pwgen [-l|--length length] [-c|--charset charset] [-e|--exclude charset] [length]                             #
-# Options                                                                                                         #
-#   -l, --length     Generate a password with [length] characters.              Default: 32                       #
-#   -c, --charset    Define the `tr`` charset used to generate the password.    Default: [:alnum:][:punct:]       #
-#   -e, --exclude    Define the `tr` charset to exclude from the password.      Default: (None)                   #
-#   -h, --help       Display this help message                                                                    #
-###################################################################################################################
+#!/bin/bash
+# pwgen - Generate a random password and print it to stdout
+#
+# Usage:
+#   pwgen [-l|--length length] [-c|--charset charset] [-e|--exclude charset] [length]
+#   pwgen -h
+#
+# Options:
+#   -l, --length   Generate a password with [length] characters        Default: 32
+#   -c, --charset  `tr` charset used to generate the password          Default: [:alnum:][:punct:]
+#   -e, --exclude  `tr` charset to exclude from the password           Default: (None)
+#   -h, --help     Show help message
 
 _pwgen() {
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="pwgen" ;; esac
     # Default 32 characters (arbitrary "long" length)
     local length=32
     # Generate from alphanumeric + OWASP password special characters: https://owasp.org/www-community/password-special-characters
@@ -25,8 +26,6 @@ _pwgen() {
     local charset="$alnum$punct"
     # Will be set to a tr range of characters to exclude from the password
     local exclude=''
-    # Will ultimately be set to the generated password
-    export LASTPASS=''
 
     # Helper functions for messages and help
     _show_help() {
@@ -34,18 +33,24 @@ _pwgen() {
         local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
         local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
         echo "NAME"
-        echo "  pwgen - Prints a random string according to the options provided and stores it to the variable \$LASTPASS for reference."
+        echo "  $SCRIPT_NAME - generate a random password"
         echo "SYNOPSIS"
-        echo "  pwgen [-l|--length ${s}length${r}] [-c|--charset ${s}charset${r}] [-e|--exclude ${s}charset${r}] [${s}length${r}]"
+        echo "  $SCRIPT_NAME [-l|--length ${s}length${r}] [-c|--charset ${s}charset${r}] [-e|--exclude ${s}charset${r}] [${s}length${r}]"
+        echo "  $SCRIPT_NAME -h"
+        echo "DESCRIPTION"
+        echo "  Prints a random password built from the given charset (minus any"
+        echo "  excluded characters) to stdout."
         echo "OPTIONS"
         echo "  -l, --length   Generate a password with ${s}length${r} characters.             Default: $length"
         echo "  -c, --charset  Define the \`tr\` charset used to generate the password.  Default: [:alnum:][:punct:]"
         echo "  -e, --exclude  Define the \`tr\` charset to exclude from the password.   Default: (None)"
-        echo "  -h, --help     Display this help message"
+        echo "  -h, --help     Show this help message"
+        echo "CAVEATS"
+        echo "  Reads from /dev/random for entropy. May block on low-entropy systems."
     }
-    _error() { echo "[ERR] pwgen: $*" >&2; }
-    _warn()  { echo "[WRN] pwgen: $*" >&2; }
-    _info()  { echo "[INF] pwgen: $*"; }
+    _error() { echo "[ERR] $SCRIPT_NAME: $*" >&2; }
+    _warn()  { echo "[WRN] $SCRIPT_NAME: $*" >&2; }
+    _info()  { echo "[INF] $SCRIPT_NAME: $*"; }
 
     # Escapes forward slashes and ampersands with a backslash, ensuring `sed` sees a literal string
     _escape_sed() {
@@ -92,21 +97,133 @@ _pwgen() {
     }
 
     _expand_all_ranges() {
+        # Walks the input left-to-right, expanding any A-B style character ranges
+        # (A and B must be alphanumeric) in place. Non-range characters are passed
+        # through verbatim. Concatenation-based instead of sed-based so octal
+        # escapes emitted by _expand_range aren't reinterpreted as backreferences.
         local input="$1"
-        local range start end expanded
-        # Loop until no more character ranges are found
-        while echo "$input" | grep -qE '([A-Za-z0-9])-([A-Za-z0-9])'; do
-            # Extract the first matched range
-            range=$(echo "$input" | sed -E 's/.*([A-Za-z0-9]-[A-Za-z0-9]).*/\1/')
-            # Split the range into start and end
-            start=${range%-*}
-            end=${range#*-}
-            # Expand the character range (B-D -> BCD)
-            expanded=$(_expand_range "$start" "$end")
-            # Replace the first occurrence of the range with its expanded version
-            input=$(echo "$input" | sed -E "s/$range/$expanded/")
+        local out=''
+        local i=0
+        local n="${#input}"
+        local ch
+        local next1
+        local next2
+        while [ "$i" -lt "$n" ]; do
+            ch="${input:$i:1}"
+            next1="${input:$((i+1)):1}"
+            next2="${input:$((i+2)):1}"
+            case "$ch$next1$next2" in
+                [A-Za-z0-9]-[A-Za-z0-9])
+                    out="$out$(_expand_range "$ch" "$next2")"
+                    i=$((i + 3))
+                    ;;
+                *)
+                    out="$out$ch"
+                    i=$((i + 1))
+                    ;;
+            esac
         done
-        printf %s "$input"
+        printf %s "$out"
+    }
+
+    # Expands bracket expressions `[...]` into their literal character contents.
+    # Contents may include: literal characters, A-B ranges, and POSIX classes
+    # like `[:lower:]`. Unclosed brackets produce an error. Anything outside
+    # brackets is passed through verbatim (top-level ranges/classes are handled
+    # by _expand_all_ranges / _expand_posix on the result).
+    _expand_brackets() {
+        local input="$1"
+        local out=''
+        local i=0
+        local n="${#input}"
+        local ch
+        local inner
+        local close
+        local inner_expanded
+        while [ "$i" -lt "$n" ]; do
+            ch="${input:$i:1}"
+            if [ "$ch" != '[' ]; then
+                out="$out$ch"
+                i=$((i + 1))
+                continue
+            fi
+            # `[:` is a POSIX class opener, not a bracket expression opener --
+            # leave it to _expand_posix at the top level. This also keeps the
+            # trailing-`]` check below from mis-closing at the `:` that ends a
+            # class (e.g. `[:digit:]` has a `]` of its own).
+            if [ "${input:$((i+1)):1}" = ':' ]; then
+                out="$out$ch"
+                i=$((i + 1))
+                continue
+            fi
+            # Find the matching `]`. Inside the bracket we skip over `[:...:]`
+            # subclasses so their `]` doesn't close us early.
+            inner=''
+            close=-1
+            local j=$((i + 1))
+            while [ "$j" -lt "$n" ]; do
+                local jch="${input:$j:1}"
+                if [ "$jch" = '[' ] && [ "${input:$((j+1)):1}" = ':' ]; then
+                    # Skip past the POSIX subclass `[:class:]` as a unit.
+                    local k=$((j + 2))
+                    while [ "$k" -lt "$n" ]; do
+                        if [ "${input:$k:1}" = ':' ] && [ "${input:$((k+1)):1}" = ']' ]; then
+                            inner="$inner${input:$j:$((k + 2 - j))}"
+                            j=$((k + 2))
+                            break
+                        fi
+                        k=$((k + 1))
+                    done
+                    if [ "$k" -ge "$n" ]; then
+                        _error "Invalid charset '$input': unclosed POSIX class starting at position $j"
+                        return 6
+                    fi
+                    continue
+                fi
+                if [ "$jch" = ']' ]; then
+                    close="$j"
+                    break
+                fi
+                inner="$inner$jch"
+                j=$((j + 1))
+            done
+            if [ "$close" -lt 0 ]; then
+                _error "Invalid charset '$input': unclosed bracket expression starting at position $i"
+                return 6
+            fi
+            # Expand POSIX classes, then ranges, inside the bracket contents.
+            inner_expanded="$(_expand_posix "$inner")"
+            inner_expanded="$(_expand_all_ranges "$inner_expanded")"
+            out="$out$inner_expanded"
+            i=$((close + 1))
+        done
+        printf %s "$out"
+    }
+
+    # Validates charset syntax: any `[:` (POSIX class opener) must complete as
+    # `[:digit:]`, `[:upper:]`, `[:lower:]`, `[:alpha:]`, `[:alnum:]`, or
+    # `[:punct:]`. A bare `[` not followed by `:` is treated as a bracket
+    # expression opener and must close with `]`. Returns 0 if valid,
+    # non-zero (with an error message) otherwise.
+    _validate_charset() {
+        local input="$1"
+        # Strip recognized POSIX classes; any remaining `[:` indicates an
+        # unclosed or unrecognized class opener.
+        local stripped; stripped="$(printf %s "$input" | sed '
+            s/\[:digit:\]//g;
+            s/\[:upper:\]//g;
+            s/\[:lower:\]//g;
+            s/\[:alpha:\]//g;
+            s/\[:alnum:\]//g;
+            s/\[:punct:\]//g;
+        ')"
+        case "$stripped" in
+            *\[:*)
+                _error "Invalid charset '$input': unclosed or unrecognized bracket expression (expected [:alnum:], [:alpha:], [:digit:], [:lower:], [:upper:], or [:punct:])"
+                return 6
+                ;;
+        esac
+        return 0
     }
 
     # Expands POSIX bracket expressions, e.g. [:digit:] -> 0123456789
@@ -122,7 +239,10 @@ _pwgen() {
     }
 
     # Clean up functions to avoid polluting global namespace
-    trap 'unset -f _show_help _error _warn _info _escape_sed _expand_range _expand_all_ranges _expand_posix; trap - RETURN' RETURN
+    __unset() {
+        unset -f __unset _show_help _error _warn _info _escape_sed _expand_range _expand_all_ranges _expand_brackets _expand_posix _validate_charset
+    }
+    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
     # Handle arguments
     while [ $# -gt 0 ]; do
@@ -158,22 +278,37 @@ _pwgen() {
         esac
     done
 
-    # Expand provided charset, then remove excluded characters
-    charset="$(_expand_posix "$(_expand_all_ranges "$charset")" | tr -d "$exclude")"
+    # Validate charset syntax first (catches unclosed/unrecognized bracket expressions)
+    _validate_charset "$charset" || return $?
+    [ -z "$exclude" ] || _validate_charset "$exclude" || return $?
+
+    # Expansion pipeline: bracket expressions first (they internally handle
+    # POSIX classes and ranges inside their `[...]`), then top-level POSIX
+    # classes and ranges on whatever's outside the brackets. Finally, strip
+    # any excluded characters.
+    local expanded_charset; expanded_charset="$(_expand_brackets "$charset")" || return $?
+    local expanded_exclude; expanded_exclude="$(_expand_brackets "$exclude")" || return $?
+    charset="$(_expand_posix "$(_expand_all_ranges "$expanded_charset")" | tr -d "$(_expand_posix "$(_expand_all_ranges "$expanded_exclude")")")"
 
     # Exit early if charset is empty after applying exclusions
     [ "$charset" ] || { _error "Charset is empty after exclusions"; return 5; }
 
     # Generate the password in a loop to ensure the length is exactly right
-    LASTPASS=""
-    while [ "${#LASTPASS}" -lt "$length" ]; do
-        # Generate a batch of characters and append them to $LASTPASS
-        # Setting locale via LC_ALL=C instructs tr to process input as single bytes instead of potentially-multi-byte UTF-8
-        LASTPASS="$LASTPASS$(LC_ALL=C tr -dc "$charset" </dev/random | head -c "$((length - ${#LASTPASS}))")"
+    local password=""
+    while [ "${#password}" -lt "$length" ]; do
+        # Generate a batch of characters and append them to $password.
+        # Setting locale via LC_ALL=C instructs tr to process input as single bytes instead of potentially-multi-byte UTF-8.
+        password="$password$(LC_ALL=C tr -dc "$charset" </dev/random | head -c "$((length - ${#password}))")"
     done
 
     # Print the final result
-    echo "$LASTPASS"
+    echo "$password"
 }
 
 _pwgen "$@"
+__pwgen_rc=$?
+unset -f _pwgen
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __pwgen_rc; return $__pwgen_rc"
+fi
+eval "unset __pwgen_rc; exit $__pwgen_rc"

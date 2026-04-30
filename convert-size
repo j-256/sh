@@ -1,0 +1,157 @@
+#!/bin/bash
+# convert-size - convert file sizes between SI (1000) and binary (1024) systems
+#
+# Usage:
+#   convert-size <-t|--to system> [-u|--unit unit] <size>
+#   convert-size -h
+
+_convert_size() {
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="convert-size" ;; esac
+
+    _error() { echo "[$SCRIPT_NAME] ERROR: $*" >&2; }
+
+    _show_help() {
+        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
+        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        echo "NAME"
+        echo "  $SCRIPT_NAME - convert file sizes between SI (1000) and binary (1024) systems"
+        echo "SYNOPSIS"
+        echo "  $SCRIPT_NAME -t ${s}system${r} [-u ${s}unit${r}] ${s}size${r}"
+        echo "  $SCRIPT_NAME -h"
+        echo "OPTIONS"
+        echo "  -t, --to ${s}system${r}   Target number system. Values:"
+        echo "                     SI:     mac, macos, si, unix, nix"
+        echo "                     Binary: win, windows, bin, binary"
+        echo "  -u, --unit ${s}unit${r}   Override the unit suffix on ${s}size${r} (B, K, M, G, T)"
+        echo "  -h, --help         Show this help message"
+        echo "EXAMPLES"
+        echo "  $SCRIPT_NAME -t binary 500G    # 500 GB -> binary GiB"
+        echo "  $SCRIPT_NAME -t binary 500 GB  # same, space-separated unit"
+        echo "  $SCRIPT_NAME -t si 256M        # 256 MiB -> SI MB"
+        echo "  $SCRIPT_NAME -t win -u G 1000  # 1000 (forced to G) -> binary GiB"
+        echo "CAVEATS"
+        echo "  ${s}size${r} must be a positive integer (4700M is OK; 4.7G is not -- use 4700M instead)."
+        echo "DEPENDENCIES"
+        echo "  bc"
+    }
+
+    local unit
+    local to
+    local size
+
+    _si_unit() {
+        case "$1" in
+            B) echo 1 ;; K) echo 1000 ;; M) echo 1000000 ;;
+            G) echo 1000000000 ;; T) echo 1000000000000 ;;
+        esac
+    }
+    _binary_unit() {
+        case "$1" in
+            B) echo 1 ;; K) echo 1024 ;; M) echo 1048576 ;;
+            G) echo 1073741824 ;; T) echo 1099511627776 ;;
+        esac
+    }
+
+    __unset() {
+        unset -f __unset _show_help _error _si_unit _binary_unit
+    }
+    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -h|--help)
+                _show_help
+                return 0
+                ;;
+            -u|--unit)
+                [ "$unit" ] && { _error "The -u|--unit option is specified more than once. Run \`$SCRIPT_NAME -h\` for usage."; return 1; }
+                shift
+                unit="$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')"
+                ;;
+            -t|--to)
+                [ "$to" ] && { _error "The -t|--to option is specified more than once. Run \`$SCRIPT_NAME -h\` for usage."; return 1; }
+                shift
+                to="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+                ;;
+            *)
+                if [ "$size" ]; then
+                    # A second positional arg was supplied. Accept it only when the
+                    # first positional was purely numeric and the second is a valid
+                    # unit letter -- treat `convert-size 500 GB` as `500G`.
+                    local second_upper; second_upper="$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')"
+                    local second_letter="${second_upper%B}" # allow GB -> G, KB -> K, etc.
+                    [ -z "$second_letter" ] && second_letter="$second_upper"
+                    case "$size" in
+                        ''|*[!0-9]*)
+                            _error "Multiple size inputs (positional parameters) provided. Please specify only one size. Run \`$SCRIPT_NAME -h\` for usage."
+                            return 1
+                            ;;
+                    esac
+                    case "$second_letter" in
+                        B|K|M|G|T)
+                            size="${size}${second_letter}"
+                            ;;
+                        *)
+                            _error "Multiple size inputs (positional parameters) provided. Please specify only one size. Run \`$SCRIPT_NAME -h\` for usage."
+                            return 1
+                            ;;
+                    esac
+                else
+                    size="$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')"
+                fi
+                ;;
+        esac
+        shift
+    done
+
+    if [ -z "$size" ] || [ -z "$to" ]; then
+        echo "Usage: $SCRIPT_NAME <-t|--to system> [-u|--unit unit] <size>" >&2
+        return 1
+    fi
+
+    # Separate size from unit
+    local input_size="${size%[BKMGT]*}"
+    local input_unit="${size:${#input_size}}"
+
+    # -u flag overrides suffix; default to B if neither
+    input_unit="${unit:-${input_unit:-B}}"
+
+    case "$input_size" in
+        ''|*[!0-9]*) _error "Invalid size: $input_size. Must be a positive integer."; return 1 ;;
+    esac
+    if [ -z "$(_si_unit "$input_unit")" ]; then
+        _error "Invalid unit: $input_unit. Supported: B, K, M, G, T."
+        return 1
+    fi
+
+    local size_in_bytes
+    local target_multiplier
+    case "$to" in
+        win|windows|bin|binary)
+            size_in_bytes=$(bc <<< "scale=0; $input_size * $(_si_unit "$input_unit")")
+            target_multiplier=$(_binary_unit "$input_unit")
+            ;;
+        mac|macos|si|unix|nix)
+            size_in_bytes=$(bc <<< "scale=0; $input_size * $(_binary_unit "$input_unit")")
+            target_multiplier=$(_si_unit "$input_unit")
+            ;;
+        *)
+            _error "Invalid target system specified. Use one of: mac, macos, si, unix, nix, win, windows, bin, binary."
+            return 1
+            ;;
+    esac
+
+    local converted_size; converted_size="$(bc <<< "scale=2; $size_in_bytes / $target_multiplier" \
+        | sed -E 's/(\.[0-9]*[1-9])0+$/\1/; s/\.0+$//; s/^\./0./')"
+
+    echo "${converted_size}${input_unit}"
+}
+
+_convert_size "$@"
+__convert_size_rc=$?
+unset -f _convert_size
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __convert_size_rc; return $__convert_size_rc"
+fi
+eval "unset __convert_size_rc; exit $__convert_size_rc"

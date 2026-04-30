@@ -35,6 +35,8 @@ _tsd() {
     # Microseconds (the 3 places following milliseconds) is abbreviated μs, as in the Greek letter mu
     # In this script we use `us` to get close enough, as ms is obviously taken by milliseconds
 
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="tsd" ;; esac
     local input
     local unit # Set to default value later, if still unset after processing arguments
     local digits
@@ -75,7 +77,7 @@ _tsd() {
         #region help
         -h|--help)
             echo "Usage:"
-            printf '\t%s\n' "tsd [options] timestamp_or_duration"
+            printf '\t%s\n' "$SCRIPT_NAME [options] timestamp_or_duration"
             echo
             printf '\t%s\n' "Provide a duration (e.g. 7238) or unix epoch timestamp (e.g. 1609477200) to get a human-readable"
             printf '\t%s\n' "duration (e.g. 2h 0m 38s) or datetime (e.g. 2021-01-01T05:00:00Z), respectively."
@@ -91,7 +93,7 @@ _tsd() {
             echo
             echo "Examples:"
             printf '\t%s\n' "Parse a Unix epoch timestamp:"
-            printf '\t%s\n' "$ tsd 1609477200"
+            printf '\t%s\n' "$ $SCRIPT_NAME 1609477200"
             printf '\t%s\n' "> 2021-01-01T05:00:00Z"
             printf '\t%s\n' "> 2021-01-01 00:00:00 EST (GMT-5)"
             echo
@@ -99,15 +101,15 @@ _tsd() {
             printf '\t%s\n' "$ sfcc-ci sandbox:start zzzu-010"
             printf '\t%s\n' "> Starting 5e568774-dec5-455d-a396-7d93cce00e1d was triggered. Waiting for sandbox to finish starting..."
             printf '\t%s\n' "> Sandbox zzzu-010 with ID 5e568774-dec5-455d-a396-7d93cce00e1d, was found with status \`started\` (135180 ms)."
-            printf '\t%s\n' "$ tsd 135180 -m"
+            printf '\t%s\n' "$ $SCRIPT_NAME 135180 -m"
             printf '\t%s\n' "> 2m 15s 180ms"
             echo
             printf '\t%s\n' "Check the duration of a 1800-second access token:"
-            printf '\t%s\n' "$ tsd 1800"
+            printf '\t%s\n' "$ $SCRIPT_NAME 1800"
             printf '\t%s\n' "> 30m"
             echo
             printf '\t%s\n' "Explain 1800 milliseconds like you're five:"
-            printf '\t%s\n' "$ tsd 1800 -m  # or tsd -m 1800"
+            printf '\t%s\n' "$ $SCRIPT_NAME 1800 -m  # or $SCRIPT_NAME -m 1800"
             printf '\t%s\n' "> 1s 800ms"
             return 0
             ;;
@@ -133,11 +135,11 @@ _tsd() {
 
     # If no unit provided, infer from length of input
     if [ -z "$unit" ]; then
-        if [ $digits -le 10 ]; then
+        if [ "$digits" -le 10 ]; then
             unit="s"
-        elif [ $digits -le 13 ]; then
+        elif [ "$digits" -le 13 ]; then
             unit="ms"
-        elif [ $digits -le 16 ]; then
+        elif [ "$digits" -le 16 ]; then
             unit="us"
         else
             unit="ns"
@@ -149,10 +151,10 @@ _tsd() {
         is_timestamp=''
     else
         # If provided number is the right length, detect it as a timestamp
-        if { [ "$unit" = "s" ]  && [ $digits -eq 10 ]; } || \
-           { [ "$unit" = "ms" ] && [ $digits -eq 13 ]; } || \
-           { [ "$unit" = "us" ] && [ $digits -eq 16 ]; } || \
-           { [ "$unit" = "ns" ] && [ $digits -eq 19 ]; }; then
+        if { [ "$unit" = "s" ]  && [ "$digits" -eq 10 ]; } || \
+           { [ "$unit" = "ms" ] && [ "$digits" -eq 13 ]; } || \
+           { [ "$unit" = "us" ] && [ "$digits" -eq 16 ]; } || \
+           { [ "$unit" = "ns" ] && [ "$digits" -eq 19 ]; }; then
             is_timestamp=true
         else
             is_timestamp=''
@@ -164,7 +166,10 @@ _tsd() {
         # macOS `date` can only handle unix timestamps in seconds, so we need to truncate the input down to 10 digits
         # We'll inject ms/us/ns back into the timestamp after running `date` to avoid losing precision
         # ISO8601 doesn't specify a max precision for the fractional seconds, so we'll still be in spec
-        local s ms us ns
+        local s
+        local ms
+        local us
+        local ns
         case "$unit" in
             s)
                 # Input should already be in the form we need (10 digits)
@@ -293,3 +298,9 @@ _tsd() {
 }
 
 _tsd "$@"
+__tsd_rc=$?
+unset -f _tsd
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __tsd_rc; return $__tsd_rc"
+fi
+eval "unset __tsd_rc; exit $__tsd_rc"

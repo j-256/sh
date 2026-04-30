@@ -1,0 +1,224 @@
+#!/bin/bash
+# pwa-prereqs - check or install PWA development prerequisites (Xcode CLT, Homebrew, nvm, Node LTS)
+#
+# Usage:
+#   pwa-prereqs              # check-only: report which components are installed
+#   pwa-prereqs --install    # install any missing components
+#   pwa-prereqs -h
+#
+# Options:
+#   --install     Install missing components (default is check-only)
+#   -h, --help    Show help message
+
+_pwa_prereqs() {
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="pwa-prereqs" ;; esac
+
+    _error() { echo "[$SCRIPT_NAME] ERROR: $*" >&2; }
+
+    _show_help() {
+        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
+        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        echo "NAME"
+        echo "  $SCRIPT_NAME - check or install PWA development prerequisites"
+        echo "SYNOPSIS"
+        echo "  $SCRIPT_NAME [${s}options${r}]"
+        echo "  $SCRIPT_NAME -h"
+        echo "DESCRIPTION"
+        echo "  Checks or installs the prerequisites for Salesforce PWA Kit"
+        echo "  development on macOS:"
+        echo "    1. Xcode Command Line Tools (required for Homebrew)"
+        echo "    2. Homebrew"
+        echo "    3. nvm (Node Version Manager)"
+        echo "    4. Latest LTS Node.js (via \`nvm install --lts\`)"
+        echo ""
+        echo "  Default (no flags): check-only mode. Reports [ok] or [missing]"
+        echo "  for each component and exits 0 if all are present, 1 otherwise."
+        echo ""
+        echo "  With --install: actually installs any missing components."
+        echo "  Skips anything already present. The Xcode CLT install is a"
+        echo "  GUI flow (Apple's dialog); when missing, this script triggers"
+        echo "  the installer and exits so you can re-run once CLT is in"
+        echo "  place. Requires sudo access during the Homebrew install step."
+        echo "OPTIONS"
+        echo "  --install     Install missing components (default is check-only)"
+        echo "  -h, --help    Show this help message"
+        echo "EXIT STATUS"
+        echo "  0  All prerequisites present (check mode) or installed (install mode)"
+        echo "  1  Missing prerequisites (check mode) or installation failed (install mode)"
+        echo "  2  Usage / argument error"
+        echo "DEPENDENCIES"
+        echo "  curl (for --install)"
+        echo "CAVEATS"
+        echo "  macOS only."
+    }
+
+    __unset() {
+        unset -f __unset _show_help _error
+    }
+    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
+
+    local mode="check"
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -h|--help) _show_help; return 0 ;;
+            --install) mode="install"; shift ;;
+            -*)
+                _error "unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage."
+                return 2
+                ;;
+            *)
+                _error "unexpected argument '$1'. Run \`$SCRIPT_NAME -h\` for usage."
+                return 2
+                ;;
+        esac
+    done
+
+    # Platform check: macOS only.
+    local platform; platform="$(uname -s)"
+    if [ "$platform" != "Darwin" ]; then
+        _error "macOS only (detected: $platform)"
+        return 1
+    fi
+
+    # --- check mode ---
+    if [ "$mode" = "check" ]; then
+        local all_ok=0
+
+        # Xcode Command Line Tools: `xcode-select -p` prints the active dev dir and exits 0 when present
+        if xcode-select -p >/dev/null 2>&1; then
+            echo "[ok]      Xcode Command Line Tools"
+        else
+            echo "[missing] Xcode Command Line Tools"
+            all_ok=1
+        fi
+
+        # Homebrew
+        if command -v brew >/dev/null 2>&1; then
+            echo "[ok]      Homebrew"
+        else
+            echo "[missing] Homebrew"
+            all_ok=1
+        fi
+
+        # nvm: command in PATH, or sourceable ~/.nvm/nvm.sh
+        local nvm_present=1
+        if command -v nvm >/dev/null 2>&1; then
+            nvm_present=0
+        elif [ -s "$HOME/.nvm/nvm.sh" ]; then
+            # NVM_DIR must be exported -- nvm.sh reads it from the environment.
+            export NVM_DIR="$HOME/.nvm"
+            # shellcheck disable=SC1091
+            . "$NVM_DIR/nvm.sh" >/dev/null 2>&1
+            command -v nvm >/dev/null 2>&1 && nvm_present=0
+        fi
+        if [ "$nvm_present" -eq 0 ]; then
+            echo "[ok]      nvm"
+        else
+            echo "[missing] nvm"
+            all_ok=1
+        fi
+
+        # Node LTS: if nvm is present, ask it; otherwise fall back to `node` in PATH.
+        local node_present=1
+        if [ "$nvm_present" -eq 0 ] && nvm ls --no-colors 2>/dev/null | grep -q 'lts'; then
+            node_present=0
+        elif command -v node >/dev/null 2>&1; then
+            node_present=0
+        fi
+        if [ "$node_present" -eq 0 ]; then
+            echo "[ok]      Node LTS"
+        else
+            echo "[missing] Node LTS"
+            all_ok=1
+        fi
+
+        return "$all_ok"
+    fi
+
+    # --- install mode ---
+    echo "--- START xcode ---"
+    if xcode-select -p >/dev/null 2>&1; then
+        echo "Xcode Command Line Tools already installed."
+        echo "--- FINISH xcode ---"
+    else
+        echo "Installing Xcode Command Line Tools..."
+        # Triggers Apple's GUI installer dialog. The command returns quickly;
+        # the actual install happens asynchronously and requires user click-through.
+        xcode-select --install >/dev/null 2>&1 || true
+        echo "A GUI installer was launched. Complete it, then re-run \`$SCRIPT_NAME --install\`."
+        echo "--- FINISH xcode ---"
+        return 1
+    fi
+
+    echo "--- START brew ---"
+    if command -v brew >/dev/null 2>&1; then
+        echo "Homebrew is already installed."
+    else
+        echo "Installing Homebrew..."
+        if /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; then
+            echo "Homebrew installed successfully."
+        else
+            echo "Homebrew installation failed!"
+            return 1
+        fi
+    fi
+    echo "--- FINISH brew ---"
+
+    echo "--- START nvm ---"
+    if command -v nvm >/dev/null 2>&1; then
+        echo "nvm is already installed."
+    elif [ -d "$HOME/.nvm" ]; then
+        echo "nvm directory exists, but nvm command is not found. Attempting to source nvm..."
+        # NVM_DIR must be exported -- nvm.sh and its child processes read it from
+        # the environment (CONVENTIONS allows export for genuinely env-needed vars).
+        export NVM_DIR="$HOME/.nvm"
+        if [ -s "$NVM_DIR/nvm.sh" ]; then
+            # shellcheck disable=SC1091
+            . "$NVM_DIR/nvm.sh"
+            echo "nvm sourced successfully."
+        else
+            echo "nvm script not found in $NVM_DIR. Reinstalling nvm..."
+            if curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash; then
+                echo "nvm reinstalled successfully."
+            else
+                echo "nvm reinstallation failed!"
+                return 1
+            fi
+        fi
+    else
+        if curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash; then
+            echo "nvm installed successfully."
+            export NVM_DIR="$HOME/.nvm"
+            if [ -s "$NVM_DIR/nvm.sh" ]; then
+                # shellcheck disable=SC1091
+                . "$NVM_DIR/nvm.sh"
+            else
+                echo "nvm script not found in $NVM_DIR. Please check the installation."
+                return 1
+            fi
+        else
+            echo "nvm installation failed!"
+            return 1
+        fi
+    fi
+    echo "--- FINISH nvm ---"
+
+    echo "--- START node/npm ---"
+    echo "Installing latest Long-Term Support (LTS) Node.js..."
+    if nvm install --lts; then # automatically runs `nvm use --lts`
+        echo "Node.js installed successfully."
+    else
+        echo "Node.js installation failed!"
+        return 1
+    fi
+    echo "--- FINISH node/npm ---"
+}
+
+_pwa_prereqs "$@"
+__pwa_prereqs_rc=$?
+unset -f _pwa_prereqs
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __pwa_prereqs_rc; return $__pwa_prereqs_rc"
+fi
+eval "unset __pwa_prereqs_rc; exit $__pwa_prereqs_rc"

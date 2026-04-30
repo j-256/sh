@@ -1,14 +1,45 @@
-#!/usr/bin/env bash
-
-################################################################################
-# Creates a .project file in each subfolder of the given or current directory, #
-# allowing them to be recognized as Salesforce B2C Commerce cartridges         #
-################################################################################
-# Usage:                                                                       #
-#   dot-project [code_version_directory]                                       #
-################################################################################
+#!/bin/bash
+# dot-project - generate .project files for B2C Commerce cartridges
+#
+# Usage:
+#   dot-project [code_version_directory]
+#   dot-project -h
+#
+# Creates a .project XML file in each subdirectory of the given directory
+# (or the current directory), allowing them to be recognized as Salesforce
+# B2C Commerce (Demandware) cartridges by Eclipse/UX Studio. Each .project
+# file uses the subdirectory name as the project name.
 
 _dot_project() {
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="dot-project" ;; esac
+
+    _show_help() {
+        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
+        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        echo "NAME"
+        echo "  $SCRIPT_NAME - generate .project files for B2C Commerce cartridges"
+        echo "SYNOPSIS"
+        echo "  $SCRIPT_NAME [${s}code_version_directory${r}]"
+        echo "  $SCRIPT_NAME -h"
+        echo "DESCRIPTION"
+        echo "  Creates a .project XML file in each subdirectory of the given directory"
+        echo "  (or the current directory), allowing them to be recognized as Salesforce"
+        echo "  B2C Commerce (Demandware) cartridges by Eclipse/UX Studio."
+        echo "  Each .project file uses the subdirectory name as the project name."
+        echo "OPTIONS"
+        echo "  -h, --help    Show this help message"
+    }
+
+    __unset() {
+        unset -f __unset _show_help
+    }
+    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
+
+    case "${1-}" in
+        -h|--help) _show_help; return 0 ;;
+    esac
+
     # Default to current directory
     local code_version="${1:-"."}"
     # Create a .project file in each subdirectory (cartridge)
@@ -44,3 +75,9 @@ DOT_PROJECT_TEMPLATE
 }
 
 _dot_project "$@"
+__dot_project_rc=$?
+unset -f _dot_project
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __dot_project_rc; return $__dot_project_rc"
+fi
+eval "unset __dot_project_rc; exit $__dot_project_rc"

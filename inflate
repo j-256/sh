@@ -1,29 +1,78 @@
-#!/usr/bin/env bash
-
-###########################################################################
-# Finds the equivalent buying power today* of a historical amount of USD. #
-# e.g. "$1234.56 in Feb 1980 is equivalent to $4915.94 in Jun 2024"       #
-# Data Source: https://data.bls.gov/cgi-bin/cpicalc.pl                    #
-# * Most recent month available is used, typically a 1-month delay        #
-###########################################################################
-# Usage:                                                                  #
-#   inflate <amount> <year> [month]                                       #
-#   (where month is an integer in [1,12], default 1)                      #
-# Sample output with stderr:                                              #
-#   $ inflate 150 1970 9                                                  #
-#   $150.00: Sep 1970 -> Jun 2024                                         #
-#   1202.20                                                               #
-# Sample output without stderr:                                           #
-#   $ inflate 150 1970 9 2>/dev/null                                      #
-#   1202.20                                                               #
-###########################################################################
+#!/bin/bash
+# inflate - adjust a historical USD amount for inflation using BLS CPI data
+#
+# Finds the equivalent buying power today* of a historical amount of USD.
+# e.g. "$1234.56 in Feb 1980 is equivalent to $4915.94 in Jun 2024"
+# Data source: https://data.bls.gov/cgi-bin/cpicalc.pl
+# * Most recent month available is used, typically a 1-month delay.
+#
+# Usage:
+#   inflate <amount> <year> [month]
+#   (where month is an integer in [1,12], default 1)
+#
+# Sample output with stderr:
+#   $ inflate 150 1970 9
+#   $150.00: Sep 1970 -> Jun 2024
+#   1202.20
+# Sample output without stderr:
+#   $ inflate 150 1970 9 2>/dev/null
+#   1202.20
 
 _inflate() {
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="inflate" ;; esac
+
+    _error() { echo "[$SCRIPT_NAME] ERROR: $*" >&2; }
+
+    _show_help() {
+        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
+        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        echo "NAME"
+        echo "  $SCRIPT_NAME - adjust a historical USD amount for inflation"
+        echo "SYNOPSIS"
+        echo "  $SCRIPT_NAME ${s}amount${r} ${s}year${r} [${s}month${r}]"
+        echo "  $SCRIPT_NAME -h"
+        echo "DESCRIPTION"
+        echo "  Fetches CPI data from the US Bureau of Labor Statistics and prints"
+        echo "  the equivalent buying power in the most recent month available."
+        echo "  The adjusted amount is printed to stdout; a summary line (e.g."
+        echo "  \"\$150.00: Sep 1970 -> Jun 2024\") is printed to stderr."
+        echo "  BLS CPI data is available for years 1913 through the most recent"
+        echo "  month (typically a 1-2 month delay)."
+        echo "OPTIONS"
+        echo "  ${s}amount${r}           Dollar amount to adjust (e.g. 150, 1234.56)"
+        echo "  ${s}year${r}             Historical year (1913 or later)"
+        echo "  ${s}month${r}            Month as integer 1-12 (default: 1 / January)"
+        echo "  -h, --help         Show this help message"
+        echo "DEPENDENCIES"
+        echo "  curl"
+        echo "CAVEATS"
+        echo "  Requires network connectivity; the BLS inflation calculator at"
+        echo "  https://data.bls.gov/cgi-bin/cpicalc.pl must be reachable. Data is"
+        echo "  fetched on every invocation (no local cache)."
+    }
+
+    __unset() {
+        unset -f __unset _show_help _error
+    }
+    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
+
+    case "$1" in
+        -h|--help) _show_help; return 0 ;;
+    esac
+
     [ "$1" ] || { echo "amount is required" >&2; return 1; }
     [ "$2" ] || { echo "year is required" >&2; return 1; }
     local amount; amount="$(printf '%.2f' "$1")"
     local input_year="$2"
     local input_month="${3:-1}" # default to January
+
+    # Validate month range before network request - an invalid month produces a
+    # confusing downstream error (blank month name in the failure message)
+    if [ "$input_month" -lt 1 ] || [ "$input_month" -gt 12 ]; then
+        _error "month must be in range [1, 12] (got: $input_month). Run \`$SCRIPT_NAME -h\` for usage."
+        return 2
+    fi
     # Zero-pad month if necessary - printf is not good here because numbers with leading zeroes can be interpreted as octal
     [ "$input_month" -lt 10 ] && input_month="0${input_month#0}"
 
@@ -51,6 +100,7 @@ _inflate() {
                             | sed -n '/id="answer"/{s/^.*\$//;s/<.*$//;s/,//g;p;}')"
     if [ -z "$result" ]; then
         echo "Failed to convert \$$amount from $input_date_formatted to $recent_date_formatted" >&2
+        echo "BLS CPI data is available for years 1913 through the most recent month. Got: $input_year" >&2
         return 1
     fi
 
@@ -60,3 +110,9 @@ _inflate() {
 }
 
 _inflate "$@"
+__inflate_rc=$?
+unset -f _inflate
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __inflate_rc; return $__inflate_rc"
+fi
+eval "unset __inflate_rc; exit $__inflate_rc"

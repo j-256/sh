@@ -427,6 +427,20 @@ test_suffix_picks_highest() {
     assert_contains "uses _02 pass" "$log" "${hostname}_02.txt"
 }
 
+test_suffix_announcement() {
+    # Auto-selected suffix should be announced visibly on stdout
+    local hostname="cert.staging.customer.realm.demandware.net"
+    create_cert_bundle "$hostname" "01"
+    create_cert_bundle "$hostname" "02"
+    setup_input "customer.realm" "1"
+
+    run_script_with_input "$TEST_DIR"
+    assert_rc "announcement run succeeds" 0
+    local stdout
+    stdout="$(cat "$TEST_DIR/stdout")"
+    assert_contains "announces selected suffix" "$stdout" "Using cert bundle suffix _02"
+}
+
 test_suffix_skips_incomplete() {
     local hostname="cert.staging.customer.realm.demandware.net"
     create_cert_bundle "$hostname" "01"
