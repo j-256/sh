@@ -178,8 +178,8 @@ Then run the tests to confirm the script still parses everything correctly:
 | Code | Meaning |
 |---|---|
 | 0 | Success (code found and displayed) |
-| 1 | Missing dependency (jq not installed) |
-| 2 | Missing or unknown status code |
+| 2 | Usage error (missing or unknown status code) |
+| 3 | Dependency error (jq not installed) |
 
 ### Dependencies
 

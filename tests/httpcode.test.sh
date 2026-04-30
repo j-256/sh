@@ -88,9 +88,9 @@ test_missing_jq() {
     env TEST_DIR="$TEST_DIR" PATH="" \
         /bin/bash "$UNDER_TEST" 200 >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
-    assert_rc "missing jq exits 1" 1
-    assert_stdout_contains "missing jq error" "[ERR] Missing dependency: jq"
-    assert_stdout_contains "missing jq suggest install" "Recommend installing via Homebrew"
+    assert_rc "missing jq exits 3" 3
+    assert_err_contains "missing jq error" "jq is required"
+    assert_err_contains "missing jq suggest install" "Homebrew"
 }
 
 test_valid_status_418() {

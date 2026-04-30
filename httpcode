@@ -34,6 +34,10 @@ _httpcode() {
         echo "  (520-527, 530), nginx (444, 494, 499), and IIS (440, 449)."
         echo "EXAMPLE"
         echo "  $SCRIPT_NAME 418    # -> 418 I'm a teapot"
+        echo "EXIT STATUS"
+        echo "  0  Success"
+        echo "  2  Usage error (no code given, or code unknown)"
+        echo "  3  Dependency error (jq missing)"
         echo "DEPENDENCIES"
         echo "  jq"
     }
@@ -50,7 +54,10 @@ _httpcode() {
             ;;
     esac
 
-    command -v jq >/dev/null 2>&1 || { printf '%s\n%s\n' "[ERR] Missing dependency: jq" "Recommend installing via Homebrew (https://brew.sh) or downloading binary directly (https://jqlang.github.io/jq/download)"; return 1; }
+    if ! command -v jq >/dev/null 2>&1; then
+        _error "jq is required. Install via Homebrew (https://brew.sh) or download directly (https://jqlang.github.io/jq/download)."
+        return 3
+    fi
 
     if [ -z "$1" ]; then
         _error "status code is required. Run \`$SCRIPT_NAME -h\` for usage."
