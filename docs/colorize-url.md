@@ -78,7 +78,7 @@ Output preserves whether `=` was present: `debug` (no `=`), `key=` (empty value 
 | Code | Meaning |
 |---|---|
 | 0 | Success |
-| 1 | No URL provided |
+| 2 | Usage error (no URL provided, or URL missing protocol) |
 
 ### Dependencies
 

@@ -75,6 +75,9 @@ _colorize_url() {
         echo "  Query string keys and values are colored separately."
         echo "OPTIONS"
         echo "  -h, --help   Show this help message"
+        echo "EXIT STATUS"
+        echo "  0  Success"
+        echo "  2  Usage error (no URL provided, or URL missing protocol)"
     }
 
     case "$1" in
@@ -99,7 +102,7 @@ _colorize_url() {
     local url="$1"
     if [ -z "$url" ]; then
         _error "No URL provided. Run \`$SCRIPT_NAME -h\` for usage."
-        return 1
+        return 2
     fi
     # Require an explicit protocol (e.g. https://). Parsing relies on '://' as
     # the first delimiter; without it, results are silently wrong.
