@@ -224,7 +224,7 @@ test_help_short_flag() {
 test_non_darwin_rejected() {
     touch "$TEST_DIR/uname_linux"
     run_script
-    assert_rc "non-Darwin exits 1" 1
+    assert_rc "non-Darwin exits 2" 2
     assert_err_contains "non-Darwin error message" "macOS only"
     assert_err_contains "non-Darwin shows detected OS" "detected: Linux"
 }

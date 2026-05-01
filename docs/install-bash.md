@@ -72,7 +72,8 @@ You'll need to manually remove the Homebrew bash line from `/etc/shells` if you 
 | Code | Meaning |
 |---|---|
 | `0` | Success |
-| `1` | Not running on macOS, Homebrew installation failed, `brew --prefix` returned empty, bash install failed, `/etc/shells` update failed, `chsh` failed, or `~/.bash_profile` update failed |
+| `1` | Runtime failure (install step failed, `brew --prefix` returned empty, `/etc/shells` update failed, `chsh` failed, or `~/.bash_profile` update failed) |
+| `2` | Precondition error (not running on macOS) |
 
 ### Dependencies
 

@@ -34,6 +34,10 @@ _install_bash() {
         echo "  - chsh changes the login shell permanently; revert with \`chsh -s /bin/zsh\`"
         echo "OPTIONS"
         echo "  -h, --help    Show this help message"
+        echo "EXIT STATUS"
+        echo "  0  Success"
+        echo "  1  Runtime failure (install step failed, sudo/chsh rejection, etc.)"
+        echo "  2  Precondition error (not running on macOS)"
         echo "DEPENDENCIES"
         echo "  curl, sudo, chsh, uname"
     }
@@ -54,7 +58,7 @@ _install_bash() {
     local os; os="$(uname -s)"
     if [ "$os" != "Darwin" ]; then
         echo "$px ERROR: macOS only (detected: $os)" >&2
-        return 1
+        return 2
     fi
 
     # Install Homebrew
