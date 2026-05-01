@@ -27,6 +27,10 @@ _stats() {
         echo "OPTIONS"
         echo "  -n             Print the dataset before statistics"
         echo "  -h, --help     Show this help message"
+        echo "EXIT STATUS"
+        echo "  0  Success"
+        echo "  2  Usage error (non-integer input)"
+        echo "  3  Dependency error (bc missing)"
         echo "DEPENDENCIES"
         echo "  bc, sort"
     }
@@ -40,6 +44,11 @@ _stats() {
         -h|--help) _show_help; return 0 ;;
     esac
 
+    if ! command -v bc >/dev/null 2>&1; then
+        echo "[$SCRIPT_NAME] ERROR: bc is required" >&2
+        return 3
+    fi
+
     # Read a list of whitespace-separated integers from stdin (newlines, spaces, tabs all OK)
     local -a numbers
     local line
@@ -48,7 +57,7 @@ _stats() {
     done < <(tr -s '[:space:]' '\n')
 
     # Check for any non-digits (which would most likely be a decimal point) - allow spaces as the numbers are concatenated with spaces
-    grep -q '[^0-9 ]' <<<"${numbers[*]}" && { echo "Error: Integers only." >&2; return 1; }
+    grep -q '[^0-9 ]' <<<"${numbers[*]}" && { echo "[$SCRIPT_NAME] ERROR: Integers only." >&2; return 2; }
     # If -n is provided, list the dataset first
     [ "$1" = "-n" ] && printf '%s, ' "${numbers[@]}" | sed 's/, $/\n/'
 

@@ -96,7 +96,8 @@ This is the same approach used in box-and-whisker plots. The 1.5 multiplier is a
 | Code | Meaning |
 |---|---|
 | `0` | Success |
-| `1` | Error: non-integer input detected (e.g., decimals) |
+| `2` | Usage error (non-integer input detected) |
+| `3` | Dependency error (`bc` missing) |
 
 ### Dependencies
 
