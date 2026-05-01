@@ -106,7 +106,7 @@ Trimming happens after matching, so the boundary lines are used to find the sect
 | Code | Meaning |
 |---|---|
 | 0 | Success |
-| 1 | Error (missing required flag value, no start pattern provided, unknown option) |
+| 2 | Usage error (missing required flag value, no start pattern provided, unknown option) |
 
 ### Dependencies
 

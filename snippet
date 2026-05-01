@@ -41,6 +41,9 @@ _snippet() {
         echo "  -l, --trim-last ${s}num${r}   Exclude the last ${s}num${r} lines of the snippet."
         echo "  -t, --trim ${s}num${r}        Exclude the first and last ${s}num${r} lines of the snippet."
         echo "  -h, --help            Show this help message."
+        echo "Exit status:"
+        echo "  0  Success"
+        echo "  2  Usage error (missing flag value, missing start pattern, unknown option)"
     }
     # Drop first n lines of input
     _dropfirst() {
@@ -88,7 +91,7 @@ _snippet() {
                 # Required value: Ensure $2 exists
                 if [ -z "$2" ]; then
                     echo "[ERR] Missing value for '$1'." >&2
-                    return 1
+                    return 2
                 fi
                 start_pattern="$2"
                 shift 2
@@ -97,7 +100,7 @@ _snippet() {
                 # Required value: Ensure $2 exists
                 if [ -z "$2" ]; then
                     echo "[ERR] Missing value for '$1'." >&2
-                    return 1
+                    return 2
                 fi
                 end_pattern="$2"
                 shift 2
@@ -107,7 +110,7 @@ _snippet() {
                 # Required value: Ensure $2 exists
                 if [ -z "$2" ]; then
                     echo "[ERR] Missing value for '$1'." >&2
-                    return 1
+                    return 2
                 fi
                 trim_first="$2"
                 shift 2
@@ -117,7 +120,7 @@ _snippet() {
                 # Required value: Ensure $2 exists
                 if [ -z "$2" ]; then
                     echo "[ERR] Missing value for '$1'." >&2
-                    return 1
+                    return 2
                 fi
                 trim_last="$2"
                 shift 2
@@ -127,7 +130,7 @@ _snippet() {
                 # Required value: Ensure $2 exists
                 if [ -z "$2" ]; then
                     echo "[ERR] Missing value for '$1'." >&2
-                    return 1
+                    return 2
                 fi
                 trim_first="$2"
                 trim_last="$2"
@@ -148,7 +151,7 @@ _snippet() {
             # Unknown option
             -*)
                 echo "[ERR] Unknown option '$1'." >&2
-                return 1
+                return 2
                 ;;
             # Positional argument
             *)
@@ -161,7 +164,7 @@ _snippet() {
     # Error if no start pattern provided
     if [ -z "$start_pattern" ]; then
         echo "[ERR] Start pattern is required." >&2
-        return 1
+        return 2
     fi
 
     # If no end pattern provided, read to end of string
