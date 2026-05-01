@@ -44,6 +44,11 @@ _inflate() {
         echo "  ${s}year${r}             Historical year (1913 or later)"
         echo "  ${s}month${r}            Month as integer 1-12 (default: 1 / January)"
         echo "  -h, --help         Show this help message"
+        echo "EXIT STATUS"
+        echo "  0  Success"
+        echo "  1  Runtime failure (BLS calculator response didn't yield a number)"
+        echo "  2  Usage error (missing amount, missing year, month out of range)"
+        echo "  3  Dependency error (curl missing)"
         echo "DEPENDENCIES"
         echo "  curl"
         echo "CAVEATS"
@@ -61,8 +66,13 @@ _inflate() {
         -h|--help) _show_help; return 0 ;;
     esac
 
-    [ "$1" ] || { echo "amount is required" >&2; return 1; }
-    [ "$2" ] || { echo "year is required" >&2; return 1; }
+    if ! command -v curl >/dev/null 2>&1; then
+        _error "curl is required"
+        return 3
+    fi
+
+    [ "$1" ] || { _error "amount is required. Run \`$SCRIPT_NAME -h\` for usage."; return 2; }
+    [ "$2" ] || { _error "year is required. Run \`$SCRIPT_NAME -h\` for usage."; return 2; }
     local amount; amount="$(printf '%.2f' "$1")"
     local input_year="$2"
     local input_month="${3:-1}" # default to January

@@ -90,13 +90,13 @@ test_help_short_flag() {
 
 test_missing_amount() {
     run_script
-    assert_rc "no args returns 1" 1
+    assert_rc "no args returns 2" 2
     assert_err_contains "error message" "amount is required"
 }
 
 test_missing_year() {
     run_script 150
-    assert_rc "missing year returns 1" 1
+    assert_rc "missing year returns 2" 2
     assert_err_contains "error message" "year is required"
 }
 

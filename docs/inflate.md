@@ -71,7 +71,9 @@ Month defaults to January (1) if not specified. The BLS calculator supports data
 | Code | Meaning |
 |---|---|
 | 0 | Success |
-| 1 | Missing required argument (amount or year), or BLS calculator returned no result |
+| 1 | Runtime failure (BLS calculator response didn't yield a number) |
+| 2 | Usage error (missing amount, missing year, or month out of range) |
+| 3 | Dependency error (`curl` missing) |
 
 ### Dependencies
 
