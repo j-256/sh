@@ -142,7 +142,7 @@ test_valid_json_all_profiles() {
 test_invalid_json_argument() {
     make_invalid_json
     run_script "$(cat "$TEST_DIR/invalid.json")"
-    assert_rc "exits 1" 1
+    assert_rc "exits 2" 2
     assert_err_contains "error message" "ERROR: Input is not valid JSON"
     assert_err_contains "shows preview" "not valid json at all"
 }
@@ -151,7 +151,7 @@ test_long_json_argument_truncated() {
     local long_input
     long_input="$(printf 'x%.0s' {1..200})"
     run_script "$long_input"
-    assert_rc "exits 1" 1
+    assert_rc "exits 2" 2
     assert_err_contains "error shown" "ERROR: Input is not valid JSON"
     local preview
     preview="$(get_stderr | grep -v ERROR | head -n 1)"
@@ -174,13 +174,13 @@ test_clipboard_invalid_json() {
     make_invalid_json
     cp "$TEST_DIR/invalid.json" "$TEST_DIR/clipboard.txt"
     run_script
-    assert_rc "exits 1" 1
+    assert_rc "exits 2" 2
     assert_err_contains "clipboard error" "ERROR: No arguments provided and clipboard does not contain valid JSON"
 }
 
 test_clipboard_default_when_no_args() {
     run_script
-    assert_rc "exits 1" 1
+    assert_rc "exits 2" 2
     assert_err_contains "clipboard error" "ERROR: No arguments provided and clipboard does not contain valid JSON"
     local calls
     calls="$(get_pbpaste_calls)"
@@ -218,14 +218,23 @@ test_tput_unavailable() {
 test_jq_missing() {
     rm "$SHIM_DIR/jq"
     make_valid_json
-    PATH="$SHIM_DIR" run_script "$(cat "$TEST_DIR/valid.json")"
-    assert_rc "exits non-zero" 127
+    # Invoke bash directly rather than through run_script so we bypass
+    # test-helpers' env prelude (which needs /usr/bin in PATH). PATH is
+    # restricted to the shim dir so jq is genuinely absent.
+    PATH="$SHIM_DIR" /bin/bash "$UNDER_TEST" "$(cat "$TEST_DIR/valid.json")" \
+        >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
+    printf '%s\n' "$?" > "$TEST_DIR/rc"
+    assert_rc "missing jq exits 3" 3
+    assert_err_contains "missing jq error" "jq is required"
 }
 
 test_pbpaste_missing_with_no_args() {
     rm "$SHIM_DIR/pbpaste"
-    PATH="$SHIM_DIR" run_script
-    assert_rc "exits non-zero" 127
+    PATH="$SHIM_DIR" /bin/bash "$UNDER_TEST" \
+        >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
+    printf '%s\n' "$?" > "$TEST_DIR/rc"
+    assert_rc "missing pbpaste with no args exits 3" 3
+    assert_err_contains "missing pbpaste error" "pbpaste is required"
 }
 
 test_credits_calculation_medium_only() {
@@ -298,7 +307,7 @@ test_sourced_mode_error() {
     printf '0\n' > "$TEST_DIR/rc"
     assert_rc "shell exits 0" 0
     assert_stdout_contains "error shown" "ERROR: Input is not valid JSON"
-    assert_stdout_contains "returns via return" "RC=1"
+    assert_stdout_contains "returns via return" "RC=2"
 }
 
 # --- run ---

@@ -106,7 +106,8 @@ The script does not accept flags. It takes a single optional argument:
 | Code | Meaning |
 |---|---|
 | 0 | Success |
-| 1 | Invalid JSON (argument or clipboard) |
+| 2 | Usage error (invalid JSON, missing required fields, no input) |
+| 3 | Dependency error (jq missing; pbpaste missing in clipboard mode) |
 
 ### Dependencies
 

@@ -66,6 +66,10 @@ _ods_usage() {
         echo "  $SCRIPT_NAME '{\"data\":{\"createdSandboxes\":9,...}}'"
         echo "  $SCRIPT_NAME                 # reads JSON from clipboard (macOS)"
         echo "  pbpaste | xargs -0 $SCRIPT_NAME   # explicit clipboard pipe"
+        echo "EXIT STATUS"
+        echo "  0  Success"
+        echo "  2  Usage error (invalid JSON, missing required fields, no input)"
+        echo "  3  Dependency error (jq missing; pbpaste missing in clipboard mode)"
     }
 
     __unset() {
@@ -77,6 +81,11 @@ _ods_usage() {
         -h|--help) _show_help; return 0 ;;
     esac
 
+    if ! command -v jq >/dev/null 2>&1; then
+        _error "jq is required"
+        return 3
+    fi
+
     # Define one of two versions of a jq helper function, to pipe the input JSON and specify raw output each time
     # Helper will use input if arguments are provided, otherwise it will pull from the clipboard
     if [ $# -gt 0 ]; then
@@ -87,15 +96,19 @@ _ods_usage() {
         else
             echo "ERROR: Input is not valid JSON - first line preview below" >&2
             echo "$*" | head -n 1 | cut -c "1-$(tput cols)" >&2
-            return 1
+            return 2
         fi
     else
+        if ! command -v pbpaste >/dev/null 2>&1; then
+            _error "pbpaste is required for clipboard mode (macOS only). Pass JSON as an argument instead."
+            return 3
+        fi
         # Define jq helper if clipboard contains valid JSON, otherwise exit with error status
         if pbpaste | jq empty 2>/dev/null; then
             _jq() { pbpaste | jq -r "$@"; }
         else
             echo "ERROR: No arguments provided and clipboard does not contain valid JSON" >&2
-            return 1
+            return 2
         fi
     fi
 
@@ -104,7 +117,7 @@ _ods_usage() {
     local check; check="$(_jq '.data | has("createdSandboxes") and has("activeSandboxes") and has("deletedSandboxes") and has("minutesUp") and has("minutesDown")')"
     if [ "$check" != "true" ]; then
         _error "input JSON is missing required fields (expected .data.createdSandboxes, .data.activeSandboxes, .data.deletedSandboxes, .data.minutesUp, .data.minutesDown)"
-        return 1
+        return 2
     fi
 
     # If output is being piped or redirected, do not print control characters for text formatting
