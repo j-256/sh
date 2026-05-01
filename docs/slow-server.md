@@ -91,6 +91,8 @@ The server uses `socat` with `fork` to handle concurrent requests -- each reques
 | Code | Meaning |
 |---|---|
 | 0 | Clean shutdown (e.g., via Ctrl-C) |
+| 3 | Dependency error (socat missing) |
+| * | socat exit code on other failures |
 | 1 | Missing dependency (socat not found) |
 
 ### Dependencies

@@ -65,8 +65,8 @@ test_socat_missing() {
     env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR" \
         /bin/bash "$UNDER_TEST" >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
-    assert_rc "socat missing exits 1" 1
-    assert_err_contains "socat missing error" "ERROR: Missing dependency: socat"
+    assert_rc "socat missing exits 3" 3
+    assert_err_contains "socat missing error" "socat is required"
 }
 
 test_socat_fork_and_reuseaddr() {

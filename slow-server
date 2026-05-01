@@ -35,6 +35,10 @@ _slow_server() {
         echo "OPTIONS"
         echo "  ${s}port${r}   Port to listen on (default: 8080)"
         echo "  -h, --help   Show this help message"
+        echo "EXIT STATUS"
+        echo "  0  Success (server exited cleanly)"
+        echo "  3  Dependency error (socat missing)"
+        echo "  *  socat exit code on other failures"
         echo "DEPENDENCIES"
         echo "  socat, sleep (must support fractional seconds)"
     }
@@ -88,8 +92,8 @@ _slow_server() {
 
     # Check for socat dependency
     if ! command -v socat >/dev/null 2>&1; then
-        echo "ERROR: Missing dependency: socat" >&2
-        return 1
+        echo "[$SCRIPT_NAME] ERROR: socat is required" >&2
+        return 3
     fi
 
     export -f _slow_response # exported for socat
