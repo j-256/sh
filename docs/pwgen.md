@@ -133,7 +133,7 @@ Positional argument: If a single number is provided without flags, it's treated 
 | Code | Meaning |
 |---|---|
 | 0 | Success |
-| 1 | Usage error (unknown flag, missing value) |
+| 2 | Usage error (unknown flag, missing value) |
 | 5 | Charset is empty after exclusions |
 | 6 | Invalid charset (unclosed bracket, unrecognized POSIX class) |
 

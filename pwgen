@@ -47,6 +47,11 @@ _pwgen() {
         echo "  -h, --help     Show this help message"
         echo "CAVEATS"
         echo "  Reads from /dev/random for entropy. May block on low-entropy systems."
+        echo "EXIT STATUS"
+        echo "  0  Success"
+        echo "  2  Usage error (missing flag value, unknown option)"
+        echo "  5  Empty charset after applying exclusions"
+        echo "  6  Invalid charset (malformed bracket expression or POSIX class)"
     }
     _error() { echo "[ERR] $SCRIPT_NAME: $*" >&2; }
     _warn()  { echo "[WRN] $SCRIPT_NAME: $*" >&2; }
@@ -248,17 +253,17 @@ _pwgen() {
     while [ $# -gt 0 ]; do
         case "$1" in
             -l|--length)
-                [ "$2" ] || { _error "$1 specified but no length provided"; _show_help; return 1; }
+                [ "$2" ] || { _error "$1 specified but no length provided"; _show_help; return 2; }
                 length="$2"
                 shift 2
                 ;;
             -c|--charset)
-                [ "$2" ] || { _error "$1 specified but no charset provided"; _show_help; return 1; }
+                [ "$2" ] || { _error "$1 specified but no charset provided"; _show_help; return 2; }
                 charset="$2"
                 shift 2
                 ;;
             -e|--exclude|-x)
-                [ "$2" ] || { _error "$1 specified but no charset provided"; _show_help; return 1; }
+                [ "$2" ] || { _error "$1 specified but no charset provided"; _show_help; return 2; }
                 exclude="$2"
                 shift 2
                 ;;
@@ -269,7 +274,7 @@ _pwgen() {
             ""|*[!0-9]*) # Not an --option or a number
                 _error "Unknown option '$1'."
                 _show_help
-                return 1
+                return 2
                 ;;
             *) # Must be a number
                 length="$1"

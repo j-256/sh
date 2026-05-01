@@ -58,25 +58,25 @@ test_help_output() {
 
 test_missing_length_value() {
     run_script --length
-    assert_rc "missing length" 1
+    assert_rc "missing length" 2
     assert_err_contains "error message" "[ERR] pwgen: --length specified but no length provided"
 }
 
 test_missing_charset_value() {
     run_script --charset
-    assert_rc "missing charset" 1
+    assert_rc "missing charset" 2
     assert_err_contains "error message" "[ERR] pwgen: --charset specified but no charset provided"
 }
 
 test_missing_exclude_value() {
     run_script --exclude
-    assert_rc "missing exclude" 1
+    assert_rc "missing exclude" 2
     assert_err_contains "error message" "[ERR] pwgen: --exclude specified but no charset provided"
 }
 
 test_unknown_option() {
     run_script --invalid
-    assert_rc "unknown option" 1
+    assert_rc "unknown option" 2
     assert_err_contains "error message" "[ERR] pwgen: Unknown option '--invalid'"
 }
 
@@ -284,13 +284,13 @@ test_help_short() {
 
 test_non_numeric_positional() {
     run_script abc
-    assert_rc "non-numeric positional" 1
+    assert_rc "non-numeric positional" 2
     assert_err_contains "error for non-numeric" "Unknown option 'abc'"
 }
 
 test_empty_string_argument() {
     run_script ""
-    assert_rc "empty string arg" 1
+    assert_rc "empty string arg" 2
     assert_err_contains "error for empty" "Unknown option ''"
 }
 
