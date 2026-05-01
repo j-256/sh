@@ -41,7 +41,7 @@ test_help_short() {
 test_executed_rejected() {
     # Running prompt directly (not sourced) should fail with a clear error.
     run_script
-    assert_rc "executed exits 1" 1
+    assert_rc "executed exits 2" 2
     assert_err_contains "explains requirement" "must be sourced"
     assert_err_contains "shows sourced syntax" ". prompt VAR"
 }

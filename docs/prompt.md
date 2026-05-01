@@ -165,8 +165,7 @@ Arguments are positional, in this order:
 | Code | Meaning |
 |---|---|
 | 0 | Success (user provided input or default was used) |
-| 1 | Executed instead of sourced (see error message) |
-| 127 | Missing required `variable` argument (bash parameter expansion error) |
+| 2 | Usage error (script was executed rather than sourced) |
 
 ### Warnings
 

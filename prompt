@@ -45,6 +45,9 @@ OPTIONS
   default      Value used when the user presses Enter without typing
   placeholder  Gray hint text (defaults to default if omitted)
   -h, --help   Show this help message
+EXIT STATUS
+  0  Success
+  2  Usage error (script was executed rather than sourced)
 DEPENDENCIES
   tput, stty
 PROMPT_HELP
@@ -63,7 +66,7 @@ if { [ "$BASH_VERSION" ] && [ "${_basename#'-'}" != "bash" ]; } || { [ "$ZSH_VER
         "Try: . $_basename VAR \"Prompt text: \" [default] [placeholder]" \
         "     . $_basename --help" >&2
     unset _basename
-    exit 1
+    exit 2
 fi
 unset _basename
 
@@ -95,6 +98,9 @@ _prompt() {
         echo "  ${s}default${r}      Value used when the user presses Enter without typing"
         echo "  ${s}placeholder${r}  Gray hint text (defaults to ${s}default${r} if omitted)"
         echo "  -h, --help     Show this help message"
+        echo "EXIT STATUS"
+        echo "  0  Success"
+        echo "  2  Usage error (script was executed rather than sourced)"
         echo "DEPENDENCIES"
         echo "  tput, stty"
     }
