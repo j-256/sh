@@ -89,9 +89,8 @@ The script checks for `ipcalc` at startup and exits with an error if it's not av
 | Code | Meaning |
 |---|---|
 | 0 | Success |
-| 1 | Missing dependency (`ipcalc` not found) |
-| 1 | Failed to fetch Cloudflare IPs (network error or empty response) |
-| 1 | Found a CIDR range larger than /24 (can't be expanded to /16 or /24) |
+| 1 | Runtime failure (empty fetch response, or CIDR range > /24 encountered) |
+| 3 | Dependency error (`curl` or `ipcalc` not found) |
 
 ### Behavior
 

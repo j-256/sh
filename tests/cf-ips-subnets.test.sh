@@ -93,13 +93,21 @@ test_h_flag() {
     assert_stdout_contains "-h has NAME" "NAME"
 }
 
+test_curl_missing() {
+    rm "$SHIM_DIR/curl"
+    env PATH="$SHIM_DIR" /bin/bash "$UNDER_TEST" >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
+    printf '%s\n' "$?" > "$TEST_DIR/rc"
+    assert_rc "curl missing exits 3" 3
+    assert_err_contains "curl error" "curl is required"
+}
+
 test_ipcalc_missing() {
     # Remove shim and restrict PATH so command -v fails
     rm "$SHIM_DIR/ipcalc"
     env PATH="$SHIM_DIR" /bin/bash "$UNDER_TEST" >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
-    assert_rc "ipcalc missing exits 1" 1
-    assert_err_contains "ipcalc error" "ERROR: ipcalc is required"
+    assert_rc "ipcalc missing exits 3" 3
+    assert_err_contains "ipcalc error" "ipcalc is required"
 }
 
 test_curl_empty_response() {

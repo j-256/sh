@@ -28,6 +28,10 @@ _cf_ips_subnets() {
         echo "  Input ranges larger than /24 are rejected."
         echo "OPTIONS"
         echo "  -h, --help   Show this help message"
+        echo "EXIT STATUS"
+        echo "  0  Success"
+        echo "  1  Runtime failure (fetch returned nothing; range exceeds /24)"
+        echo "  3  Dependency error (curl or ipcalc missing)"
         echo "DEPENDENCIES"
         echo "  curl"
         echo "  ipcalc - https://github.com/kjokjo/ipcalc"
@@ -45,9 +49,13 @@ _cf_ips_subnets() {
             ;;
     esac
 
+    if ! command -v curl >/dev/null 2>&1; then
+        echo "[$SCRIPT_NAME] ERROR: curl is required" >&2
+        return 3
+    fi
     if ! command -v ipcalc >/dev/null 2>&1; then
-        echo "ERROR: ipcalc is required (https://github.com/kjokjo/ipcalc)" >&2
-        return 1
+        echo "[$SCRIPT_NAME] ERROR: ipcalc is required (https://github.com/kjokjo/ipcalc)" >&2
+        return 3
     fi
 
     local -a cf
