@@ -59,19 +59,19 @@ _tsd() {
             duration_explicit=true
             ;;
         -s|--sec|--seconds)
-            [ "$unit" ] && { echo "Error: Unit is already set to $unit. Cannot specify multiple units." >&2; return 1; }
+            [ "$unit" ] && { echo "Error: Unit is already set to $unit. Cannot specify multiple units." >&2; return 2; }
             unit="s"
             ;;
         -m|--milli|--milliseconds)
-            [ "$unit" ] && { echo "Error: Unit is already set to $unit. Cannot specify multiple units." >&2; return 1; }
+            [ "$unit" ] && { echo "Error: Unit is already set to $unit. Cannot specify multiple units." >&2; return 2; }
             unit="ms"
             ;;
         -u|--micro|--microseconds)
-            [ "$unit" ] && { echo "Error: Unit is already set to $unit. Cannot specify multiple units." >&2; return 1; }
+            [ "$unit" ] && { echo "Error: Unit is already set to $unit. Cannot specify multiple units." >&2; return 2; }
             unit="us"
             ;;
         -n|--nano|--nanoseconds)
-            [ "$unit" ] && { echo "Error: Unit is already set to $unit. Cannot specify multiple units." >&2; return 1; }
+            [ "$unit" ] && { echo "Error: Unit is already set to $unit. Cannot specify multiple units." >&2; return 2; }
             unit="ns"
             ;;
         #region help
@@ -111,6 +111,10 @@ _tsd() {
             printf '\t%s\n' "Explain 1800 milliseconds like you're five:"
             printf '\t%s\n' "$ $SCRIPT_NAME 1800 -m  # or $SCRIPT_NAME -m 1800"
             printf '\t%s\n' "> 1s 800ms"
+            echo
+            echo "Exit status:"
+            printf '\t%s\t%s\n' "0" "Success"
+            printf '\t%s\t%s\n' "2" "Usage error (missing input, unknown option, multiple units, multiple positionals)"
             return 0
             ;;
         #endregion
@@ -119,7 +123,7 @@ _tsd() {
                 input="$1"
                 digits=${#input}
             else
-                echo "Unknown option or multiple positional arguments: $1" >&2 && return 1
+                echo "Unknown option or multiple positional arguments: $1" >&2 && return 2
             fi
             ;;
         esac
@@ -130,7 +134,7 @@ _tsd() {
     # If no timestamp/duration provided, return an error
     if [ -z "$input" ]; then
         echo "Error: No input provided." >&2
-        return 1
+        return 2
     fi
 
     # If no unit provided, infer from length of input

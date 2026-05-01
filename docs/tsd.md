@@ -115,6 +115,13 @@ Options can appear before or after the input number.
 |---|---|
 | `TSD_LOCALTIME` | Override the local timezone source (default: `/etc/localtime`) |
 
+### Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | Success |
+| 2 | Usage error (missing input, unknown option, multiple units, multiple positionals) |
+
 ### Dependencies
 
 None -- uses only standard Unix utilities (macOS or GNU `date`).

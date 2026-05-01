@@ -94,25 +94,25 @@ test_help_output() {
 
 test_no_input() {
     run_script
-    assert_rc "no input exits 1" 1
+    assert_rc "no input exits 2" 2
     assert_err_contains "no input error" "Error: No input provided."
 }
 
 test_multiple_positional() {
     run_script 1234 5678
-    assert_rc "multiple positional exits 1" 1
+    assert_rc "multiple positional exits 2" 2
     assert_err_contains "multiple positional error" "Unknown option or multiple positional arguments: 5678"
 }
 
 test_multiple_units() {
     run_script 1234 -s -m
-    assert_rc "multiple units exits 1" 1
+    assert_rc "multiple units exits 2" 2
     assert_err_contains "multiple units error" "Unit is already set to s. Cannot specify multiple units."
 }
 
 test_unknown_option() {
     run_script 1234 --invalid
-    assert_rc "unknown option exits 1" 1
+    assert_rc "unknown option exits 2" 2
     assert_err_contains "unknown option error" "Unknown option or multiple positional arguments: --invalid"
 }
 
