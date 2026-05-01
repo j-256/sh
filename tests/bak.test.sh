@@ -181,7 +181,7 @@ test_multiple_files_one_missing() {
 
 test_unknown_option() {
     run_script --invalid
-    assert_rc "unknown option" 1
+    assert_rc "unknown option" 2
     assert_err_contains "illegal option" "illegal option"
 }
 

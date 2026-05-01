@@ -34,6 +34,10 @@ _bak() {
         echo "  -v, --verbose      Print filenames as they are backed up"
         echo "  -d, --dry-run      Simulate actions without making changes"
         echo "  -h, --help         Show this help message"
+        echo "EXIT STATUS"
+        echo "  0  Success"
+        echo "  1  Runtime failure (source file missing, mv failed)"
+        echo "  2  Usage error (illegal option)"
     }
 
     # True if verbose flag is set
@@ -111,7 +115,7 @@ _bak() {
             # Unknown option
             -*)
                 echo "$SCRIPT_NAME: illegal option -- $1" >&2
-                return 1
+                return 2
                 ;;
             # Positional argument
             *)

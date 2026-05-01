@@ -63,7 +63,8 @@ config.yaml.bak  config.yaml.bak.bak
 | Code | Meaning |
 |---|---|
 | 0 | Success |
-| 1 | File not found or move failed |
+| 1 | Runtime failure (source file missing, `mv` failed) |
+| 2 | Usage error (illegal option) |
 
 ### Behavior
 
