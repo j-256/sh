@@ -100,7 +100,10 @@ Some DKIM records use CNAMEs that point to a third-party email provider's infras
 | Code | Meaning |
 |---|---|
 | 0 | Success (key extracted and printed) |
-| 1 | DNS query returned empty response, or required arguments missing |
+| 1 | Runtime failure (DNS response empty) |
+| 2 | Usage error (missing selector or domain) |
+| 3 | Dependency error (`dig` missing) |
+| 4 | Domain-specific: record found but `p=` value missing (malformed record) |
 
 ### Dependencies
 

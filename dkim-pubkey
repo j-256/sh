@@ -30,6 +30,12 @@ _dkim_pubkey() {
         echo "CAVEATS"
         echo "  Selector must be known in advance; check SPF/DMARC records,"
         echo "  email headers, or the domain's DNS provider."
+        echo "EXIT STATUS"
+        echo "  0  Success (key printed)"
+        echo "  1  Runtime failure (DNS response empty)"
+        echo "  2  Usage error (missing selector or domain)"
+        echo "  3  Dependency error (dig missing)"
+        echo "  4  Domain-specific (record found but p= value missing)"
         echo "DEPENDENCIES"
         echo "  dig"
     }
@@ -46,21 +52,34 @@ _dkim_pubkey() {
             ;;
     esac
 
-    local selector="${1:?"not enough arguments: selector and domain required"}"
-    local domain="${2:?"not enough arguments: domain required"}"
+    if ! command -v dig >/dev/null 2>&1; then
+        echo "[$SCRIPT_NAME] ERROR: dig is required" >&2
+        return 3
+    fi
+
+    if [ -z "${1:-}" ]; then
+        echo "[$SCRIPT_NAME] ERROR: selector is required. Run \`$SCRIPT_NAME -h\` for usage." >&2
+        return 2
+    fi
+    if [ -z "${2:-}" ]; then
+        echo "[$SCRIPT_NAME] ERROR: domain is required. Run \`$SCRIPT_NAME -h\` for usage." >&2
+        return 2
+    fi
+    local selector="$1"
+    local domain="$2"
     local dns_hostname="$selector._domainkey.$domain"
     local dns_response; dns_response="$(dig +short TXT "$dns_hostname")"
     echo "\$ dig +short TXT \"$dns_hostname\"" >&2
     if [ -z "$dns_response" ]; then
-        echo "ERROR: DNS response empty" >&2
+        echo "[$SCRIPT_NAME] ERROR: DNS response empty" >&2
         return 1
     fi
     echo "$dns_response" >&2
     echo >&2
     local pubkey; pubkey="$(echo "$dns_response" | sed 's/^.*p=//; s/"$//; s/" "//g')"
     if [ -z "$pubkey" ]; then
-        echo "ERROR: record found but key is empty (p= value missing)" >&2
-        return 2
+        echo "[$SCRIPT_NAME] ERROR: record found but key is empty (p= value missing)" >&2
+        return 4
     fi
     echo "$pubkey"
 }

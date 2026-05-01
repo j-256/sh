@@ -29,6 +29,10 @@ case "$query" in
     empty._domainkey.*)
         # Empty response case
         ;;
+    empty-p._domainkey.*)
+        # Record exists but p= value is missing
+        printf '%s\n' '"v=DKIM1; k=rsa; p="'
+        ;;
     multiline._domainkey.*)
         # Multi-line response with quotes
         printf '%s\n' '"v=DKIM1; k=rsa; " "p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC3QEKyU1fSma0axspqYK5iAj+54lsAg"'
@@ -63,14 +67,14 @@ test_help_short_flag() {
 
 test_no_args() {
     run_script
-    assert_rc "no args exits 1" 1
-    assert_err_contains "no args error" "not enough arguments: selector and domain required"
+    assert_rc "no args exits 2" 2
+    assert_err_contains "no args error" "selector is required"
 }
 
 test_missing_domain() {
     run_script "dkim-selector"
-    assert_rc "missing domain exits 1" 1
-    assert_err_contains "missing domain error" "not enough arguments: domain required"
+    assert_rc "missing domain exits 2" 2
+    assert_err_contains "missing domain error" "domain is required"
 }
 
 test_basic_query() {
@@ -95,6 +99,21 @@ test_empty_dns_response() {
     run_script "empty" "example.com"
     assert_rc "empty response exits 1" 1
     assert_err_contains "empty response error" "ERROR: DNS response empty"
+}
+
+test_empty_p_value() {
+    run_script "empty-p" "example.com"
+    assert_rc "empty p= exits 4 (domain-specific)" 4
+    assert_err_contains "empty p error" "record found but key is empty"
+}
+
+test_dig_missing() {
+    rm -f "$SHIM_DIR/dig"
+    env PATH="$SHIM_DIR" TEST_DIR="$TEST_DIR" \
+        /bin/bash "$UNDER_TEST" "selector" "example.com" >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
+    printf '%s\n' "$?" > "$TEST_DIR/rc"
+    assert_rc "dig missing exits 3" 3
+    assert_err_contains "dig error" "dig is required"
 }
 
 test_multiline_response() {
