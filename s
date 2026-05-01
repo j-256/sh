@@ -49,6 +49,8 @@ _s() {
         echo "  Inherits sfcc-ci's configuration (dw.json, SFCC_OAUTH_*, SFCC_LOGIN_URL,"
         echo "  SFCC_SANDBOX_API_HOST, SFCC_SCAPI_*, DEBUG, etc.). Run \`$SCRIPT_NAME env\`"
         echo "  to see all recognized variables and their current values."
+        echo "EXIT STATUS"
+        echo "  *  Pass-through from sfcc-ci (or jq, for subcommands that parse JSON)"
         echo "DEPENDENCIES"
         echo "  sfcc-ci, jq"
         echo "SEE ALSO"
@@ -69,7 +71,7 @@ _s() {
         # Authenticate with client credentials using dw.json or environment variables
         # Prints expiration time in user's time zone after authenticating
         'a'|'auth')
-            sfcc-ci client:auth --renew || return 1
+            sfcc-ci client:auth --renew || return $?
             local exp; exp="$(sfcc-ci client:auth:token | jq -R -r 'split(".") | .[1] | @base64d | fromjson | .exp')"
             # TODO: Simplify date - use more format rather than sed
             local tz; tz="$(zdump /etc/localtime | sed 's/.* //g')"
@@ -125,23 +127,22 @@ _s() {
             TZ=UTC date -u "+%Y-%m-%d %H:%M:%S UTC (current)"
         ;;
         # Start an instance, waiting for it to finish (--sync)
+        # FORCE_COLOR=0 disables chalk's coloring in sfcc-ci so output lands
+        # in the default terminal color (sfcc-ci would otherwise emit gray).
         'start')
             local instance="${1/_/-}" # zzzz_001 -> zzzz-001
-            # cat to reset color of output text to terminal default (instead of gray)
-            sfcc-ci sandbox:start -s "$instance" --sync | cat
+            FORCE_COLOR=0 sfcc-ci sandbox:start -s "$instance" --sync
         ;;
         # Stop an instance, waiting for it to finish (--sync)
         'stop')
             local instance="${1/_/-}" # zzzz_001 -> zzzz-001
-            # cat to reset color of output text to terminal default (instead of gray)
-            sfcc-ci sandbox:stop -s "$instance" --sync | cat
+            FORCE_COLOR=0 sfcc-ci sandbox:stop -s "$instance" --sync
         ;;
         # Restart an instance synchronously (--sync), waiting for both start and stop
         'restart'|'reboot')
             local instance="${1/_/-}" # zzzz_001 -> zzzz-001
-            # cat to reset color of output text to terminal default (instead of gray)
-            sfcc-ci sandbox:stop -s "$instance" --sync | cat \
-            && sfcc-ci sandbox:start -s "$instance" --sync | cat
+            FORCE_COLOR=0 sfcc-ci sandbox:stop -s "$instance" --sync \
+                && FORCE_COLOR=0 sfcc-ci sandbox:start -s "$instance" --sync
         ;;
         # Print all relevant environment variables and their values
         'env'|'environment')

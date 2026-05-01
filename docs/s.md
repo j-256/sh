@@ -164,6 +164,10 @@ s sbx:create        # same as sandbox:create
 
 See `sfcc-ci --help` for full details.
 
+### Exit codes
+
+Pass-through from `sfcc-ci` (or `jq`, for subcommands that parse JSON). `start`/`stop`/`restart` invoke sfcc-ci with `FORCE_COLOR=0` so chalk skips terminal coloring entirely, which removes the need for a `| cat` pipeline to reset color.
+
 ### Dependencies
 
 - `sfcc-ci` (required) - Install with `npm install -g sfcc-ci`

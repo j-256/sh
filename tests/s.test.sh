@@ -365,10 +365,9 @@ SHIM
 }
 
 test_restart_stop_failure_propagates() {
-    # Override sfcc-ci to fail on stop
-    # Note: The script pipes sfcc-ci through cat, but bash's pipefail isn't set,
-    # so the exit code comes from cat (0), not sfcc-ci (1)
-    # This test verifies current behavior - if pipefail is added later, this would change
+    # Override sfcc-ci to fail on stop. The script pipes sfcc-ci through cat
+    # (for terminal color reset); PIPESTATUS[0] recovers sfcc-ci's rc so the
+    # failure propagates and the subsequent start is skipped.
     cat > "$SHIM_DIR/sfcc-ci" <<'SHIM'
 #!/bin/bash
 case "$*" in
@@ -376,15 +375,55 @@ case "$*" in
         printf 'Stop failed\n' >&2
         exit 1
         ;;
+    *"sandbox:start"*)
+        printf 'Start was called (unexpected)\n'
+        exit 0
+        ;;
 esac
 exit 0
 SHIM
     chmod +x "$SHIM_DIR/sfcc-ci"
 
     run_script restart zzzz_001
-    # Currently exits 0 because cat swallows sfcc-ci's exit code
-    assert_rc "restart with stop failure exits 0" 0
+    assert_rc "restart with stop failure propagates rc 1" 1
     assert_err_contains "restart shows stop failure" "Stop failed"
+    assert_stdout_not_contains "start was not called" "Start was called (unexpected)"
+}
+
+test_start_failure_propagates() {
+    cat > "$SHIM_DIR/sfcc-ci" <<'SHIM'
+#!/bin/bash
+case "$*" in
+    *"sandbox:start"*)
+        printf 'Start failed\n' >&2
+        exit 5
+        ;;
+esac
+exit 0
+SHIM
+    chmod +x "$SHIM_DIR/sfcc-ci"
+
+    run_script start zzzz_001
+    assert_rc "start failure passes through rc 5" 5
+    assert_err_contains "start shows failure" "Start failed"
+}
+
+test_stop_failure_propagates() {
+    cat > "$SHIM_DIR/sfcc-ci" <<'SHIM'
+#!/bin/bash
+case "$*" in
+    *"sandbox:stop"*)
+        printf 'Stop failed\n' >&2
+        exit 7
+        ;;
+esac
+exit 0
+SHIM
+    chmod +x "$SHIM_DIR/sfcc-ci"
+
+    run_script stop zzzz_001
+    assert_rc "stop failure passes through rc 7" 7
+    assert_err_contains "stop shows failure" "Stop failed"
 }
 
 # --- run ---
