@@ -2,7 +2,7 @@
 # test-runner.sh - Run all .test.sh files in this directory
 #
 # Usage:
-#   test-runner.sh [options] [pattern]
+#   test-runner.sh [options] [name]...
 #
 # Options:
 #   -v          Verbose (pass through to test files)
@@ -21,10 +21,11 @@ _test_runner() {
         echo "NAME"
         echo "  $SCRIPT_NAME - run all .test.sh files"
         echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME [${s}options${r}] [${s}pattern${r}]"
+        echo "  $SCRIPT_NAME [${s}options${r}] [${s}name${r}]..."
         echo "DESCRIPTION"
         echo "  Finds and runs all .test.sh files in the same directory."
-        echo "  If a pattern is given, only runs files matching *pattern*.test.sh."
+        echo "  If one or more names are given, only runs tests whose script name"
+        echo "  (basename minus .test.sh) exactly matches one of them."
         echo "OPTIONS"
         echo "  -v          Pass -v (verbose) to each test file"
         echo "  -h, --help  Show this help message"
@@ -36,12 +37,12 @@ _test_runner() {
     trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
     local verbose=""
-    local patterns=()
+    local names=()
     while [ $# -gt 0 ]; do
         case "$1" in
             -h|--help) _show_help; return 0 ;;
             -v) verbose="-v" ;;
-            *) patterns+=("$1") ;;
+            *) names+=("$1") ;;
         esac
         shift
     done
@@ -57,23 +58,22 @@ _test_runner() {
     for test_file in "$script_dir"/*.test.sh; do
         [ -f "$test_file" ] || continue
 
-        # With one or more patterns, run a test iff its script name (basename
-        # minus .test.sh) matches one of them exactly. Exact match avoids the
-        # substring-glob footgun where short patterns like `s` match every file.
-        if [ "${#patterns[@]}" -gt 0 ]; then
-            local name
+        local filename
+        filename="$(basename "$test_file")"
+
+        # With one or more names, only run tests whose filename matches
+        # <name>.test.sh. Exact match avoids the substring-glob footgun where
+        # short inputs like `s` would match every file.
+        if [ "${#names[@]}" -gt 0 ]; then
             local matched=0
-            local p
-            name="$(basename "$test_file" .test.sh)"
-            for p in "${patterns[@]}"; do
-                if [ "$name" = "$p" ]; then matched=1; break; fi
+            local n
+            for n in "${names[@]}"; do
+                if [ "$filename" = "$n.test.sh" ]; then matched=1; break; fi
             done
             [ "$matched" -eq 1 ] || continue
         fi
 
-        local name
-        name="$(basename "$test_file")"
-        echo "--- $name ---"
+        echo "--- $filename ---"
 
         local rc=0
         /bin/bash "$test_file" $verbose || rc=$?
@@ -82,7 +82,7 @@ _test_runner() {
             pass=$((pass + 1))
         else
             fail=$((fail + 1))
-            failed_files="$failed_files  $name"$'\n'
+            failed_files="$failed_files  $filename"$'\n'
         fi
     done
 
