@@ -99,7 +99,7 @@ test_help_output() {
 
 test_missing_directory() {
     run_script "/nonexistent/path/to/nowhere" < /dev/null
-    assert_rc "missing dir fails" 1
+    assert_rc "missing dir fails" 2
 }
 
 test_missing_ca_cert() {

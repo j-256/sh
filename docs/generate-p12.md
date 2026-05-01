@@ -134,7 +134,9 @@ These are typically provided as a `.zip` you unzip into a dedicated directory.
 | Code | Meaning |
 |---|---|
 | `0` | Success |
-| `1` | Error (missing files, invalid directory, or openssl command failed) |
+| `1` | Runtime failure (bundle files missing, openssl step failed) |
+| `2` | Usage error (directory arg is not accessible) |
+| `3` | Dependency error (`openssl` missing) |
 
 ### Dependencies
 

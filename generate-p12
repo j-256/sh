@@ -45,6 +45,11 @@ _generate_p12() {
         echo "    <hostname>.srl      CA serial number"
         echo "  where NN is a two-digit suffix (_01, _02, ...). The highest"
         echo "  complete suffix is selected automatically."
+        echo "EXIT STATUS"
+        echo "  0  Success"
+        echo "  1  Runtime failure (bundle files missing, openssl step failed)"
+        echo "  2  Usage error (directory arg is not accessible)"
+        echo "  3  Dependency error (openssl missing)"
         echo "DEPENDENCIES"
         echo "  openssl"
     }
@@ -55,6 +60,11 @@ _generate_p12() {
             return 0
             ;;
     esac
+
+    if ! command -v openssl >/dev/null 2>&1; then
+        _error "openssl is required"
+        return 3
+    fi
 
     # Example hostname: "cert.staging.customer.realm.demandware.net"
     # However, any BM hostname or as little as "customer.realm" or "customer-realm" may be provided
@@ -125,7 +135,7 @@ _generate_p12() {
     # Resolve to absolute path (the cd runs in a subshell via command substitution)
     if ! wd="$(cd "$wd" && pwd)"; then
         _error "Failed to access specified directory"
-        return 1
+        return 2
     fi
 
     local hostname
