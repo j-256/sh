@@ -54,6 +54,14 @@ The timestamp is captured at the moment of rename, not extracted from the origin
 | `-u, --utc` | Use UTC timezone instead of local time |
 | `-h, --help` | Show help |
 
+### Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | Clean shutdown |
+| 2 | Usage error (unknown option, missing flag value, unexpected arg) |
+| 3 | Dependency error (`fswatch` missing) |
+
 ### Dependencies
 
 - `fswatch` — file change monitor (install via Homebrew: `brew install fswatch`)

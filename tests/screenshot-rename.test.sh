@@ -89,8 +89,8 @@ test_fswatch_missing() {
     env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR" \
         /bin/bash "$UNDER_TEST" >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
-    assert_rc "no fswatch exits 1" 1
-    assert_err_contains "no fswatch msg" "fswatch is not installed"
+    assert_rc "no fswatch exits 3" 3
+    assert_err_contains "no fswatch msg" "fswatch is required"
 }
 
 test_fswatch_after_utc() {
@@ -99,8 +99,8 @@ test_fswatch_after_utc() {
     env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR" \
         /bin/bash "$UNDER_TEST" --utc >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
-    assert_rc "no fswatch utc exits 1" 1
-    assert_err_contains "no fswatch utc msg" "fswatch is not installed"
+    assert_rc "no fswatch utc exits 3" 3
+    assert_err_contains "no fswatch utc msg" "fswatch is required"
 }
 
 test_double_dash() {

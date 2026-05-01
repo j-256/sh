@@ -51,6 +51,10 @@ _screenshot_rename() {
         echo "  $SCRIPT_NAME --utc"
         echo "  $SCRIPT_NAME --path ~/Pictures/Screenshots"
         echo "  $SCRIPT_NAME --format \"%Y%m%d-%H%M%S\""
+        echo "EXIT STATUS"
+        echo "  0  Clean shutdown"
+        echo "  2  Usage error (unknown option, missing flag value, unexpected arg)"
+        echo "  3  Dependency error (fswatch missing)"
         echo "DEPENDENCIES"
         echo "  fswatch, defaults (macOS)"
     }
@@ -101,8 +105,8 @@ _screenshot_rename() {
     done
 
     if ! command -v fswatch >/dev/null 2>&1; then
-        _error "fswatch is not installed. Please install it to use this script."
-        return 1
+        _error "fswatch is required"
+        return 3
     fi
 
     # Determine watch directory: --path wins. Otherwise, try the macOS-configured
