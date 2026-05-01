@@ -89,7 +89,9 @@ The delete-all-then-create approach ensures a clean state even if multiple A rec
 | Code | Meaning |
 |---|---|
 | 0 | Success (IP already matched or DNS updated successfully) |
-| 1 | Failure (missing jq, IP fetch failed, zone not found, API error) |
+| 1 | Runtime failure (IP fetch failed, zone not found, API error) |
+| 2 | Usage error (missing API token or domain) |
+| 3 | Dependency error (`curl`, `jq`, or `dig` missing) |
 
 ### Dependencies
 

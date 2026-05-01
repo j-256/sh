@@ -128,19 +128,37 @@ test_missing_jq() {
     env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR" \
         /bin/bash "$UNDER_TEST" "token123" "example.com" >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
-    assert_rc "missing jq" 1
-    assert_err_contains "jq error message" "ERROR: \`jq\` is required"
+    assert_rc "missing jq" 3
+    assert_err_contains "jq error message" "jq is required"
+}
+
+test_missing_curl() {
+    rm -f "$SHIM_DIR/curl"
+    env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR" \
+        /bin/bash "$UNDER_TEST" "token123" "example.com" >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
+    printf '%s\n' "$?" > "$TEST_DIR/rc"
+    assert_rc "missing curl" 3
+    assert_err_contains "curl error message" "curl is required"
+}
+
+test_missing_dig() {
+    rm -f "$SHIM_DIR/dig"
+    env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR" \
+        /bin/bash "$UNDER_TEST" "token123" "example.com" >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
+    printf '%s\n' "$?" > "$TEST_DIR/rc"
+    assert_rc "missing dig" 3
+    assert_err_contains "dig error message" "dig is required"
 }
 
 test_missing_api_token() {
     run_script
-    assert_rc "missing token" 1
+    assert_rc "missing token" 2
     assert_err_contains "token error" "must provide an API bearer token"
 }
 
 test_missing_domain() {
     run_script "token123"
-    assert_rc "missing domain" 1
+    assert_rc "missing domain" 2
     assert_err_contains "domain error" "must provide a domain name"
 }
 

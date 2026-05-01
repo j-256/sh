@@ -41,6 +41,12 @@ _cf_ddns() {
         echo "  -h, --help   Show this help message"
         echo "ENVIRONMENT"
         echo "  DDNS_DEBUG   Set to any value to enable verbose curl/debug output"
+        echo "EXIT STATUS"
+        echo "  0  Success (DNS already correct or successfully updated)"
+        echo "  1  Runtime failure (IP detection failed, API returned unexpected JSON,"
+        echo "     no zone for domain)"
+        echo "  2  Usage error (missing API token or domain)"
+        echo "  3  Dependency error (curl, jq, or dig missing)"
         echo "DEPENDENCIES"
         echo "  curl, jq, dig"
         echo "EXTERNAL SERVICES"
@@ -56,15 +62,26 @@ _cf_ddns() {
         -h|--help) _show_help; return 0 ;;
     esac
 
-    # Check for jq dependency
-    if ! command -v jq >/dev/null 2>&1; then
-        echo "ERROR: \`jq\` is required" >&2
-        return 1
-    fi
+    # Check dependencies (before _error is defined, so shape the prefix manually)
+    local dep
+    for dep in jq curl dig; do
+        if ! command -v "$dep" >/dev/null 2>&1; then
+            echo "[$SCRIPT_NAME] ERROR: $dep is required" >&2
+            return 3
+        fi
+    done
 
     #/# Script Parameters #\#
-    local api_token="${1:?"must provide an API bearer token"}" && shift
-    local domain="${1:?"must provide a domain name"}" && shift
+    if [ -z "${1:-}" ]; then
+        echo "[$SCRIPT_NAME] ERROR: must provide an API bearer token. Run \`$SCRIPT_NAME -h\` for usage." >&2
+        return 2
+    fi
+    local api_token="$1"; shift
+    if [ -z "${1:-}" ]; then
+        echo "[$SCRIPT_NAME] ERROR: must provide a domain name. Run \`$SCRIPT_NAME -h\` for usage." >&2
+        return 2
+    fi
+    local domain="$1"; shift
     #local ip_addresses=("$@")
     #\# #/#
 
