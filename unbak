@@ -48,6 +48,10 @@ _unbak() {
         echo "  -v, --verbose      Print filenames as they are restored"
         echo "  -d, --dry-run      Simulate actions without making changes"
         echo "  -h, --help         Show this help message"
+        echo "EXIT STATUS"
+        echo "  0  Success"
+        echo "  1  Runtime failure (source file missing, destination exists, mv failed)"
+        echo "  2  Usage error (illegal option)"
     }
 
     # Return true if verbose flag is set.
@@ -142,7 +146,7 @@ _unbak() {
                 ;;
             -*)
                 echo "$SCRIPT_NAME: illegal option -- $1" >&2
-                return 1
+                return 2
                 ;;
             *)
                 args+=("$1")

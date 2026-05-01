@@ -62,7 +62,7 @@ test_no_args() {
 
 test_illegal_option() {
     run_script -x
-    assert_rc "illegal option" 1
+    assert_rc "illegal option" 2
     assert_err_contains "illegal option message" "illegal option"
 }
 

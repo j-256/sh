@@ -75,7 +75,8 @@ unbak: report.pdf: File already exists, skipping
 | Code | Meaning |
 |---|---|
 | 0 | Success |
-| 1 | File not found or destination already exists |
+| 1 | Runtime failure (source file missing, destination exists, `mv` failed) |
+| 2 | Usage error (illegal option) |
 
 ### Behavior
 
