@@ -86,10 +86,9 @@ The `<name>` element comes from the cartridge directory name. The nature (`beehi
 
 | Code | Meaning |
 |---|---|
-| 0 | Success (all `.project` files created) |
-| 1 | Failure (at least one `.project` file could not be written) |
+| 0 | Always (see note below) |
 
-The script continues processing even if one cartridge fails -- you'll see an error on stderr but other cartridges still get their `.project` files.
+The script continues processing even if one cartridge fails. Per-file write errors are logged to stderr but do not affect the final exit code. If you need partial-failure detection, check stderr.
 
 ### Dependencies
 

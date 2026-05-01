@@ -29,6 +29,9 @@ _dot_project() {
         echo "  Each .project file uses the subdirectory name as the project name."
         echo "OPTIONS"
         echo "  -h, --help    Show this help message"
+        echo "EXIT STATUS"
+        echo "  0  Success (includes no-op cases: nonexistent dir, write errors"
+        echo "     per-file logged to stderr but not propagated)"
     }
 
     __unset() {
