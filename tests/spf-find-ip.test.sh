@@ -217,8 +217,8 @@ test_dig_not_found() {
     env PATH="$SHIM_DIR" TEST_DIR="$TEST_DIR" \
         /bin/bash "$UNDER_TEST" example.com 1.2.3.4 >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
-    assert_rc "dig missing still runs" 0
-    assert_err_contains "dig command fails" "command not found"
+    assert_rc "dig missing exits 3" 3
+    assert_err_contains "dig error" "dig is required"
 }
 
 # --- run ---

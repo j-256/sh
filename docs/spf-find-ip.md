@@ -86,8 +86,9 @@ This says "IPs authorized by `_spf.google.com` are also authorized here." Mail s
 
 | Code | Meaning |
 |---|---|
-| `0` | IP found in SPF chain |
-| `1` | IP not found, or no SPF record exists |
+| `0` | Any lookup result (found, not found, or no SPF record -- distinguish via stdout) |
+| `2` | Usage error (missing domain or ip) |
+| `3` | Dependency error (`dig` missing) |
 
 ### Dependencies
 

@@ -75,6 +75,10 @@ _spf_find_ip() {
         echo "  ${s}domain${r}       Domain whose SPF record is the starting point"
         echo "  ${s}ip${r}           IP address to search for (literal or /32)"
         echo "  -h, --help   Show this help message"
+        echo "EXIT STATUS"
+        echo "  0  Success (found, not found, or no SPF record -- use stdout to distinguish)"
+        echo "  2  Usage error (missing domain or ip)"
+        echo "  3  Dependency error (dig missing)"
         echo "DEPENDENCIES"
         echo "  dig, tput"
         echo "CAVEATS"
@@ -97,6 +101,11 @@ _spf_find_ip() {
     case "$1" in
         -h|--help) _show_help; return 0 ;;
     esac
+
+    if ! command -v dig >/dev/null 2>&1; then
+        _error "dig is required"
+        return 3
+    fi
 
     local domain="$1"
     local ip="$2"
