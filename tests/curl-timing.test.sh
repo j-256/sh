@@ -36,13 +36,6 @@ case "$input" in
 esac
 SHIM
     chmod +x "$SHIM_DIR/bc"
-
-    # tput shim: no-op
-    cat > "$SHIM_DIR/tput" <<'SHIM'
-#!/bin/bash
-exit 0
-SHIM
-    chmod +x "$SHIM_DIR/tput"
 }
 
 # Override run_script to cd to TEST_DIR (curl-timing writes logs to CWD)

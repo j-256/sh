@@ -21,11 +21,11 @@ _curl_timing() {
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="curl-timing" ;; esac
 
-    _error() { echo "[$SCRIPT_NAME] ERROR: $*" >&2; }
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
 
     _show_help() {
-        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
-        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        local s; [ -t 1 ] && s=$'\033[4m'
+        local r; [ -t 1 ] && r=$'\033[24m'
         echo "NAME"
         echo "  $SCRIPT_NAME - time HTTP requests and report summary statistics"
         echo "SYNOPSIS"
@@ -83,7 +83,7 @@ _curl_timing() {
         while IFS= read -r line || [ -n "$line" ]; do numbers+=("$line"); done
 
         # Check for any non-digits (which would most likely be a decimal point) - allow spaces as the numbers are concatenated with spaces
-        grep -q '[^0-9 ]' <<<"${numbers[*]}" && { echo "Error: Integers only." >&2; return 1; }
+        grep -q '[^0-9 ]' <<<"${numbers[*]}" && { _error "Integers only"; return 1; }
         # If -n is provided, list the dataset first
         [ "$1" = "-n" ] && printf '%s, ' "${numbers[@]}" | sed 's/, $/\n/'
 
@@ -154,7 +154,7 @@ _curl_timing() {
         local c_question; c_question="$(_color black)"
         local c_equals;     c_equals="$(_color white)"
         local c_and;           c_and="$(_color black)"
-        local c_reset;       c_reset="$(tput sgr0 2>/dev/null || printf '\033[0m')"
+        local c_reset;       c_reset=$'\033[0m'
 
         local protocol="${url%%://*}"
         local url_no_protocol="${url#*://}"
@@ -211,31 +211,31 @@ _curl_timing() {
         case "$1" in
             -h|--help) _show_help; return 0 ;;
             -n|--num)
-                [ -n "${2-}" ] || { _error "--num requires a value"; return 2; }
+                [ -n "${2-}" ] || { _error "--num requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 num_requests="$2"; shift 2 ;;
             -w|--warmup)
-                [ -n "${2-}" ] || { _error "--warmup requires a value"; return 2; }
+                [ -n "${2-}" ] || { _error "--warmup requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 warmup="$2"; shift 2 ;;
             -s|--sleep)
-                [ -n "${2-}" ] || { _error "--sleep requires a value"; return 2; }
+                [ -n "${2-}" ] || { _error "--sleep requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 sleep_dur="$2"; shift 2 ;;
             -X|--method)
-                [ -n "${2-}" ] || { _error "--method requires a value"; return 2; }
+                [ -n "${2-}" ] || { _error "--method requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 method="$2"; method_set=1; shift 2 ;;
             -H|--header)
-                [ -n "${2-}" ] || { _error "--header requires a value"; return 2; }
+                [ -n "${2-}" ] || { _error "--header requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 headers+=("$2"); shift 2 ;;
             -d|--data)
-                [ -n "${2-}" ] || { _error "--data requires a value"; return 2; }
+                [ -n "${2-}" ] || { _error "--data requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 data="$2"; data_set=1; shift 2 ;;
             -A|--user-agent)
-                [ -n "${2-}" ] || { _error "--user-agent requires a value"; return 2; }
+                [ -n "${2-}" ] || { _error "--user-agent requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 user_agent="$2"; shift 2 ;;
             --no-save) save=""; shift ;;
             -q|--quiet) quiet=1; shift ;;
             --) shift; while [ "$#" -gt 0 ]; do urls+=("$1"); shift; done ;;
             -*)
-                _error "Unknown option: $1"
+                _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"
                 return 2 ;;
             *)
                 urls+=("$1"); shift ;;
@@ -243,15 +243,15 @@ _curl_timing() {
     done
 
     if [ "${#urls[@]}" -eq 0 ]; then
-        _error "At least one URL is required. Run with -h for usage."
+        _error "At least one URL is required. Run \`$SCRIPT_NAME -h\` for usage"
         return 2
     fi
 
     case "$num_requests" in
-        ''|*[!0-9]*) _error "--num must be a non-negative integer: '$num_requests'"; return 2 ;;
+        ''|*[!0-9]*) _error "Invalid --num '$num_requests' (must be a non-negative integer). Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
     esac
     case "$warmup" in
-        ''|*[!0-9]*) _error "--warmup must be a non-negative integer: '$warmup'"; return 2 ;;
+        ''|*[!0-9]*) _error "Invalid --warmup '$warmup' (must be a non-negative integer). Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
     esac
 
     if ! command -v curl >/dev/null 2>&1; then
