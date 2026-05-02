@@ -13,9 +13,15 @@ _stats() {
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="stats" ;; esac
 
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+
     _show_help() {
-        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
-        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        local s
+        local r
+        if [ -t 1 ]; then
+            s=$'\033[4m'
+            r=$'\033[24m'
+        fi
         echo "NAME"
         echo "  $SCRIPT_NAME - calculate statistics from a list of integers"
         echo "SYNOPSIS"
@@ -37,7 +43,7 @@ _stats() {
     }
 
     __unset() {
-        unset -f __unset _show_help
+        unset -f __unset _error _show_help
     }
     trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
@@ -46,7 +52,7 @@ _stats() {
     esac
 
     if ! command -v bc >/dev/null 2>&1; then
-        echo "[$SCRIPT_NAME] ERROR: bc is required" >&2
+        _error "bc is required"
         return 3
     fi
 
@@ -58,7 +64,7 @@ _stats() {
     done < <(tr -s '[:space:]' '\n')
 
     # Check for any non-digits (which would most likely be a decimal point) - allow spaces as the numbers are concatenated with spaces
-    grep -q '[^0-9 ]' <<<"${numbers[*]}" && { echo "[$SCRIPT_NAME] ERROR: Integers only." >&2; return 2; }
+    grep -q '[^0-9 ]' <<<"${numbers[*]}" && { _error "Integers only."; return 2; }
     # If -n is provided, list the dataset first
     [ "$1" = "-n" ] && printf '%s, ' "${numbers[@]}" | sed 's/, $/\n/'
 
