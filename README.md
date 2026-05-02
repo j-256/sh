@@ -18,30 +18,27 @@ A few that might be worth a look before you scroll the catalog. These are mostly
 - [`explode`](docs/explode.md?html) ([script](explode)) — move a directory's contents up one level after a nested-folder unzip
 
 ## Installation
-#### 3 options:
-1. To run from any folder, make the utility executable and move it to a folder in your `$PATH`:
-```sh
-$ chmod +x ~/Downloads/utility
-$ mv -v ~/Downloads/utility /usr/local/bin
-$ utility
-Utility output!
-```
 
-2. Otherwise, make it executable, put it where you want, then call it by path:
-```sh
-$ chmod +x ~/Downloads/utility
-$ mv -v ~/Downloads/utility /my/special/path/utility
-$ /my/special/path/utility
-Utility output!
-```
+The easiest way — pipe `get` to bash with the script names you want:
 
-3. If you don't want to make it executable or move it into your `$PATH`, you could just `source` it.  
-This may not be a viable option in the future, so using an executable is preferred.
-```sh
-# `.` == `source`, use either
-$ . /my/special/path/utility
-Utility output!
-```
+    curl -fsS toolio.sh/get | bash -s -- tsd pin-dns inflate
+
+Run with no args to see what's available:
+
+    curl -fsS toolio.sh/get | bash
+
+Scripts install to `~/.local/bin` by default; override with e.g. `INSTALL_DIR=~/bin`. See [`get`](docs/get.md) for the full reference.
+
+### Or, manually
+
+If you'd rather not pipe to bash:
+
+    curl -fsS toolio.sh/tsd -o ~/.local/bin/tsd
+    chmod +x ~/.local/bin/tsd
+
+Or source a script into your current shell (only some are designed to be sourced — see each script's doc):
+
+    . ~/.local/bin/prompt
 
 ## Notes
 macOS ships with an ancient (2007) version of Bash, but every script in this repo targets Bash 3.2, so they run on stock macOS without [Homebrew](https://brew.sh) or a shebang swap. The reason it's that old: Bash moved from GPLv2 to a license that demands more openness from distributors – _"GPLv3 is to Silicon Valley as garlic is to vampires"_. Without opening up their own software, Apple cannot distribute Bash 4.0+ with their OS, which is also why recent versions of macOS have `zsh` as the default interpreter/shell.  

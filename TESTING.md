@@ -4,7 +4,7 @@ Standards for test files in this repository.
 
 ## Principles
 
-- Every script gets a `<name>.test.sh` in `tests/` (alongside `test-helpers.sh` and `test-runner.sh`)
+- Every script gets a `<name>.test.sh` in the `tests/` directory (alongside `test-helpers.sh` and `test-runner.sh`)
 - Tests are self-contained, network-free, and runnable with bash 3.2+
 - No external dependencies beyond bash builtins and standard POSIX tools (mktemp, cat, mkdir, chmod, etc.)
 - All external commands the script-under-test calls (curl, dig, jq, etc.) are shimmed

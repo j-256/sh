@@ -2,7 +2,7 @@
 
 A mixed catalog of small shell utilities for everyday development, infrastructure, and command-line work.
 
-**Jump to:** [Shell scripting](#shell-scripting) · [Text & data](#text--data) · [Web & HTTP](#web--http) · [DNS & networking](#dns--networking) · [File operations](#file-operations) · [Security & auth](#security--auth) · [Git](#git) · [macOS](#macos) · [Salesforce B2C Commerce](#salesforce-b2c-commerce)
+**Jump to:** [Shell scripting](#shell-scripting) · [Text & data](#text--data) · [Web & HTTP](#web--http) · [DNS & networking](#dns--networking) · [File operations](#file-operations) · [Security & auth](#security--auth) · [Git](#git) · [macOS](#macos) · [Salesforce B2C Commerce](#salesforce-b2c-commerce) · [Meta](#meta)
 
 Each row's primary link opens the doc; the `script` link opens the raw script.
 
@@ -90,6 +90,12 @@ Each row's primary link opens the doc; the `script` link opens the raw script.
 | [`ods-usage`](docs/ods-usage.md?html) · [script](ods-usage) | Calculate On-Demand Sandbox credits used from an ODS API response |
 | [`gen-catalog`](docs/gen-catalog.md?html) · [script](gen-catalog) | Generate SFCC catalog XML (base products, variants, relationships) for seeding sandboxes or QA |
 | [`pwa-prereqs`](docs/pwa-prereqs.md?html) · [script](pwa-prereqs) | Check or install PWA Kit development prerequisites on macOS (Xcode CLT, Homebrew, nvm, Node LTS) |
+
+## Meta
+
+| Tool | Description |
+|------|-------------|
+| [`get`](docs/get.md?html) · [script](get) | Install scripts from this catalog into a directory on your $PATH |
 
 ---
 
