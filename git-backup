@@ -17,8 +17,8 @@ _git_backup() {
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="git-backup" ;; esac
 
     _show_help() {
-        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
-        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        local s; [ -t 1 ] && s=$'\033[4m'
+        local r; [ -t 1 ] && r=$'\033[24m'
         echo "NAME"
         echo "  $SCRIPT_NAME - back up git changes to a timestamped remote branch"
         echo "SYNOPSIS"
@@ -59,11 +59,9 @@ _git_backup() {
         echo "  them up periodically with: git push ${s}remote${r} --delete backup-YYYY-...."
     }
 
-    _failed() {
-        echo "ERROR: \`$1\` failed" >&2
-    }
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
 
-    _error() { echo "[$SCRIPT_NAME] ERROR: $*" >&2; }
+    _failed() { _error "\`$1\` failed"; }
 
     # Clean up inner functions on return
     __unset() {
@@ -80,7 +78,7 @@ _git_backup() {
             -n|--dry-run) dry_run=1; shift ;;
             --) shift; while [ $# -gt 0 ]; do positional+=("$1"); shift; done ;;
             -*)
-                _error "unknown option: $1. Run \`$SCRIPT_NAME -h\` for usage."
+                _error "Unknown option: $1. Run \`$SCRIPT_NAME -h\` for usage"
                 return 2
                 ;;
             *) positional+=("$1"); shift ;;
@@ -88,7 +86,7 @@ _git_backup() {
     done
 
     if [ "${#positional[@]}" -eq 0 ]; then
-        _error "no directory provided. Run \`$SCRIPT_NAME -h\` for usage."
+        _error "No directory provided. Run \`$SCRIPT_NAME -h\` for usage"
         return 2
     fi
 
@@ -120,7 +118,7 @@ _git_backup() {
 
     # Change to the repository directory
     if ! cd "$repo_dir"; then
-        echo "Failed to change to directory \"$repo_dir\"" >&2
+        _error "Failed to change to directory \"$repo_dir\""
         return 1
     fi
 
@@ -128,7 +126,7 @@ _git_backup() {
     # produces a raw git error that doesn't say which side (tooling or config)
     # is at fault.
     if ! git remote get-url "$remote" >/dev/null 2>&1; then
-        _error "remote '$remote' not configured in '$repo_dir'. Run \`$SCRIPT_NAME -h\` for usage."
+        _error "Remote '$remote' not configured in '$repo_dir'. Run \`$SCRIPT_NAME -h\` for usage"
         return 2
     fi
 
