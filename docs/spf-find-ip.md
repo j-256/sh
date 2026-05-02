@@ -93,6 +93,5 @@ This says "IPs authorized by `_spf.google.com` are also authorized here." Mail s
 ### Dependencies
 
 - `dig` (DNS lookup tool, part of BIND utilities)
-- `tput` (terminal formatting, used for highlighting the matched IP)
 
 Script uses Google DNS (8.8.8.8) for all lookups to ensure consistent results regardless of local resolver configuration.

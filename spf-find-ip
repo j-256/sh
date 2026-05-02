@@ -19,7 +19,7 @@ _spf_find_ip() {
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="spf-find-ip" ;; esac
 
-    _error() { echo "[$SCRIPT_NAME] ERROR: $*" >&2; }
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
 
     get_spf_record() {
         local domain="$1"
@@ -46,7 +46,7 @@ _spf_find_ip() {
                     # If target IP is present in the included SPF record, return to finish recursion
                     if echo "$included_record" | grep -q "$ip"; then
                         echo "IP $ip is included by: $include_domain"
-                        echo "${included_record/"$ip"/"$(tput setaf 1)$ip$(tput sgr0)"}"
+                        echo "${included_record/"$ip"/$'\033[31m'$ip$'\033[0m'}"
                         return 0
                     fi
                     # If not present, keep searching recursively
@@ -61,8 +61,8 @@ _spf_find_ip() {
     }
 
     _show_help() {
-        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
-        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        local s; [ -t 1 ] && s=$'\033[4m'
+        local r; [ -t 1 ] && r=$'\033[24m'
         echo "NAME"
         echo "  $SCRIPT_NAME - find an IP address in SPF DNS records"
         echo "SYNOPSIS"
@@ -81,7 +81,7 @@ _spf_find_ip() {
         echo "  2  Usage error (missing domain or ip)"
         echo "  3  Dependency error (dig missing)"
         echo "DEPENDENCIES"
-        echo "  dig, tput"
+        echo "  dig"
         echo "CAVEATS"
         echo "  - Only include: directives are followed; redirect= is not recursed"
         echo "    into (e.g. Gmail uses redirect=_spf.google.com, so this script"
@@ -112,11 +112,11 @@ _spf_find_ip() {
     local ip="$2"
 
     if [ -z "$domain" ]; then
-        _error "domain is required. Run \`$SCRIPT_NAME -h\` for usage."
+        _error "domain is required. Run \`$SCRIPT_NAME -h\` for usage"
         return 2
     fi
     if [ -z "$ip" ]; then
-        _error "ip is required. Run \`$SCRIPT_NAME -h\` for usage."
+        _error "ip is required. Run \`$SCRIPT_NAME -h\` for usage"
         return 2
     fi
 

@@ -80,17 +80,6 @@ esac
 exit 0
 SHIM
     chmod +x "$SHIM_DIR/dig"
-
-    # tput shim: used for color output
-    cat > "$SHIM_DIR/tput" <<'SHIM'
-#!/bin/bash
-case "$1" in
-    setaf) printf '[RED]' ;;
-    sgr0) printf '[RESET]' ;;
-esac
-exit 0
-SHIM
-    chmod +x "$SHIM_DIR/tput"
 }
 
 # --- test cases ---
