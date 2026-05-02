@@ -160,7 +160,7 @@ run_tests() {
     local root
     root="$(mktemp -d 2>/dev/null)" || root="$(mktemp -d -t test 2>/dev/null)"
     if [ ! -d "$root" ]; then
-        echo "[ERR] Failed to create temp directory" >&2
+        echo "[ERR][test-helpers] Failed to create temp directory" >&2
         exit 1
     fi
 
@@ -169,7 +169,7 @@ run_tests() {
     local tests
     tests="$(declare -F | awk '$2 == "-f" && $3 ~ /^test_/ {print $3}')"
     if [ -z "$tests" ]; then
-        echo "[ERR] No test_ functions found" >&2
+        echo "[ERR][test-helpers] No test_ functions found" >&2
         rm -rf "$root"
         exit 1
     fi
