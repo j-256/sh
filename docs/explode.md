@@ -44,7 +44,7 @@ README.md -> ./
 
 ```bash
 $ explode package-v1.2.3
-[explode] ERROR: Aborting -- the following items already exist in .:
+[ERR][explode] Aborting -- the following items already exist in .:
   README.md
 
 $ explode -f package-v1.2.3

@@ -198,7 +198,7 @@ test_verbose() {
 test_unknown_option() {
     run_script --unknown
     assert_rc "unknown option fails" 1
-    assert_err_contains "unknown option error" "Unknown option '--unknown'"
+    assert_err_contains "unknown option error" "Unknown argument '--unknown'"
 }
 
 test_multiple_dirs() {
