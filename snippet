@@ -25,11 +25,13 @@ _snippet() {
     local trim_first=0
     local trim_last=0
 
+    # Print error message to stderr
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
     # Print usage (help) info
     _show_help() {
         # Underline only if output is a terminal (not a pipe or file)
-        local s; [ -t 1 ] && s="$(tput smul)"
-        local r; [ -t 1 ] && r="$(tput rmul)"
+        local s; [ -t 1 ] && s=$'\033[4m'
+        local r; [ -t 1 ] && r=$'\033[24m'
         echo "Usage:"
         echo "  $SCRIPT_NAME -s ${s}pattern${r} [-e ${s}pattern${r}] [-f ${s}num${r}] [-l ${s}num${r}] [${s}file${r} ${s}...${r}]"
         echo "  $SCRIPT_NAME -s ${s}pattern${r} [-e ${s}pattern${r}] [-t ${s}num${r}] [${s}file${r} ${s}...${r}]"
@@ -75,7 +77,7 @@ _snippet() {
     }
     # Unset helper functions before returning
     __unset() {
-        unset -f __unset _show_help _dropfirst _droplast
+        unset -f __unset _error _show_help _dropfirst _droplast
     }
     trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
@@ -91,7 +93,7 @@ _snippet() {
             -s|--start|--start-pattern)
                 # Required value: Ensure $2 exists
                 if [ -z "$2" ]; then
-                    echo "[ERR] Missing value for '$1'." >&2
+                    _error "Missing value for '$1'. Run \`$SCRIPT_NAME -h\` for usage"
                     return 2
                 fi
                 start_pattern="$2"
@@ -100,7 +102,7 @@ _snippet() {
             -e|--end|--end-pattern)
                 # Required value: Ensure $2 exists
                 if [ -z "$2" ]; then
-                    echo "[ERR] Missing value for '$1'." >&2
+                    _error "Missing value for '$1'. Run \`$SCRIPT_NAME -h\` for usage"
                     return 2
                 fi
                 end_pattern="$2"
@@ -110,7 +112,7 @@ _snippet() {
             -f|--trim-first|--trim-start)
                 # Required value: Ensure $2 exists
                 if [ -z "$2" ]; then
-                    echo "[ERR] Missing value for '$1'." >&2
+                    _error "Missing value for '$1'. Run \`$SCRIPT_NAME -h\` for usage"
                     return 2
                 fi
                 trim_first="$2"
@@ -120,7 +122,7 @@ _snippet() {
             -l|--trim-last|--trim-end)
                 # Required value: Ensure $2 exists
                 if [ -z "$2" ]; then
-                    echo "[ERR] Missing value for '$1'." >&2
+                    _error "Missing value for '$1'. Run \`$SCRIPT_NAME -h\` for usage"
                     return 2
                 fi
                 trim_last="$2"
@@ -130,7 +132,7 @@ _snippet() {
             -t|--trim)
                 # Required value: Ensure $2 exists
                 if [ -z "$2" ]; then
-                    echo "[ERR] Missing value for '$1'." >&2
+                    _error "Missing value for '$1'. Run \`$SCRIPT_NAME -h\` for usage"
                     return 2
                 fi
                 trim_first="$2"
@@ -151,7 +153,7 @@ _snippet() {
                 ;;
             # Unknown option
             -*)
-                echo "[ERR] Unknown option '$1'." >&2
+                _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"
                 return 2
                 ;;
             # Positional argument
@@ -164,7 +166,7 @@ _snippet() {
 
     # Error if no start pattern provided
     if [ -z "$start_pattern" ]; then
-        echo "[ERR] Start pattern is required." >&2
+        _error "Start pattern is required. Run \`$SCRIPT_NAME -h\` for usage"
         return 2
     fi
 
