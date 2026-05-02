@@ -15,11 +15,11 @@ _pwa_prereqs() {
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="pwa-prereqs" ;; esac
 
-    _error() { echo "[$SCRIPT_NAME] ERROR: $*" >&2; }
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
 
     _show_help() {
-        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
-        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        local s; [ -t 1 ] && s=$'\033[4m'
+        local r; [ -t 1 ] && r=$'\033[24m'
         echo "NAME"
         echo "  $SCRIPT_NAME - check or install PWA development prerequisites"
         echo "SYNOPSIS"
@@ -65,11 +65,11 @@ _pwa_prereqs() {
             -h|--help) _show_help; return 0 ;;
             --install) mode="install"; shift ;;
             -*)
-                _error "unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage."
+                _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"
                 return 2
                 ;;
             *)
-                _error "unexpected argument '$1'. Run \`$SCRIPT_NAME -h\` for usage."
+                _error "Unexpected argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"
                 return 2
                 ;;
         esac
@@ -146,7 +146,7 @@ _pwa_prereqs() {
         echo "Installing Xcode Command Line Tools..."
         # Triggers Apple's GUI installer dialog. The command returns quickly;
         # the actual install happens asynchronously and requires user click-through.
-        xcode-select --install >/dev/null 2>&1 || true
+        xcode-select --install >/dev/null 2>&1 || :
         echo "A GUI installer was launched. Complete it, then re-run \`$SCRIPT_NAME --install\`."
         echo "--- FINISH xcode ---"
         return 1

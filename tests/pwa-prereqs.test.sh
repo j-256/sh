@@ -427,13 +427,13 @@ test_non_darwin_platform_rejected_install() {
 test_unknown_option() {
     run_script --bogus
     assert_rc "unknown option exits 2" 2
-    assert_err_contains "unknown error" "unknown argument"
+    assert_err_contains "unknown error" "Unknown argument"
 }
 
 test_unexpected_positional() {
     run_script somearg
     assert_rc "positional exits 2" 2
-    assert_err_contains "unexpected error" "unexpected argument"
+    assert_err_contains "unexpected error" "Unexpected argument"
 }
 
 # --- run ---
