@@ -41,13 +41,13 @@ test_missing_bc() {
 test_missing_target() {
     run_script 500G
     assert_rc "missing -t exits 2" 2
-    assert_err_contains "missing -t shows usage" "Usage: convert-size"
+    assert_err_contains "missing -t shows usage" "[ERR][convert-size] Must provide a target system and size"
 }
 
 test_missing_size() {
     run_script -t binary
     assert_rc "missing size exits 2" 2
-    assert_err_contains "missing size shows usage" "Usage: convert-size"
+    assert_err_contains "missing size shows usage" "[ERR][convert-size] Must provide a target system and size"
 }
 
 test_duplicate_to_option() {
@@ -119,7 +119,7 @@ test_invalid_unit_override() {
 test_invalid_target_system() {
     run_script -t foo 500G
     assert_rc "invalid target exits 2" 2
-    assert_err_contains "invalid target error" "Invalid target system specified"
+    assert_err_contains "invalid target error" "Invalid -t|--to 'foo'"
 }
 
 test_si_to_binary_gigabytes() {
