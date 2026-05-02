@@ -61,19 +61,19 @@ _tsd() {
             duration_explicit=true
             ;;
         -s|--sec|--seconds)
-            [ "$unit" ] && { _error "Unit is already set to $unit. Cannot specify multiple units"; return 2; }
+            [ "$unit" ] && { _error "Multiple units not allowed (already set to '$unit'). Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
             unit="s"
             ;;
         -m|--milli|--milliseconds)
-            [ "$unit" ] && { _error "Unit is already set to $unit. Cannot specify multiple units"; return 2; }
+            [ "$unit" ] && { _error "Multiple units not allowed (already set to '$unit'). Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
             unit="ms"
             ;;
         -u|--micro|--microseconds)
-            [ "$unit" ] && { _error "Unit is already set to $unit. Cannot specify multiple units"; return 2; }
+            [ "$unit" ] && { _error "Multiple units not allowed (already set to '$unit'). Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
             unit="us"
             ;;
         -n|--nano|--nanoseconds)
-            [ "$unit" ] && { _error "Unit is already set to $unit. Cannot specify multiple units"; return 2; }
+            [ "$unit" ] && { _error "Multiple units not allowed (already set to '$unit'). Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
             unit="ns"
             ;;
         #region help

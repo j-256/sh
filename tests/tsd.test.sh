@@ -107,7 +107,7 @@ test_multiple_positional() {
 test_multiple_units() {
     run_script 1234 -s -m
     assert_rc "multiple units exits 2" 2
-    assert_err_contains "multiple units error" "[ERR][tsd] Unit is already set to s. Cannot specify multiple units"
+    assert_err_contains "multiple units error" "[ERR][tsd] Multiple units not allowed"
 }
 
 test_unknown_option() {

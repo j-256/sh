@@ -55,7 +55,7 @@ $ ls
 report.pdf  report.pdf.bak
 
 $ unbak report.pdf.bak
-unbak: report.pdf: File already exists, skipping
+[ERR][unbak] report.pdf: File already exists, skipping
 ```
 
 ---
@@ -76,11 +76,11 @@ unbak: report.pdf: File already exists, skipping
 |---|---|
 | 0 | Success |
 | 1 | Runtime failure (source file missing, destination exists, `mv` failed) |
-| 2 | Usage error (illegal option) |
+| 2 | Usage error (unknown option) |
 
 ### Behavior
 
-- If the source `.bak` file doesn't exist, fails with `unbak: file: No such file`
-- If the destination (without `.bak`) already exists, skips with `unbak: file: File already exists, skipping`
+- If the source `.bak` file doesn't exist, fails with `[ERR][unbak] file: No such file`
+- If the destination (without `.bak`) already exists, skips with `[ERR][unbak] file: File already exists, skipping`
 - Restores backup chains recursively from oldest to newest — `file.bak.bak.bak` restores to `file.bak.bak`, then to `file.bak`, then to `file`
 - With multiple files, processes each in order; failure on one doesn't stop the rest
