@@ -38,6 +38,7 @@ _tsd() {
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="tsd" ;; esac
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
     local input
     local unit # Set to default value later, if still unset after processing arguments
     local digits
@@ -60,19 +61,19 @@ _tsd() {
             duration_explicit=true
             ;;
         -s|--sec|--seconds)
-            [ "$unit" ] && { echo "Error: Unit is already set to $unit. Cannot specify multiple units." >&2; return 2; }
+            [ "$unit" ] && { _error "Unit is already set to $unit. Cannot specify multiple units"; return 2; }
             unit="s"
             ;;
         -m|--milli|--milliseconds)
-            [ "$unit" ] && { echo "Error: Unit is already set to $unit. Cannot specify multiple units." >&2; return 2; }
+            [ "$unit" ] && { _error "Unit is already set to $unit. Cannot specify multiple units"; return 2; }
             unit="ms"
             ;;
         -u|--micro|--microseconds)
-            [ "$unit" ] && { echo "Error: Unit is already set to $unit. Cannot specify multiple units." >&2; return 2; }
+            [ "$unit" ] && { _error "Unit is already set to $unit. Cannot specify multiple units"; return 2; }
             unit="us"
             ;;
         -n|--nano|--nanoseconds)
-            [ "$unit" ] && { echo "Error: Unit is already set to $unit. Cannot specify multiple units." >&2; return 2; }
+            [ "$unit" ] && { _error "Unit is already set to $unit. Cannot specify multiple units"; return 2; }
             unit="ns"
             ;;
         #region help
@@ -124,7 +125,8 @@ _tsd() {
                 input="$1"
                 digits=${#input}
             else
-                echo "Unknown option or multiple positional arguments: $1" >&2 && return 2
+                _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"
+                return 2
             fi
             ;;
         esac
@@ -134,7 +136,7 @@ _tsd() {
 
     # If no timestamp/duration provided, return an error
     if [ -z "$input" ]; then
-        echo "Error: No input provided." >&2
+        _error "No input provided. Run \`$SCRIPT_NAME -h\` for usage"
         return 2
     fi
 
@@ -304,7 +306,7 @@ _tsd() {
 
 _tsd "$@"
 __tsd_rc=$?
-unset -f _tsd
+unset -f _tsd _error
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __tsd_rc; return $__tsd_rc"
 fi

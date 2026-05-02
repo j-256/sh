@@ -95,25 +95,25 @@ test_help_output() {
 test_no_input() {
     run_script
     assert_rc "no input exits 2" 2
-    assert_err_contains "no input error" "Error: No input provided."
+    assert_err_contains "no input error" "[ERR][tsd] No input provided. Run \`tsd -h\` for usage"
 }
 
 test_multiple_positional() {
     run_script 1234 5678
     assert_rc "multiple positional exits 2" 2
-    assert_err_contains "multiple positional error" "Unknown option or multiple positional arguments: 5678"
+    assert_err_contains "multiple positional error" "[ERR][tsd] Unknown argument '5678'. Run \`tsd -h\` for usage"
 }
 
 test_multiple_units() {
     run_script 1234 -s -m
     assert_rc "multiple units exits 2" 2
-    assert_err_contains "multiple units error" "Unit is already set to s. Cannot specify multiple units."
+    assert_err_contains "multiple units error" "[ERR][tsd] Unit is already set to s. Cannot specify multiple units"
 }
 
 test_unknown_option() {
     run_script 1234 --invalid
     assert_rc "unknown option exits 2" 2
-    assert_err_contains "unknown option error" "Unknown option or multiple positional arguments: --invalid"
+    assert_err_contains "unknown option error" "[ERR][tsd] Unknown argument '--invalid'. Run \`tsd -h\` for usage"
 }
 
 # --- timestamp tests ---

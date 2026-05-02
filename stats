@@ -16,12 +16,8 @@ _stats() {
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
 
     _show_help() {
-        local s
-        local r
-        if [ -t 1 ]; then
-            s=$'\033[4m'
-            r=$'\033[24m'
-        fi
+        local s; [ -t 1 ] && s=$'\033[4m'
+        local r; [ -t 1 ] && r=$'\033[24m'
         echo "NAME"
         echo "  $SCRIPT_NAME - calculate statistics from a list of integers"
         echo "SYNOPSIS"
@@ -64,7 +60,7 @@ _stats() {
     done < <(tr -s '[:space:]' '\n')
 
     # Check for any non-digits (which would most likely be a decimal point) - allow spaces as the numbers are concatenated with spaces
-    grep -q '[^0-9 ]' <<<"${numbers[*]}" && { _error "Integers only."; return 2; }
+    grep -q '[^0-9 ]' <<<"${numbers[*]}" && { _error "Integers only"; return 2; }
     # If -n is provided, list the dataset first
     [ "$1" = "-n" ] && printf '%s, ' "${numbers[@]}" | sed 's/, $/\n/'
 
