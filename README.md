@@ -17,9 +17,20 @@ A few that might be worth a look before you scroll the catalog. These are mostly
 - [`pin-dns`](docs/pin-dns.md?html) ([script](pin-dns)) — curl wrapper that overrides DNS without touching `/etc/hosts`
 - [`explode`](docs/explode.md?html) ([script](explode)) — move a directory's contents up one level after a nested-folder unzip
 
+## Usage
+
+Every script is a one-liner away — no install step. Pipe it straight into bash:
+
+    curl -fsS toolio.sh/tsd | bash -s -- 1800
+    curl -fsS toolio.sh/inflate | bash -s -- 150 1970
+
+The only exception is [`prompt`](docs/prompt.md?html), which must be sourced so it can set a variable in your shell. For a one-shot run without installing:
+
+    . <(curl -fsS toolio.sh/prompt) name "Name: "
+
 ## Installation
 
-The easiest way — pipe `get` to bash with the script names you want:
+To put scripts on your `$PATH` for repeated use, pipe [`get`](docs/get.md?html) to bash with the names you want:
 
     curl -fsS toolio.sh/get | bash -s -- tsd pin-dns inflate
 
@@ -35,10 +46,6 @@ If you'd rather not pipe to bash:
 
     curl -fsS toolio.sh/tsd -o ~/.local/bin/tsd
     chmod +x ~/.local/bin/tsd
-
-Or source a script into your current shell (only some are designed to be sourced — see each script's doc):
-
-    . ~/.local/bin/prompt
 
 ## Notes
 macOS ships with an ancient (2007) version of Bash, but every script in this repo targets Bash 3.2, so they run on stock macOS without [Homebrew](https://brew.sh) or a shebang swap. The reason it's that old: Bash moved from GPLv2 to a license that demands more openness from distributors – _"GPLv3 is to Silicon Valley as garlic is to vampires"_. Without opening up their own software, Apple cannot distribute Bash 4.0+ with their OS, which is also why recent versions of macOS have `zsh` as the default interpreter/shell.  
