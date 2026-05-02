@@ -19,7 +19,7 @@ _script_name() {
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
 
     _show_help() { ... }
-    _error() { echo "[$SCRIPT_NAME] ERROR: $*" >&2; }
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
 
     # --- cleanup trap (see below) ---
 
@@ -45,12 +45,12 @@ A plain comment block immediately after the shebang. Includes the script name, a
 
 ## --help
 
-Every script supports `-h` and `--help`. The help function uses `tput smul`/`rmul` for underlined parameter placeholders, guarded by `[ -t 1 ]` (only when stdout is a terminal):
+Every script supports `-h` and `--help`. The help function uses raw ANSI SGR escapes (`\033[4m`/`\033[24m`) for underlined parameter placeholders, guarded by `[ -t 1 ]` (only when stdout is a terminal):
 
 ```bash
 _show_help() {
-    local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
-    local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+    local s; [ -t 1 ] && s=$'\033[4m'
+    local r; [ -t 1 ] && r=$'\033[24m'
     echo "NAME"
     echo "  $SCRIPT_NAME - short description"
     echo "SYNOPSIS"
@@ -154,16 +154,75 @@ This ensures:
 
 ## Error Messages
 
-Standardize the shape of argument/usage errors so users always know where to get help:
+All diagnostic output follows a single canonical shape:
 
-```bash
-_error() { echo "[$SCRIPT_NAME] ERROR: $*" >&2; }
-_error "client_id is required. Run \`$SCRIPT_NAME -h\` for usage."
+```
+[ERR][$SCRIPT_NAME] message
+[WRN][$SCRIPT_NAME] message
+[INF][$SCRIPT_NAME] message
+[DBG][$SCRIPT_NAME] message
 ```
 
-Rendered: `[script-name] ERROR: client_id is required. Run \`script-name -h\` for usage.`
+All four helpers write to **stderr**. Program output stays on stdout.
 
-The "Run ... for usage" suffix is for argument/validation errors where the user needs to learn the interface. It is not required for runtime errors (e.g. "network request failed", "file not found") where usage isn't the issue.
+The severity token leads so `grep '^\[ERR\]'` is greppable across the repo without per-script awareness. Severity is the most actionable field when scanning output, matching the ordering in `journalctl` and most log viewers. Three-letter tokens also line up when levels mix, producing a tidy left column.
+
+### Level tokens
+
+- **ERR** -- something went wrong; the caller will get a non-zero exit
+- **WRN** -- surprising condition worth surfacing; the script continues
+- **INF** -- progress/status information
+- **DBG** -- verbose diagnostic output gated by a script-specific env var (e.g. `DDNS_DEBUG`)
+
+### Casing and punctuation
+
+- Capitalize prose-led messages (`"Invalid argument"`, `"Missing value"`, `"Unknown option"`).
+- Preserve literal casing for identifier-led messages (`"client_id is required"`, `"jq is required"`, `"$dir does not exist"`).
+- No trailing period on single-sentence messages. Matches Unix tradition (`git`, `cargo`, `brew`, `ls`).
+- Internal periods only where structurally required to separate sentences. The usage-hint pattern is the canonical case: `"... is required. Run \`$SCRIPT_NAME -h\` for usage"` -- the period closes the first sentence and the second has no trailing period. When a usage hint is appended, the message has exactly one internal period (between the two sentences) and no trailing period.
+
+### Usage hint
+
+Usage-class errors (missing arg, unknown option, bad flag value) append `. Run \`$SCRIPT_NAME -h\` for usage`. Runtime errors (network failed, file not found) and dependency errors (`jq is required`) do **not** -- usage isn't the issue.
+
+```bash
+_error "Must provide a domain name. Run \`$SCRIPT_NAME -h\` for usage"   # usage error
+_error "Failed to get device's IP"                                      # runtime error
+_error "jq is required"                                                 # dep error
+```
+
+### Helper presence
+
+- `_error` is required in every script.
+- `_warn`, `_info`, `_debug` are defined only when the script calls them. Bash errors loudly at the call site if a caller uses an undefined helper.
+- `__unset` lists exactly the helpers the script defines.
+
+### Default helper block (plain)
+
+```bash
+_error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+_warn()  { echo "[WRN][$SCRIPT_NAME] $*" >&2; }
+_info()  { echo "[INF][$SCRIPT_NAME] $*" >&2; }
+_debug() { echo "[DBG][$SCRIPT_NAME] $*" >&2; }
+```
+
+This is the shape for every script unless it has a specific need to disambiguate its own diagnostic output from external command output.
+
+### Colored variant
+
+A small number of scripts drive `curl`, `dig`, `openssl`, or spawn other tools whose output interleaves with theirs. These may use ANSI color to make diagnostic output visually distinct, guarded by a TTY check and respecting `NO_COLOR`:
+
+```bash
+_color() { [ -t 2 ] && [ -z "${NO_COLOR:-}" ] && printf '%s' "$1"; }
+_error() { printf '%s[ERR][%s] %s%s\n' "$(_color $'\033[31m')" "$SCRIPT_NAME" "$*" "$(_color $'\033[0m')" >&2; }
+_warn()  { printf '%s[WRN][%s] %s%s\n' "$(_color $'\033[33m')" "$SCRIPT_NAME" "$*" "$(_color $'\033[0m')" >&2; }
+_info()  { printf '%s[INF][%s] %s%s\n' "$(_color $'\033[2m')"  "$SCRIPT_NAME" "$*" "$(_color $'\033[0m')" >&2; }
+_debug() { printf '%s[DBG][%s] %s%s\n' "$(_color $'\033[36m')" "$SCRIPT_NAME" "$*" "$(_color $'\033[0m')" >&2; }
+```
+
+Palette: `[ERR]` red (`\033[31m`), `[WRN]` yellow (`\033[33m`), `[INF]` dim (`\033[2m`), `[DBG]` cyan (`\033[36m`). Palette is color-only -- no `\033[1m` (bold) or other weight changes. Mechanism: raw ANSI escapes, not `tput`. TTY guard uses `[ -t 2 ]` since helpers write to stderr. `NO_COLOR` respected per https://no-color.org/. `__unset` must include `_color`.
+
+Default to the plain variant. Only reach for the colored variant when output disambiguation genuinely matters.
 
 ## Dependencies
 
@@ -180,4 +239,11 @@ fi
 
 List non-universal tools in the `DEPENDENCIES` section of `--help` and the `.md`. **Do not** list near-universal POSIX utilities that are assumed present by the `#!/bin/bash` shebang: `sed`, `grep`, `tr`, `awk`, `tail`, `head`, `cut`, `find`, `printf`, `basename`, `dirname`, `cat`, `echo`, `mv`, `cp`, `rm`, `mkdir`, `rmdir`, `test`/`[`, `date`, `sort`, `uniq`. These are shebang-implied.
 
-Non-universal tools that **do** warrant listing: `jq`, `curl`, `openssl`, `dig`, `bc`, `ipcalc`, `fswatch`, `osascript`, `pbpaste`, `tput`, `stty`, `defaults`, `brew`, `chsh`, `git`, `sudo`, `base64`, and anything platform-specific.
+Non-universal tools that **do** warrant listing: `jq`, `curl`, `openssl`, `dig`, `bc`, `ipcalc`, `fswatch`, `osascript`, `pbpaste`, `stty`, `defaults`, `brew`, `chsh`, `git`, `sudo`, `base64`, and anything platform-specific.
+
+## Commit Style
+
+- **Subject format:** `Update <script> - <short description>` (leading verb "Update", no final period). For truly new additions, `Add <script> - <short description>`.
+- **Body:** bulleted, one bullet per concrete change. Focus on the "what" -- the rationale can go in the spec or commit message body paragraph if needed, but subject + bullets is usually enough.
+- **Scope:** one commit per script. The commit covers the script itself plus `docs/<name>.md` and `tests/<name>.test.sh` if those change. Cross-cutting edits (`CONVENTIONS.md`, `test-helpers.sh`, `test-runner.sh`) get their own commits.
+- **Exceptions:** small typo/formatting sweeps across many files may land as one commit when splitting would add no clarity.
