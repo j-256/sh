@@ -64,10 +64,10 @@ config.yaml.bak  config.yaml.bak.bak
 |---|---|
 | 0 | Success |
 | 1 | Runtime failure (source file missing, `mv` failed) |
-| 2 | Usage error (illegal option) |
+| 2 | Usage error (unknown option) |
 
 ### Behavior
 
-- If the target file doesn't exist, fails with `bak: file: No such file`
+- If the target file doesn't exist, fails with `[ERR][bak] file: No such file`
 - Backup rotation is recursive -- no limit on depth
 - With multiple files, processes each in order; failure on one doesn't stop the rest

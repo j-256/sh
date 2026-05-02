@@ -24,8 +24,8 @@ _bak() {
     # Print usage (help) info
     _show_help() {
         # Underline only if output is a terminal (not a pipe or file)
-        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
-        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        local s; [ -t 1 ] && s=$'\033[4m'
+        local r; [ -t 1 ] && r=$'\033[24m'
         echo "NAME"
         echo "  $SCRIPT_NAME - move ${s}file${r} to ${s}file.bak${r}"
         echo "SYNOPSIS"
@@ -38,8 +38,9 @@ _bak() {
         echo "EXIT STATUS"
         echo "  0  Success"
         echo "  1  Runtime failure (source file missing, mv failed)"
-        echo "  2  Usage error (illegal option)"
+        echo "  2  Usage error (unknown option)"
     }
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
 
     # True if verbose flag is set
     _verbose() { [ "$verbose" = true ]; }
@@ -56,7 +57,7 @@ _bak() {
             local src="$1"
             local dest="$2"
             if [ ! -e "$src" ]; then
-                echo "$SCRIPT_NAME: $src: No such file" >&2
+                _error "$src: No such file"
                 return 1
             fi
             if _dry_run; then
@@ -71,7 +72,7 @@ _bak() {
 
         # If neither the file nor its backup exists, error out
         if [ ! -e "$file" ] && [ ! -e "$file.bak" ]; then
-            echo "$SCRIPT_NAME: $file: No such file" >&2
+            _error "$file: No such file"
             return 1
         fi
 
@@ -86,7 +87,7 @@ _bak() {
 
     # Clean up inner functions when returning
     __unset() {
-        unset -f __unset _show_help _verbose _dry_run _backup _move_file
+        unset -f __unset _show_help _error _verbose _dry_run _backup _move_file
     }
     trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
@@ -115,7 +116,7 @@ _bak() {
                 ;;
             # Unknown option
             -*)
-                echo "$SCRIPT_NAME: illegal option -- $1" >&2
+                _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"
                 return 2
                 ;;
             # Positional argument

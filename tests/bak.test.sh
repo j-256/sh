@@ -84,7 +84,7 @@ test_no_args_shows_help() {
 test_file_not_exists() {
     run_script "$TEST_DIR/files/nonexistent"
     assert_rc "file not exists" 1
-    assert_err_contains "error message" "No such file"
+    assert_err_contains "error message" "[ERR][bak] $TEST_DIR/files/nonexistent: No such file"
 }
 
 test_basic_backup() {
@@ -176,13 +176,13 @@ test_multiple_files_one_missing() {
     echo "exists" > "$TEST_DIR/files/exists.txt"
     run_script "$TEST_DIR/files/exists.txt" "$TEST_DIR/files/missing.txt"
     assert_rc "one missing" 1
-    assert_err_contains "error for missing" "No such file"
+    assert_err_contains "error for missing" "[ERR][bak] $TEST_DIR/files/missing.txt: No such file"
 }
 
 test_unknown_option() {
     run_script --invalid
     assert_rc "unknown option" 2
-    assert_err_contains "illegal option" "illegal option"
+    assert_err_contains "unknown argument" "[ERR][bak] Unknown argument '--invalid'"
 }
 
 test_double_dash_boundary() {
@@ -204,7 +204,7 @@ test_backup_only_exists() {
     echo "backup only" > "$TEST_DIR/files/only.bak"
     run_script "$TEST_DIR/files/only"
     assert_rc "backup only" 1
-    assert_err_contains "error message" "No such file"
+    assert_err_contains "error message" "[ERR][bak] $TEST_DIR/files/only: No such file"
 }
 
 test_verbose_and_dry_run() {
