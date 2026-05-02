@@ -23,11 +23,11 @@ _inflate() {
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="inflate" ;; esac
 
-    _error() { echo "[$SCRIPT_NAME] ERROR: $*" >&2; }
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
 
     _show_help() {
-        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
-        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        local s; [ -t 1 ] && s=$'\033[4m'
+        local r; [ -t 1 ] && r=$'\033[24m'
         echo "NAME"
         echo "  $SCRIPT_NAME - adjust a historical USD amount for inflation"
         echo "SYNOPSIS"
@@ -72,8 +72,8 @@ _inflate() {
         return 3
     fi
 
-    [ "$1" ] || { _error "amount is required. Run \`$SCRIPT_NAME -h\` for usage."; return 2; }
-    [ "$2" ] || { _error "year is required. Run \`$SCRIPT_NAME -h\` for usage."; return 2; }
+    [ "$1" ] || { _error "amount is required. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+    [ "$2" ] || { _error "year is required. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
     local amount; amount="$(printf '%.2f' "$1")"
     local input_year="$2"
     local input_month="${3:-1}" # default to January
@@ -81,7 +81,7 @@ _inflate() {
     # Validate month range before network request - an invalid month produces a
     # confusing downstream error (blank month name in the failure message)
     if [ "$input_month" -lt 1 ] || [ "$input_month" -gt 12 ]; then
-        _error "month must be in range [1, 12] (got: $input_month). Run \`$SCRIPT_NAME -h\` for usage."
+        _error "month must be in range [1, 12] (got: $input_month). Run \`$SCRIPT_NAME -h\` for usage"
         return 2
     fi
     # Zero-pad month if necessary - printf is not good here because numbers with leading zeroes can be interpreted as octal
@@ -110,8 +110,8 @@ _inflate() {
     local result; result="$(curl -fsS "$CALCULATOR_URL?cost1=$amount&year1=$input_year$input_month&year2=$recent_year$recent_month" \
                             | sed -n '/id="answer"/{s/^.*\$//;s/<.*$//;s/,//g;p;}')"
     if [ -z "$result" ]; then
-        echo "Failed to convert \$$amount from $input_date_formatted to $recent_date_formatted" >&2
-        echo "BLS CPI data is available for years 1913 through the most recent month. Got: $input_year" >&2
+        _error "Failed to convert \$$amount from $input_date_formatted to $recent_date_formatted"
+        _error "BLS CPI data is available for years 1913 through the most recent month (got: $input_year)"
         return 1
     fi
 
