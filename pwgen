@@ -31,8 +31,8 @@ _pwgen() {
     # Helper functions for messages and help
     _show_help() {
         # Only underline if stdout is a terminal
-        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
-        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        local s; [ -t 1 ] && s=$'\033[4m'
+        local r; [ -t 1 ] && r=$'\033[24m'
         echo "NAME"
         echo "  $SCRIPT_NAME - generate a random password"
         echo "SYNOPSIS"
@@ -54,9 +54,8 @@ _pwgen() {
         echo "  5  Empty charset after applying exclusions"
         echo "  6  Invalid charset (malformed bracket expression or POSIX class)"
     }
-    _error() { echo "[ERR] $SCRIPT_NAME: $*" >&2; }
-    _warn()  { echo "[WRN] $SCRIPT_NAME: $*" >&2; }
-    _info()  { echo "[INF] $SCRIPT_NAME: $*"; }
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+    _warn()  { echo "[WRN][$SCRIPT_NAME] $*" >&2; }
 
     # Escapes forward slashes and ampersands with a backslash, ensuring `sed` sees a literal string
     _escape_sed() {
@@ -77,7 +76,7 @@ _pwgen() {
                 start_char="${start_char%-*}" # remove everything after the hyphen
             # Error out if there is no second argument and the first is not a hyphenated range
             else
-                _error "Range expected (e.g. \"b-d\" or \"b d\") but only one argument provided." >&2
+                _error "Range expected (e.g. \"b-d\" or \"b d\") but only one argument provided"
                 return 2
             fi
         fi
@@ -86,12 +85,12 @@ _pwgen() {
         local end_num; end_num="$(printf "%d" "'$end_char")"
         # If the end of the range comes before the start, warn and exit early
         if [ "$end_num" -lt "$start_num" ]; then
-            _warn "Range start is after end; nothing will be printed to stdout." >&2
+            _warn "Range start is after end; nothing will be printed to stdout"
             return 3
         fi
         # Exit early if not all requested characters are printable and single-byte
         if [ "$start_num" -lt 32 ] || [ "$start_num" -gt 126 ] || [ "$end_num" -lt 32 ] || [ "$end_num" -gt 126 ]; then
-            _warn "$start_num or $end_num is outside of printable ASCII range ([32,126]); nothing will be printed to stdout." >&2
+            _warn "$start_num or $end_num is outside of printable ASCII range ([32,126]); nothing will be printed to stdout"
             return 4
         fi
         local result
@@ -246,7 +245,7 @@ _pwgen() {
 
     # Clean up functions to avoid polluting global namespace
     __unset() {
-        unset -f __unset _show_help _error _warn _info _escape_sed _expand_range _expand_all_ranges _expand_brackets _expand_posix _validate_charset
+        unset -f __unset _show_help _error _warn _escape_sed _expand_range _expand_all_ranges _expand_brackets _expand_posix _validate_charset
     }
     trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
@@ -254,17 +253,17 @@ _pwgen() {
     while [ $# -gt 0 ]; do
         case "$1" in
             -l|--length)
-                [ "$2" ] || { _error "$1 specified but no length provided"; _show_help; return 2; }
+                [ "$2" ] || { _error "$1 specified but no length provided. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 length="$2"
                 shift 2
                 ;;
             -c|--charset)
-                [ "$2" ] || { _error "$1 specified but no charset provided"; _show_help; return 2; }
+                [ "$2" ] || { _error "$1 specified but no charset provided. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 charset="$2"
                 shift 2
                 ;;
             -e|--exclude|-x)
-                [ "$2" ] || { _error "$1 specified but no charset provided"; _show_help; return 2; }
+                [ "$2" ] || { _error "$1 specified but no charset provided. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 exclude="$2"
                 shift 2
                 ;;
@@ -273,8 +272,7 @@ _pwgen() {
                 return 0
                 ;;
             ""|*[!0-9]*) # Not an --option or a number
-                _error "Unknown option '$1'."
-                _show_help
+                _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"
                 return 2
                 ;;
             *) # Must be a number

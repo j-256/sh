@@ -59,32 +59,32 @@ test_help_output() {
 test_missing_length_value() {
     run_script --length
     assert_rc "missing length" 2
-    assert_err_contains "error message" "[ERR] pwgen: --length specified but no length provided"
+    assert_err_contains "error message" "[ERR][pwgen] --length specified but no length provided"
 }
 
 test_missing_charset_value() {
     run_script --charset
     assert_rc "missing charset" 2
-    assert_err_contains "error message" "[ERR] pwgen: --charset specified but no charset provided"
+    assert_err_contains "error message" "[ERR][pwgen] --charset specified but no charset provided"
 }
 
 test_missing_exclude_value() {
     run_script --exclude
     assert_rc "missing exclude" 2
-    assert_err_contains "error message" "[ERR] pwgen: --exclude specified but no charset provided"
+    assert_err_contains "error message" "[ERR][pwgen] --exclude specified but no charset provided"
 }
 
 test_unknown_option() {
     run_script --invalid
     assert_rc "unknown option" 2
-    assert_err_contains "error message" "[ERR] pwgen: Unknown option '--invalid'"
+    assert_err_contains "error message" "[ERR][pwgen] Unknown argument '--invalid'"
 }
 
 test_empty_charset_after_exclusions() {
     # Exclude all alphanumeric and punctuation
     run_script --charset "abc" --exclude "abc"
     assert_rc "empty charset" 5
-    assert_err_contains "error message" "[ERR] pwgen: Charset is empty after exclusions"
+    assert_err_contains "error message" "[ERR][pwgen] Charset is empty after exclusions"
 }
 
 test_default_length() {
@@ -285,13 +285,13 @@ test_help_short() {
 test_non_numeric_positional() {
     run_script abc
     assert_rc "non-numeric positional" 2
-    assert_err_contains "error for non-numeric" "Unknown option 'abc'"
+    assert_err_contains "error for non-numeric" "Unknown argument 'abc'"
 }
 
 test_empty_string_argument() {
     run_script ""
     assert_rc "empty string arg" 2
-    assert_err_contains "error for empty" "Unknown option ''"
+    assert_err_contains "error for empty" "Unknown argument ''"
 }
 
 test_literal_range_charset() {
