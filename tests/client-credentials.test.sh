@@ -106,7 +106,7 @@ test_missing_client_secret() {
 test_invalid_argument() {
     run_script --invalid-flag
     assert_rc "invalid arg exits 1" 1
-    assert_err_contains "invalid arg error" "Invalid argument: --invalid-flag"
+    assert_err_contains "invalid arg error" "Unknown argument '--invalid-flag'"
 }
 
 test_am_endpoint_basic() {
@@ -152,7 +152,7 @@ test_slas_missing_org_id() {
 test_invalid_endpoint() {
     run_script --endpoint invalid --client-id "client123" --client-secret "secret456"
     assert_rc "invalid endpoint exits 1" 1
-    assert_err_contains "invalid endpoint error" "Invalid endpoint type: invalid"
+    assert_err_contains "invalid endpoint error" "Invalid endpoint type: 'invalid'"
 }
 
 test_default_endpoint_am() {
@@ -217,7 +217,7 @@ test_env_print_out_alias() {
 test_env_print_invalid() {
     run_script --env invalid
     assert_rc "env invalid exits 1" 1
-    assert_err_contains "env invalid error" "Invalid argument for -E|--env: invalid"
+    assert_err_contains "env invalid error" "Invalid argument for -E|--env: 'invalid'"
 }
 
 test_env_print_no_arg() {
