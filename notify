@@ -25,19 +25,12 @@ _notify() {
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="notify" ;; esac
 
-    _is_tty() { [ -t 2 ]; }
-
-    _error() {
-        if _is_tty; then
-            printf '\033[1;31m%s\033[0m\n' "[ERR] $SCRIPT_NAME: $*" >&2
-        else
-            printf '%s\n' "[ERR] $SCRIPT_NAME: $*" >&2
-        fi
-    }
+    _color() { [ -t 2 ] && [ -z "${NO_COLOR:-}" ] && printf '%s' "$1"; }
+    _error() { printf '%s[ERR][%s] %s%s\n' "$(_color $'\033[31m')" "$SCRIPT_NAME" "$*" "$(_color $'\033[0m')" >&2; }
 
     _show_help() {
-        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
-        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        local s; [ -t 1 ] && s=$'\033[4m'
+        local r; [ -t 1 ] && r=$'\033[24m'
         echo "NAME"
         echo "  $SCRIPT_NAME - show a macOS notification via osascript"
         echo "SYNOPSIS"
@@ -97,7 +90,7 @@ _notify() {
     }
 
     __unset() {
-        unset -f _is_tty
+        unset -f _color
         unset -f _error
         unset -f _show_help
         unset -f _list_sounds
