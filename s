@@ -14,8 +14,8 @@ _s() {
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="s" ;; esac
 
     _show_help() {
-        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
-        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        local s; [ -t 1 ] && s=$'\033[4m'
+        local r; [ -t 1 ] && r=$'\033[24m'
         echo "NAME"
         echo "  $SCRIPT_NAME - sfcc-ci wrapper with shortcuts and enhanced output"
         echo "SYNOPSIS"
@@ -76,7 +76,9 @@ _s() {
             local exp; exp="$(sfcc-ci client:auth:token | jq -R -r 'split(".") | .[1] | @base64d | fromjson | .exp')"
             # TODO: Simplify date - use more format rather than sed
             local tz; tz="$(zdump /etc/localtime | sed 's/.* //g')"
-            echo "Expires at $(tput smul)$(TZ="/etc/localtime" date -r "$exp" -Iminutes | sed "s/.*T//; s/[-+][0-9]\{2\}:[0-9]\{2\}/ $tz/")$(tput rmul) ($(TZ=UTC date -u -r "$exp" -Iseconds | sed 's/T/ /; s/+00:00/ UTC/'))"
+            local s; [ -t 1 ] && s=$'\033[4m'
+            local r; [ -t 1 ] && r=$'\033[24m'
+            echo "Expires at $s$(TZ="/etc/localtime" date -r "$exp" -Iminutes | sed "s/.*T//; s/[-+][0-9]\{2\}:[0-9]\{2\}/ $tz/")$r ($(TZ=UTC date -u -r "$exp" -Iseconds | sed 's/T/ /; s/+00:00/ UTC/'))"
         ;;
         # Get a single instance and print important fields in a human-readable format
         'sbx'|'sandbox'|'box')
