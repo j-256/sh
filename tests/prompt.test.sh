@@ -42,8 +42,8 @@ test_executed_rejected() {
     # Running prompt directly (not sourced) should fail with a clear error.
     run_script
     assert_rc "executed exits 2" 2
-    assert_err_contains "explains requirement" "must be sourced"
-    assert_err_contains "shows sourced syntax" ". prompt VAR"
+    assert_err_contains "explains requirement" "Must be sourced"
+    assert_err_contains "refers to help" "Run \`prompt -h\` for usage"
 }
 
 test_executed_help_long() {

@@ -50,7 +50,7 @@ EXIT STATUS
   0  Success
   2  Usage error (script was executed rather than sourced)
 DEPENDENCIES
-  tput, stty
+  stty
 PROMPT_HELP
         unset _SCRIPT_NAME
         exit 0
@@ -62,11 +62,10 @@ esac
 # "file" when sourced by zsh. Either indicates a sourced context.
 _basename="${0##*'/'}"
 if { [ "$BASH_VERSION" ] && [ "${_basename#'-'}" != "bash" ]; } || { [ "$ZSH_VERSION" ] && [ "${ZSH_EVAL_CONTEXT#*"file"}" = "$ZSH_EVAL_CONTEXT" ]; }; then
-    printf '%s\n' \
-        "$_basename: must be sourced, not executed." \
-        "Try: . $_basename VAR \"Prompt text: \" [default] [placeholder]" \
-        "     . $_basename --help" >&2
-    unset _basename
+    _SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "$_SCRIPT_NAME" in ""|bash|sh|zsh|dash) _SCRIPT_NAME="prompt" ;; esac
+    echo "[ERR][$_SCRIPT_NAME] Must be sourced, not executed. Run \`$_SCRIPT_NAME -h\` for usage" >&2
+    unset _basename _SCRIPT_NAME
     exit 2
 fi
 unset _basename
@@ -77,8 +76,8 @@ _prompt() {
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="prompt" ;; esac
 
     _show_help() {
-        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
-        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        local s; [ -t 1 ] && s=$'\033[4m' || s=""
+        local r; [ -t 1 ] && r=$'\033[24m' || r=""
         echo "NAME"
         echo "  $SCRIPT_NAME - interactive prompt with default value and placeholder"
         echo "SYNOPSIS"
@@ -104,7 +103,7 @@ _prompt() {
         echo "  0  Success"
         echo "  2  Usage error (script was executed rather than sourced)"
         echo "DEPENDENCIES"
-        echo "  tput, stty"
+        echo "  stty"
     }
 
     # _saved_stty is captured later, after we confirm we're on a TTY. The restore
@@ -169,7 +168,7 @@ _prompt() {
 
     # Render prompt + gray placeholder, then move cursor back to the end of the prompt text.
     printf "%s\033[90m%s\033[0m" "$PROMPT" "$PLACEHOLDER"
-    [ ${#PLACEHOLDER} -ne 0 ] && tput cub ${#PLACEHOLDER}
+    [ ${#PLACEHOLDER} -ne 0 ] && printf '\033[%dD' "${#PLACEHOLDER}"
 
     local _input=""
     local _ch
@@ -200,7 +199,7 @@ _prompt() {
             *)
                 # First printable keypress: clear the gray placeholder.
                 if [ "$_placeholder_cleared" -eq 0 ] && [ ${#PLACEHOLDER} -ne 0 ]; then
-                    tput el
+                    printf '\033[K'
                     _placeholder_cleared=1
                 fi
                 _input+="$_ch"
