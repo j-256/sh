@@ -93,7 +93,7 @@ The bar width is clamped to fit the terminal so the line never wraps and breaks 
 
 Fixed overhead is 8 characters (`[`, `] `, and `%3d%%`), so a 50-character bar setting on an 80-column terminal will be honored, but on a 40-column terminal it will be reduced to 32 characters.
 
-Width detection uses `stty`, then `tput`, then `$COLUMNS`, falling back to 80.
+Width detection uses `stty`, then `$COLUMNS`, falling back to 80.
 
 ---
 
@@ -120,7 +120,6 @@ Width detection uses `stty`, then `tput`, then `$COLUMNS`, falling back to 80.
 ### Dependencies
 
 - `stty` (optional, for terminal width detection)
-- `tput` (optional, for terminal width detection)
 
 ### Behavior
 

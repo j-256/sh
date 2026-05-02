@@ -25,9 +25,11 @@ _progress() {
     local interactive=false
     local out_mode="auto" # auto (prefer stderr), stderr, stdout
 
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+
     _show_help() {
-        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
-        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        local s; [ -t 1 ] && s=$'\033[4m' || s=""
+        local r; [ -t 1 ] && r=$'\033[24m' || r=""
         echo "NAME"
         echo "  $SCRIPT_NAME - render a single-line progress bar with percentage completion"
         echo "SYNOPSIS"
@@ -42,7 +44,7 @@ _progress() {
         echo ""
         echo "  The bar width is automatically clamped to fit the terminal so the"
         echo "  rendered line never wraps. Terminal width is detected in this order:"
-        echo "  stty size, tput cols, \$COLUMNS, falling back to 80 columns."
+        echo "  stty size, \$COLUMNS, falling back to 80 columns."
         echo "OPTIONS"
         echo "  CURRENT                   Current progress value (integer, clamped to 0..MAX)"
         echo "  MAX                       Maximum value representing 100% (positive integer)"
@@ -63,7 +65,7 @@ _progress() {
         echo "  0  Success"
         echo "  2  Usage error (missing/invalid arg, bad flag value)"
         echo "DEPENDENCIES"
-        echo "  stty, tput"
+        echo "  stty"
     }
 
     # Parse options
@@ -81,21 +83,21 @@ _progress() {
             ;;
             -w|--width)
                 # Width is the bar width, not the total printed line width
-                [ "$2" ] || { echo "Error: Missing value for width option." >&2; return 2; }
+                [ "$2" ] || { _error "Missing value for width option. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 bar_width="$2" && shift 2
             ;;
             -p|--progress-char)
-                [ "$2" ] || { echo "Error: Missing value for progress character option." >&2; return 2; }
+                [ "$2" ] || { _error "Missing value for progress character option. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 progress_char="$2" && shift 2
             ;;
             -r|--remaining-char)
-                [ "$2" ] || { echo "Error: Missing value for remaining character option." >&2; return 2; }
+                [ "$2" ] || { _error "Missing value for remaining character option. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 remaining_char="$2" && shift 2
             ;;
             *)
                 if [ -z "$current" ]; then current="$1"
                 elif [ -z "$max" ]; then max="$1"
-                else echo "Error: Too many positional arguments." >&2; return 2; fi
+                else _error "Too many positional arguments. Run \`$SCRIPT_NAME -h\` for usage"; return 2; fi
                 shift
             ;;
         esac
@@ -103,8 +105,7 @@ _progress() {
 
     # Validate required arguments
     if [ -z "$current" ] || [ -z "$max" ]; then
-        echo "Error: Missing required positional parameter(s)" >&2
-        echo "Try: progress --help" >&2
+        _error "Missing required positional parameter(s). Run \`$SCRIPT_NAME -h\` for usage"
         return 2
     fi
 
@@ -112,21 +113,21 @@ _progress() {
     # current is allowed to be any integer; it will be clamped into range below
     case "$current" in
         -[0-9]*|[0-9]*) ;;
-        *) echo "Error: current must be an integer" >&2; return 2 ;;
+        *) _error "current must be an integer"; return 2 ;;
     esac
     # max is a hard invariant: must be a positive integer
     case "$max" in
         [0-9]*)
-            [ "$max" -gt 0 ] || { echo "Error: max must be > 0" >&2; return 2; }
+            [ "$max" -gt 0 ] || { _error "max must be > 0"; return 2; }
         ;;
-        *) echo "Error: max must be a positive integer" >&2; return 2 ;;
+        *) _error "max must be a positive integer"; return 2 ;;
     esac
     # bar_width is a hard invariant: must be a positive integer
     case "$bar_width" in
         [0-9]*)
-            [ "$bar_width" -gt 0 ] || { echo "Error: width must be > 0" >&2; return 2; }
+            [ "$bar_width" -gt 0 ] || { _error "width must be > 0"; return 2; }
         ;;
-        *) echo "Error: width must be a positive integer" >&2; return 2 ;;
+        *) _error "width must be a positive integer"; return 2 ;;
     esac
 
     _select_out_fd() {
@@ -157,7 +158,7 @@ _progress() {
 
     _get_term_cols() {
         # Returns terminal column count (integer), falling back to 80
-        # Prefers stty against /dev/tty, then tput against /dev/tty, then $COLUMNS
+        # Prefers stty against /dev/tty, then $COLUMNS
         # /dev/tty uses the controlling terminal and avoids stdin/stdout redirection edge cases
         local cols=""
         local out=""
@@ -165,16 +166,6 @@ _progress() {
         if command -v stty >/dev/null 2>&1; then
             if out="$(stty size </dev/tty 2>/dev/null)"; then
                 cols="${out##* }"
-                case "$cols" in
-                    ''|*[!0-9]*) cols="" ;;
-                esac
-                [ "$cols" ] && { echo "$cols"; return 0; }
-            fi
-        fi
-
-        if command -v tput >/dev/null 2>&1; then
-            if out="$(tput cols </dev/tty 2>/dev/null)"; then
-                cols="$out"
                 case "$cols" in
                     ''|*[!0-9]*) cols="" ;;
                 esac
@@ -210,7 +201,7 @@ _progress() {
     }
 
     __unset() {
-        unset -f __unset _show_help _select_out_fd _is_tty_fd _get_term_cols _print_on_fd
+        unset -f __unset _error _show_help _select_out_fd _is_tty_fd _get_term_cols _print_on_fd
     }
     trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 

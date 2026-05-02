@@ -28,17 +28,6 @@ esac
 exit 0
 SHIM
     chmod +x "$SHIM_DIR/stty"
-
-    # tput shim: return deterministic column count
-    cat > "$SHIM_DIR/tput" <<'SHIM'
-#!/bin/bash
-case "$*" in
-    *cols*) echo "80" ;;
-    *) exit 1 ;;
-esac
-exit 0
-SHIM
-    chmod +x "$SHIM_DIR/tput"
 }
 
 # --- test cases ---
@@ -58,7 +47,7 @@ test_missing_current() {
     run_script
     assert_rc "missing current" 2
     assert_err_contains "missing param error" "Missing required positional parameter"
-    assert_err_contains "help hint" "Try: progress --help"
+    assert_err_contains "help hint" "Run \`progress -h\` for usage"
 }
 
 test_missing_max() {
@@ -94,7 +83,7 @@ test_max_negative() {
 test_width_missing_value() {
     run_script 50 100 --width
     assert_rc "width missing value" 2
-    assert_err_contains "width missing error" "Missing value for width option."
+    assert_err_contains "width missing error" "Missing value for width option"
 }
 
 test_width_zero() {
@@ -112,13 +101,13 @@ test_width_not_integer() {
 test_progress_char_missing_value() {
     run_script 50 100 --progress-char
     assert_rc "progress-char missing" 2
-    assert_err_contains "progress-char error" "Missing value for progress character option."
+    assert_err_contains "progress-char error" "Missing value for progress character option"
 }
 
 test_remaining_char_missing_value() {
     run_script 50 100 --remaining-char
     assert_rc "remaining-char missing" 2
-    assert_err_contains "remaining-char error" "Missing value for remaining character option."
+    assert_err_contains "remaining-char error" "Missing value for remaining character option"
 }
 
 test_too_many_args() {
