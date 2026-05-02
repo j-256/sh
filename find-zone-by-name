@@ -28,9 +28,11 @@ _find_zone_by_name() {
     local -r COUNT_HEADER_NAME="sfdc-pagination-result-count"
     local -r TOTAL_HEADER_NAME="sfdc-pagination-total-count"
 
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+
     _show_help() {
-        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
-        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        local s=$'\033[4m' r=$'\033[24m'
+        [ -t 1 ] || { s=''; r=''; }
         echo "NAME"
         echo "  $SCRIPT_NAME - Salesforce Commerce Cloud SCAPI helper for finding a CDN zone by name"
         echo "SYNOPSIS"
@@ -62,11 +64,10 @@ _find_zone_by_name() {
         echo "EXIT STATUS"
         echo "  0   Zone found and printed"
         echo "  1   No matching zone found, or API request failed"
-        echo "  2   Usage or argument error"
     }
 
     __unset() {
-        unset -f __unset _show_help
+        unset -f __unset _error _show_help
     }
     trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
@@ -88,7 +89,7 @@ _find_zone_by_name() {
             -h|--help)
                 _show_help
                 return 0;;
-            *) echo "Invalid option"; return 1;;
+            *) _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 1;;
         esac
     done
 
@@ -102,8 +103,7 @@ _find_zone_by_name() {
 
     # Check if any parameter is missing
     if [ "$missingParam" ]; then
-        echo "Error: Missing required option: $missingParam"
-        echo "Use '$SCRIPT_NAME --help' for usage information."
+        _error "Missing required option: $missingParam. Run \`$SCRIPT_NAME -h\` for usage"
         return 1
     fi
 
@@ -152,8 +152,8 @@ _find_zone_by_name() {
             # Calculate the next offset
             offset=$((offset + limit))
         else
-            echo "Reached the end of pagination without finding the requested zone."
-            echo "Searched for: $target"
+            _error "Reached the end of pagination without finding the requested zone"
+            _error "Searched for: $target"
             return 1
         fi
     done
