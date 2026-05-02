@@ -26,7 +26,7 @@ SCRIPTS=(
     bak cf-ddns cf-ips-subnets chrome-ua client-credentials
     colorize-url convert-size curl-timing dkim-pubkey dot-project
     dw-jwt explode find-zone-by-name gen-catalog generate-p12
-    git-add-nonsub git-backup httpcode inflate install-bash
+    get git-add-nonsub git-backup httpcode inflate install-bash
     notify ods-usage pin-dns pkce progress
     prompt propfind-p12 pwa-prereqs pwgen s
     screenshot-rename slow-server snippet spf-find-ip stats
