@@ -43,8 +43,10 @@ _install_bash() {
         echo "  curl, sudo, chsh, uname"
     }
 
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+
     __unset() {
-        unset -f __unset _show_help
+        unset -f __unset _show_help _error
     }
     trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
@@ -58,7 +60,7 @@ _install_bash() {
     # macOS-only check
     local os; os="$(uname -s)"
     if [ "$os" != "Darwin" ]; then
-        echo "$px ERROR: macOS only (detected: $os)" >&2
+        _error "macOS only (detected: $os)"
         return 2
     fi
 
@@ -69,7 +71,7 @@ _install_bash() {
         if /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; then
             echo "$px Installed Homebrew (brew)"
         else
-            echo "$px ERROR: Homebrew installation failed (\`/bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"\`)" >&2
+            _error "Homebrew installation failed (\`/bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"\`)"
             return 1
         fi
     fi
@@ -82,7 +84,7 @@ _install_bash() {
         elif [ -x "/usr/local/bin/brew" ]; then
             eval "$(/usr/local/bin/brew shellenv)"
         else
-            echo "$px ERROR: \`brew\` is not on PATH after install" >&2
+            _error "\`brew\` is not on PATH after install"
             return 1
         fi
     fi
@@ -91,14 +93,14 @@ _install_bash() {
     if brew install bash; then
         echo "$px Installed Bash via Homebrew (\`brew install bash\`)"
     else
-        echo "$px ERROR: Failed to install Bash via Homebrew" >&2
+        _error "Failed to install Bash via Homebrew"
         return 1
     fi
 
     # Resolve the actual bash install path dynamically (Intel vs Apple Silicon)
     local brew_prefix; brew_prefix="$(brew --prefix)"
     if [ -z "$brew_prefix" ]; then
-        echo "$px ERROR: Failed to resolve Homebrew prefix (\`brew --prefix\`)" >&2
+        _error "Failed to resolve Homebrew prefix (\`brew --prefix\`)"
         return 1
     fi
     local bash_path="$brew_prefix/bin/bash"
@@ -111,7 +113,7 @@ _install_bash() {
         if echo "$bash_path" | sudo tee -a "/etc/shells" >/dev/null; then
             echo "$px Added \"$bash_path\" to /etc/shells"
         else
-            echo "$px ERROR: Failed to add \"$bash_path\" to /etc/shells (\`echo \"$bash_path\" | sudo tee -a \"/etc/shells\" >/dev/null\`)" >&2
+            _error "Failed to add \"$bash_path\" to /etc/shells (\`echo \"$bash_path\" | sudo tee -a \"/etc/shells\" >/dev/null\`)"
             return 1
         fi
     fi
@@ -120,7 +122,7 @@ _install_bash() {
     if chsh -s "$bash_path"; then
         echo "$px Shell for $USER set to $bash_path"
     else
-        echo "$px ERROR: Failed to change user's shell (\`chsh -s $bash_path\`)" >&2
+        _error "Failed to change user's shell (\`chsh -s $bash_path\`)"
         return 1
     fi
 
@@ -131,7 +133,7 @@ _install_bash() {
         if printf '\n%s\n' "$shellenv" >>"$HOME/.bash_profile"; then
             echo "$px Added Homebrew environment setup to ~/.bash_profile (\`brew shellenv\`)"
         else
-            echo "$px ERROR: Failed to add \`brew shellenv\` output to ~/.bash_profile" >&2
+            _error "Failed to add \`brew shellenv\` output to ~/.bash_profile"
             return 1
         fi
     else

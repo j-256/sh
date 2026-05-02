@@ -288,7 +288,7 @@ test_homebrew_install_fails() {
     touch "$TEST_DIR/curl_fails"
     run_script
     assert_rc "homebrew install fails" 1
-    assert_err_contains "error message" "ERROR: Homebrew installation failed"
+    assert_err_contains "error message" "[ERR][install-bash] Homebrew installation failed"
 }
 
 test_brew_install_bash_fails() {
@@ -296,7 +296,7 @@ test_brew_install_bash_fails() {
     touch "$TEST_DIR/brew_install_fails"
     run_script
     assert_rc "brew install bash fails" 1
-    assert_err_contains "error message" "ERROR: Failed to install Bash via Homebrew"
+    assert_err_contains "error message" "[ERR][install-bash] Failed to install Bash via Homebrew"
 }
 
 test_shells_already_updated() {
@@ -315,7 +315,7 @@ test_sudo_tee_fails() {
     touch "$TEST_DIR/sudo_fails"
     run_script
     assert_rc "sudo fails" 1
-    assert_err_contains "sudo error" "ERROR: Failed to add"
+    assert_err_contains "sudo error" "[ERR][install-bash] Failed to add"
     assert_err_contains "sudo cmd shown" "sudo tee -a"
 }
 
@@ -325,7 +325,7 @@ test_chsh_fails() {
     touch "$TEST_DIR/chsh_fails"
     run_script
     assert_rc "chsh fails" 1
-    assert_err_contains "chsh error" "ERROR: Failed to change user's shell"
+    assert_err_contains "chsh error" "[ERR][install-bash] Failed to change user's shell"
 }
 
 test_bash_profile_append() {
@@ -355,7 +355,7 @@ test_bash_profile_append_fails() {
     chmod 000 "$TEST_DIR/home/.bash_profile"
     run_script
     assert_rc "append fails" 1
-    assert_err_contains "append error" "ERROR: Failed to add"
+    assert_err_contains "append error" "[ERR][install-bash] Failed to add"
     assert_err_contains "shellenv mentioned" "brew shellenv"
     chmod 644 "$TEST_DIR/home/.bash_profile"
 }
