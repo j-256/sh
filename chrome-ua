@@ -11,12 +11,12 @@ _chrome_ua() {
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="chrome-ua" ;; esac
 
-    _error() { echo "[$SCRIPT_NAME] ERROR: $*" >&2; }
-    _warn()  { echo "[$SCRIPT_NAME] WARN: $*" >&2; }
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+    _warn()  { echo "[WRN][$SCRIPT_NAME] $*" >&2; }
 
     _show_help() {
-        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
-        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        local s; [ -t 1 ] && s=$'\033[4m'
+        local r; [ -t 1 ] && r=$'\033[24m'
         echo "NAME"
         echo "  $SCRIPT_NAME - print a realistic Chrome User-Agent string"
         echo "SYNOPSIS"
@@ -120,7 +120,7 @@ _chrome_ua() {
             --platform)
                 shift
                 if [ $# -eq 0 ] || [ -z "$1" ]; then
-                    _error "--platform requires a value (mac|win|linux)"
+                    _error "--platform requires a value (mac|win|linux). Run \`$SCRIPT_NAME -h\` for usage"
                     return 2
                 fi
                 platform="$1"
@@ -133,7 +133,7 @@ _chrome_ua() {
             --app)
                 shift
                 if [ $# -eq 0 ] || [ -z "$1" ]; then
-                    _error "--app requires a path"
+                    _error "--app requires a path. Run \`$SCRIPT_NAME -h\` for usage"
                     return 2
                 fi
                 app="$1"
@@ -144,7 +144,7 @@ _chrome_ua() {
                 shift
                 ;;
             *)
-                _error "unknown argument '$1'"
+                _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"
                 return 2
                 ;;
         esac
@@ -153,7 +153,7 @@ _chrome_ua() {
     case "$platform" in
         mac|win|linux) ;;
         *)
-            _error "invalid --platform '$platform' (valid: mac|win|linux)"
+            _error "Invalid --platform '$platform' (valid: mac|win|linux). Run \`$SCRIPT_NAME -h\` for usage"
             return 2
             ;;
     esac
@@ -166,7 +166,7 @@ _chrome_ua() {
             _ua_for "$platform" "$major"
             return 0
         fi
-        _warn "failed to fetch latest Chrome version from Google's API; using pinned major=$fallback_major"
+        _warn "Failed to fetch latest Chrome version from Google's API; using pinned major=$fallback_major"
         _ua_for "$platform" "$fallback_major"
         return 0
     fi
@@ -182,20 +182,20 @@ _chrome_ua() {
             _ua_for "$platform" "$major"
             return 0
         fi
-        _warn "unable to read Chrome version from '$plist'"
+        _warn "Unable to read Chrome version from '$plist'"
     fi
 
     # Local read failed. Try network fallback unless env var blocks it.
     if [ -z "${CHROME_UA_OFFLINE:-}" ]; then
         if major="$(_fetch_latest_major "$platform")" && [ -n "$major" ]; then
-            _warn "local read failed; fetched latest Chrome major=$major from Google's API"
+            _warn "Local read failed; fetched latest Chrome major=$major from Google's API"
             _ua_for "$platform" "$major"
             return 0
         fi
     fi
 
     # Network also failed or blocked: pinned fallback.
-    _warn "using pinned fallback major=$fallback_major (update periodically)"
+    _warn "Using pinned fallback major=$fallback_major (update periodically)"
     _ua_for "$platform" "$fallback_major"
     return 0
 }

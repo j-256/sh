@@ -87,7 +87,7 @@ test_help_short_flag() {
 test_unknown_flag() {
     run_script --bogus
     assert_rc "unknown flag exits 2" 2
-    assert_err_contains "error names flag" "unknown argument '--bogus'"
+    assert_err_contains "error names flag" "Unknown argument '--bogus'"
 }
 
 test_app_requires_value() {
@@ -160,7 +160,7 @@ test_local_fails_auto_fetches_latest() {
     local curl_log; curl_log="$(cat "$TEST_DIR/curl.log" 2>/dev/null)"
     assert_contains "curl called" "$curl_log" "versionhistory.googleapis.com"
     assert_contains "mac platform requested" "$curl_log" "platforms/mac"
-    assert_err_contains "warns about network fallback" "local read failed"
+    assert_err_contains "warns about network fallback" "Local read failed"
     assert_stdout_contains "latest major from API" "Chrome/148.0.0.0"
 }
 
