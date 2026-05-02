@@ -68,13 +68,13 @@ test_help_short_flag() {
 test_no_args() {
     run_script
     assert_rc "no args exits 2" 2
-    assert_err_contains "no args error" "selector is required"
+    assert_err_contains "no args error" "Selector is required"
 }
 
 test_missing_domain() {
     run_script "dkim-selector"
     assert_rc "missing domain exits 2" 2
-    assert_err_contains "missing domain error" "domain is required"
+    assert_err_contains "missing domain error" "Domain is required"
 }
 
 test_basic_query() {
@@ -98,13 +98,13 @@ test_dig_invocation() {
 test_empty_dns_response() {
     run_script "empty" "example.com"
     assert_rc "empty response exits 1" 1
-    assert_err_contains "empty response error" "ERROR: DNS response empty"
+    assert_err_contains "empty response error" "[ERR][dkim-pubkey] DNS response empty"
 }
 
 test_empty_p_value() {
     run_script "empty-p" "example.com"
     assert_rc "empty p= exits 4 (domain-specific)" 4
-    assert_err_contains "empty p error" "record found but key is empty"
+    assert_err_contains "empty p error" "Record found but key is empty"
 }
 
 test_dig_missing() {

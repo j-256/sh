@@ -74,7 +74,7 @@ DKIM TXT records follow the format `"k=rsa; p=<base64-key>"` (sometimes with add
 ```
 $ dkim-pubkey nonexistent example.com
 $ dig +short TXT "nonexistent._domainkey.example.com"
-ERROR: DNS response empty
+[ERR][dkim-pubkey] DNS response empty
 ```
 
 This means either the selector doesn't exist, or the domain doesn't have DKIM configured. Check your email provider's documentation for the correct selector name -- common ones are `default`, `selector1`, `selector2`, `google`, `k1`, `s1`.

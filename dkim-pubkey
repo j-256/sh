@@ -14,9 +14,11 @@ _dkim_pubkey() {
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="dkim-pubkey" ;; esac
 
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+
     _show_help() {
-        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
-        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        local s; [ -t 1 ] && s=$'\033[4m'
+        local r; [ -t 1 ] && r=$'\033[24m'
         echo "NAME"
         echo "  $SCRIPT_NAME - print base64-encoded DKIM public key for a domain"
         echo "SYNOPSIS"
@@ -42,7 +44,7 @@ _dkim_pubkey() {
     }
 
     __unset() {
-        unset -f __unset _show_help
+        unset -f __unset _error _show_help
     }
     trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
@@ -54,16 +56,16 @@ _dkim_pubkey() {
     esac
 
     if ! command -v dig >/dev/null 2>&1; then
-        echo "[$SCRIPT_NAME] ERROR: dig is required" >&2
+        _error "dig is required"
         return 3
     fi
 
     if [ -z "${1:-}" ]; then
-        echo "[$SCRIPT_NAME] ERROR: selector is required. Run \`$SCRIPT_NAME -h\` for usage." >&2
+        _error "Selector is required. Run \`$SCRIPT_NAME -h\` for usage."
         return 2
     fi
     if [ -z "${2:-}" ]; then
-        echo "[$SCRIPT_NAME] ERROR: domain is required. Run \`$SCRIPT_NAME -h\` for usage." >&2
+        _error "Domain is required. Run \`$SCRIPT_NAME -h\` for usage."
         return 2
     fi
     local selector="$1"
@@ -72,14 +74,14 @@ _dkim_pubkey() {
     local dns_response; dns_response="$(dig +short TXT "$dns_hostname")"
     echo "\$ dig +short TXT \"$dns_hostname\"" >&2
     if [ -z "$dns_response" ]; then
-        echo "[$SCRIPT_NAME] ERROR: DNS response empty" >&2
+        _error "DNS response empty"
         return 1
     fi
     echo "$dns_response" >&2
     echo >&2
     local pubkey; pubkey="$(echo "$dns_response" | sed 's/^.*p=//; s/"$//; s/" "//g')"
     if [ -z "$pubkey" ]; then
-        echo "[$SCRIPT_NAME] ERROR: record found but key is empty (p= value missing)" >&2
+        _error "Record found but key is empty (p= value missing)"
         return 4
     fi
     echo "$pubkey"
