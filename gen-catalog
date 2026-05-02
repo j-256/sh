@@ -17,8 +17,8 @@ _gen_catalog() {
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="gen-catalog" ;; esac
 
     _show_help() {
-        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
-        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        local s; [ -t 1 ] && s=$'\033[4m'
+        local r; [ -t 1 ] && r=$'\033[24m'
         echo "NAME"
         echo "  $SCRIPT_NAME - generate SFCC catalog XML"
         echo "SYNOPSIS"
@@ -38,32 +38,34 @@ _gen_catalog() {
         echo "  2  Usage error (missing or non-positive-integer arg)"
     }
 
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+
     main() {
         local base_count="$1"
         local variants_per_base="$2"
         local catalog_id="$3"
 
         if [ ! "$base_count" ] || [ ! "$variants_per_base" ]; then
-            echo "Usage: $SCRIPT_NAME BASE_COUNT VARIANTS_PER_BASE [CATALOG_ID]" >&2
+            _error "Must provide BASE_COUNT and VARIANTS_PER_BASE. Run \`$SCRIPT_NAME -h\` for usage"
             return 2
         fi
 
         case "$base_count" in
             *[!0-9]*)
-                echo "BASE_COUNT must be a positive integer" >&2
+                _error "BASE_COUNT must be a positive integer"
                 return 2
                 ;;
         esac
 
         case "$variants_per_base" in
             *[!0-9]*)
-                echo "VARIANTS_PER_BASE must be a positive integer" >&2
+                _error "VARIANTS_PER_BASE must be a positive integer"
                 return 2
                 ;;
         esac
 
         if [ "$base_count" -le 0 ] || [ "$variants_per_base" -le 0 ]; then
-            echo "BASE_COUNT and VARIANTS_PER_BASE must be greater than zero" >&2
+            _error "BASE_COUNT and VARIANTS_PER_BASE must be greater than zero"
             return 2
         fi
 
@@ -158,7 +160,7 @@ _gen_catalog() {
     }
 
     __unset() {
-        unset -f __unset _show_help main print_header print_footer print_all_in_order _print_base _print_variants
+        unset -f __unset _show_help _error main print_header print_footer print_all_in_order _print_base _print_variants
     }
     trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 

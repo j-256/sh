@@ -30,13 +30,13 @@ test_help_short() {
 test_missing_all_args() {
     run_script
     assert_rc "no args exits 2" 2
-    assert_err_contains "usage message" "Usage: gen-catalog"
+    assert_err_contains "usage message" "Must provide BASE_COUNT and VARIANTS_PER_BASE"
 }
 
 test_missing_variants_per_base() {
     run_script 5
     assert_rc "missing second arg exits 2" 2
-    assert_err_contains "usage message" "Usage: gen-catalog"
+    assert_err_contains "usage message" "Must provide BASE_COUNT and VARIANTS_PER_BASE"
 }
 
 test_base_count_non_numeric() {
