@@ -62,25 +62,25 @@ test_help_short() {
 test_unknown_option() {
     run_script --unknown
     assert_rc "unknown exits 2" 2
-    assert_err_contains "unknown msg" "Unknown option: --unknown"
+    assert_err_contains "unknown msg" "[ERR][screenshot-rename] Unknown argument '--unknown'. Run \`screenshot-rename -h\` for usage"
 }
 
 test_unknown_short() {
     run_script -x
     assert_rc "unknown short exits 2" 2
-    assert_err_contains "unknown short msg" "Unknown option: -x"
+    assert_err_contains "unknown short msg" "[ERR][screenshot-rename] Unknown argument '-x'. Run \`screenshot-rename -h\` for usage"
 }
 
 test_unexpected_argument() {
     run_script positional
     assert_rc "unexpected exits 2" 2
-    assert_err_contains "unexpected msg" "Unexpected argument: positional"
+    assert_err_contains "unexpected msg" "[ERR][screenshot-rename] Unexpected argument 'positional'. Run \`screenshot-rename -h\` for usage"
 }
 
 test_utc_then_argument() {
     run_script --utc badarg
     assert_rc "utc arg exits 2" 2
-    assert_err_contains "utc arg msg" "Unexpected argument: badarg"
+    assert_err_contains "utc arg msg" "[ERR][screenshot-rename] Unexpected argument 'badarg'. Run \`screenshot-rename -h\` for usage"
 }
 
 test_fswatch_missing() {
@@ -90,7 +90,7 @@ test_fswatch_missing() {
         /bin/bash "$UNDER_TEST" >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
     assert_rc "no fswatch exits 3" 3
-    assert_err_contains "no fswatch msg" "fswatch is required"
+    assert_err_contains "no fswatch msg" "[ERR][screenshot-rename] fswatch is required"
 }
 
 test_fswatch_after_utc() {
@@ -100,7 +100,7 @@ test_fswatch_after_utc() {
         /bin/bash "$UNDER_TEST" --utc >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
     assert_rc "no fswatch utc exits 3" 3
-    assert_err_contains "no fswatch utc msg" "fswatch is required"
+    assert_err_contains "no fswatch utc msg" "[ERR][screenshot-rename] fswatch is required"
 }
 
 test_double_dash() {
@@ -162,7 +162,7 @@ test_path_equals_form() {
 test_path_missing_value() {
     run_script --path
     assert_rc "missing path value exits 2" 2
-    assert_err_contains "path err msg" "--path requires a directory"
+    assert_err_contains "path err msg" "[ERR][screenshot-rename] --path requires a directory. Run \`screenshot-rename -h\` for usage"
 }
 
 test_format_flag_accepted() {
@@ -176,7 +176,7 @@ test_format_flag_accepted() {
 test_format_missing_value() {
     run_script --format
     assert_rc "missing format value exits 2" 2
-    assert_err_contains "format err msg" "--format requires a strftime pattern"
+    assert_err_contains "format err msg" "[ERR][screenshot-rename] --format requires a strftime pattern. Run \`screenshot-rename -h\` for usage"
 }
 
 # --- run ---
