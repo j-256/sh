@@ -89,7 +89,7 @@ test_missing_jq() {
         /bin/bash "$UNDER_TEST" 200 >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
     assert_rc "missing jq exits 3" 3
-    assert_err_contains "missing jq error" "jq is required"
+    assert_err_contains "missing jq error" "[ERR][httpcode] jq is required"
     assert_err_contains "missing jq suggest install" "Homebrew"
 }
 
@@ -122,14 +122,14 @@ test_invalid_status_code() {
     run_script 999
     assert_rc "999 exits 2" 2
     # Unknown codes now fail loudly with an error to stderr
-    assert_err_contains "999 error message" "unknown or unsupported HTTP status code"
+    assert_err_contains "999 error message" "[ERR][httpcode] Unknown or unsupported HTTP status code"
 }
 
 test_no_arguments() {
     run_script
     assert_rc "no args exits 2" 2
     # No args now fails with a clear required-arg error
-    assert_err_contains "no args error message" "status code is required"
+    assert_err_contains "no args error message" "[ERR][httpcode] Status code is required"
 }
 
 test_source_mode_help() {
