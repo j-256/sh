@@ -36,6 +36,7 @@ _tsd() {
     # In this script we use `us` to get close enough, as ms is obviously taken by milliseconds
 
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="tsd" ;; esac
     local input
     local unit # Set to default value later, if still unset after processing arguments

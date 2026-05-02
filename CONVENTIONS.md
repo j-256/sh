@@ -80,17 +80,25 @@ Heredocs: prefer unquoted delimiter (`<<EOF`) so `$SCRIPT_NAME` expands. Quoted-
 
 Edge case: `basename "${BASH_SOURCE[0]}"` resolves to the file the function was *defined* in. For a standalone script, that's the script's filename (correct). But a function pasted into `~/.bash_profile` will identify itself as `.bash_profile` in help and error output, which is wrong. If a snippet is meant to be sourced into a dotfile, hardcode `local SCRIPT_NAME="<func_name>"` in that copy.
 
-Pipe invocation (`curl -s https://toolio.sh/foo | bash`) is another edge case: the script is delivered on stdin with no filename anywhere, so `${BASH_SOURCE[0]}` resolves to the interpreter name (`bash`) inside the function and is empty at top level. `$0` is the interpreter name. There's no runtime signal to recover the original name from, so scripts hardcode a fallback:
+Pipe/procsub invocation is another edge case with no real filename. Four shapes, all of which scripts need to survive:
+
+- `curl -s https://toolio.sh/foo | bash` — stdin pipe. `${BASH_SOURCE[0]}` is the interpreter name (`bash`) inside the function and empty at top level.
+- `bash <(curl -s https://toolio.sh/foo)` — process substitution, executed. `${BASH_SOURCE[0]}` is `/dev/fd/N` (basename: a digit).
+- `. <(curl -s https://toolio.sh/foo)` — process substitution, sourced. Same `/dev/fd/N` shape.
+- `cat foo | bash -c '. /dev/stdin'` — source via `/dev/stdin`. `${BASH_SOURCE[0]}` is `/dev/stdin` (basename: `stdin`).
+
+There's no runtime signal to recover the original name from in any of these, so scripts hardcode a fallback. The fallback is two-stage: first wipe `SCRIPT_NAME` if the source path is a `/dev/*` or `/proc/*` pseudo-file (procsub, `/dev/stdin`), then apply the interpreter-name/empty-string fallback (stdin-pipe):
 
 ```bash
 _foo() {
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="foo" ;; esac
     ...
 }
 ```
 
-This preserves the rename/symlink tracking for real-file invocations; only the undetectable pipe case falls back to the canonical name. The canonical name is the one non-user-visible place besides the header comment where the literal filename appears.
+The path-based pre-check is deliberate: matching on the full path (`/dev/*`) rather than the basename (which could be `63`, `stdin`, etc.) avoids fragile globs that could misfire on legitimate filenames starting with a digit or literally named `stdin`. The post-basename case only handles the stdin-pipe shape, where basename is `bash` or empty. Real-file invocations pass through both cases untouched, so rename/symlink tracking still works. The canonical name is the one non-user-visible place besides the header comment where the literal filename appears.
 
 ## Cleanup Trap
 

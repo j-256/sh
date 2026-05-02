@@ -12,6 +12,7 @@
 
 _cf_ddns() {
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="cf-ddns" ;; esac
     local -r API_VERSION="v4"
     local -r API_BASE="https://api.cloudflare.com/client/$API_VERSION"

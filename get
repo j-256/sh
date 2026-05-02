@@ -14,6 +14,7 @@ _get() {
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     # When piped via `curl ... | bash`, BASH_SOURCE[0] is empty or "bash",
     # so basename returns "bash". Fall back to the canonical name.
+    case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="get" ;; esac
 
     _show_help() {

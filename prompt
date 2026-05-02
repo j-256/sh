@@ -17,6 +17,7 @@
 case "$1" in
     -h|--help)
         _SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+        case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) _SCRIPT_NAME="" ;; esac
         case "$_SCRIPT_NAME" in ""|bash|sh|zsh|dash) _SCRIPT_NAME="prompt" ;; esac
         cat <<PROMPT_HELP
 NAME
@@ -72,6 +73,7 @@ unset _basename
 
 _prompt() {
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="prompt" ;; esac
 
     _show_help() {
