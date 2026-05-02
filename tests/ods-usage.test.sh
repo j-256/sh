@@ -73,17 +73,16 @@ exit 0
 SHIM
     chmod +x "$SHIM_DIR/pbpaste"
 
-    # tput shim: returns underline codes unless disabled
-    cat > "$SHIM_DIR/tput" <<'SHIM'
+    # stty shim: return deterministic terminal size (rows cols)
+    cat > "$SHIM_DIR/stty" <<'SHIM'
 #!/bin/bash
-case "$1" in
-    smul) [ -f "$TEST_DIR/tput.disable" ] && exit 1; printf '\033[4m' ;;
-    rmul) [ -f "$TEST_DIR/tput.disable" ] && exit 1; printf '\033[24m' ;;
-    cols) printf '80' ;;
+case "$*" in
+    *size*) echo "24 80" ;;
+    *) exit 1 ;;
 esac
 exit 0
 SHIM
-    chmod +x "$SHIM_DIR/tput"
+    chmod +x "$SHIM_DIR/stty"
 }
 
 # --- test data ---
@@ -143,7 +142,7 @@ test_invalid_json_argument() {
     make_invalid_json
     run_script "$(cat "$TEST_DIR/invalid.json")"
     assert_rc "exits 2" 2
-    assert_err_contains "error message" "ERROR: Input is not valid JSON"
+    assert_err_contains "error message" "[ERR][ods-usage] Input is not valid JSON"
     assert_err_contains "shows preview" "not valid json at all"
 }
 
@@ -152,9 +151,9 @@ test_long_json_argument_truncated() {
     long_input="$(printf 'x%.0s' {1..200})"
     run_script "$long_input"
     assert_rc "exits 2" 2
-    assert_err_contains "error shown" "ERROR: Input is not valid JSON"
+    assert_err_contains "error shown" "[ERR][ods-usage] Input is not valid JSON"
     local preview
-    preview="$(get_stderr | grep -v ERROR | head -n 1)"
+    preview="$(get_stderr | grep -v '\[ERR\]' | head -n 1)"
     local preview_len=${#preview}
     assert_eq "preview truncated to terminal width" "$preview_len" "80"
 }
@@ -175,13 +174,13 @@ test_clipboard_invalid_json() {
     cp "$TEST_DIR/invalid.json" "$TEST_DIR/clipboard.txt"
     run_script
     assert_rc "exits 2" 2
-    assert_err_contains "clipboard error" "ERROR: No arguments provided and clipboard does not contain valid JSON"
+    assert_err_contains "clipboard error" "[ERR][ods-usage] No arguments provided and clipboard does not contain valid JSON"
 }
 
 test_clipboard_default_when_no_args() {
     run_script
     assert_rc "exits 2" 2
-    assert_err_contains "clipboard error" "ERROR: No arguments provided and clipboard does not contain valid JSON"
+    assert_err_contains "clipboard error" "[ERR][ods-usage] No arguments provided and clipboard does not contain valid JSON"
     local calls
     calls="$(get_pbpaste_calls)"
     assert_eq "pbpaste called" "$calls" "1"
@@ -197,16 +196,6 @@ test_terminal_formatting_enabled() {
 }
 
 test_formatting_omitted_when_no_tty() {
-    make_valid_json
-    run_script "$(cat "$TEST_DIR/valid.json")"
-    assert_rc "exits 0" 0
-    local out
-    out="$(get_stdout)"
-    assert_not_contains "no underline codes" "$out" "$(printf '\033')"
-}
-
-test_tput_unavailable() {
-    rm "$SHIM_DIR/tput"
     make_valid_json
     run_script "$(cat "$TEST_DIR/valid.json")"
     assert_rc "exits 0" 0
@@ -306,7 +295,7 @@ test_sourced_mode_error() {
         /bin/bash -c "source '$UNDER_TEST' '$(cat "$TEST_DIR/invalid.json")' 2>&1; echo RC=\$?" > "$TEST_DIR/stdout" 2>&1
     printf '0\n' > "$TEST_DIR/rc"
     assert_rc "shell exits 0" 0
-    assert_stdout_contains "error shown" "ERROR: Input is not valid JSON"
+    assert_stdout_contains "error shown" "[ERR][ods-usage] Input is not valid JSON"
     assert_stdout_contains "returns via return" "RC=2"
 }
 

@@ -33,11 +33,34 @@ _ods_usage() {
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="ods-usage" ;; esac
 
-    _error() { echo "[$SCRIPT_NAME] ERROR: $*" >&2; }
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+
+    _terminal_cols() {
+        # Returns terminal column count (integer), falling back to 80.
+        # Prefers stty against /dev/tty (real ioctl-sourced width), then $COLUMNS.
+        # Avoids tput to drop the runtime dependency.
+        # The { ...; } 2>/dev/null wrapping silences the shell's own redirect
+        # error ("/dev/tty: Device not configured") when /dev/tty is unavailable.
+        local cols=""
+        local out=""
+        if out="$({ stty size </dev/tty; } 2>/dev/null)"; then
+            cols="${out##* }"
+            case "$cols" in
+                ''|*[!0-9]*) cols="" ;;
+            esac
+            [ "$cols" ] && [ "$cols" -gt 0 ] 2>/dev/null && { printf '%s\n' "$cols"; return 0; }
+        fi
+        cols="${COLUMNS:-}"
+        case "$cols" in
+            ''|*[!0-9]*) cols="" ;;
+        esac
+        [ "$cols" ] && [ "$cols" -gt 0 ] 2>/dev/null && { printf '%s\n' "$cols"; return 0; }
+        printf '80\n'
+    }
 
     _show_help() {
-        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
-        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        local s; [ -t 1 ] && s=$'\033[4m'
+        local r; [ -t 1 ] && r=$'\033[24m'
         echo "NAME"
         echo "  $SCRIPT_NAME - calculate On-Demand Sandbox credits used from an ODS API response"
         echo "SYNOPSIS"
@@ -62,7 +85,7 @@ _ods_usage() {
         echo "  ${s}api_response${r}   JSON response (if omitted, read from clipboard via pbpaste)"
         echo "  -h, --help     Show this help message"
         echo "DEPENDENCIES"
-        echo "  jq, pbpaste (macOS clipboard; required for clipboard mode), tput"
+        echo "  jq, pbpaste (macOS clipboard; required for clipboard mode)"
         echo "EXAMPLES"
         echo "  $SCRIPT_NAME '{\"data\":{\"createdSandboxes\":9,...}}'"
         echo "  $SCRIPT_NAME                 # reads JSON from clipboard (macOS)"
@@ -74,7 +97,7 @@ _ods_usage() {
     }
 
     __unset() {
-        unset -f __unset _show_help _error _jq
+        unset -f __unset _show_help _error _terminal_cols _jq
     }
     trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
@@ -95,20 +118,21 @@ _ods_usage() {
         if echo "$json" | jq empty 2>/dev/null; then
             _jq() { echo "$json" | jq -r "$@"; }
         else
-            echo "ERROR: Input is not valid JSON - first line preview below" >&2
-            echo "$*" | head -n 1 | cut -c "1-$(tput cols)" >&2
+            _error "Input is not valid JSON (first line preview below). Run \`$SCRIPT_NAME -h\` for usage"
+            local width; width="$(_terminal_cols)"
+            echo "$*" | head -n 1 | cut -c "1-$width" >&2
             return 2
         fi
     else
         if ! command -v pbpaste >/dev/null 2>&1; then
-            _error "pbpaste is required for clipboard mode (macOS only). Pass JSON as an argument instead."
+            _error "pbpaste is required for clipboard mode (macOS only). Pass JSON as an argument instead"
             return 3
         fi
         # Define jq helper if clipboard contains valid JSON, otherwise exit with error status
         if pbpaste | jq empty 2>/dev/null; then
             _jq() { pbpaste | jq -r "$@"; }
         else
-            echo "ERROR: No arguments provided and clipboard does not contain valid JSON" >&2
+            _error "No arguments provided and clipboard does not contain valid JSON. Run \`$SCRIPT_NAME -h\` for usage"
             return 2
         fi
     fi
@@ -117,7 +141,7 @@ _ods_usage() {
     # otherwise print "null" and leak jq errors to stderr while exiting 0.
     local check; check="$(_jq '.data | has("createdSandboxes") and has("activeSandboxes") and has("deletedSandboxes") and has("minutesUp") and has("minutesDown")')"
     if [ "$check" != "true" ]; then
-        _error "input JSON is missing required fields (expected .data.createdSandboxes, .data.activeSandboxes, .data.deletedSandboxes, .data.minutesUp, .data.minutesDown)"
+        _error "Input JSON is missing required fields (expected .data.createdSandboxes, .data.activeSandboxes, .data.deletedSandboxes, .data.minutesUp, .data.minutesDown). Run \`$SCRIPT_NAME -h\` for usage"
         return 2
     fi
 
@@ -125,11 +149,8 @@ _ods_usage() {
     local smul=''
     local rmul=''
     if [ -t 1 ]; then # stdout (fd1) is a terminal
-        smul="$(tput smul 2>/dev/null)" # start underline
-        rmul="$(tput rmul 2>/dev/null)" # remove underline
-        if [ -z "$smul" ] || [ -z "$rmul" ]; then
-            echo "WARNING: tput smul/rmul failed, underlines will not be applied" >&2
-        fi
+        smul=$'\033[4m'  # start underline
+        rmul=$'\033[24m' # remove underline
     fi
 
     # Define credit cost per minute for each ODS resource profile (all profiles are 0.3 credits per minute down)

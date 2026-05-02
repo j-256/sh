@@ -89,7 +89,7 @@ Credit multipliers per minute:
 - **Xlarge** (up): 4.0x
 - **Stopped** (down): 0.3x (applies to all profiles)
 
-Headers are underlined when stdout is a terminal (via `tput smul`/`rmul`).
+Headers are underlined when stdout is a terminal (via raw ANSI SGR codes).
 
 ---
 
@@ -113,7 +113,6 @@ The script does not accept flags. It takes a single optional argument:
 
 - `jq` - required for JSON parsing
 - `pbpaste` (macOS) - required only if invoking without arguments (clipboard mode)
-- `tput` (optional) - used for underlined headers; falls back gracefully if unavailable
 
 ### Caveats
 
