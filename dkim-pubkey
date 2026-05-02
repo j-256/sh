@@ -61,11 +61,11 @@ _dkim_pubkey() {
     fi
 
     if [ -z "${1:-}" ]; then
-        _error "Selector is required. Run \`$SCRIPT_NAME -h\` for usage."
+        _error "selector is required. Run \`$SCRIPT_NAME -h\` for usage"
         return 2
     fi
     if [ -z "${2:-}" ]; then
-        _error "Domain is required. Run \`$SCRIPT_NAME -h\` for usage."
+        _error "domain is required. Run \`$SCRIPT_NAME -h\` for usage"
         return 2
     fi
     local selector="$1"

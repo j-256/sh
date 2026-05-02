@@ -15,9 +15,11 @@ _dot_project() {
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="dot-project" ;; esac
 
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+
     _show_help() {
-        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
-        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        local s; [ -t 1 ] && s=$'\033[4m' || s=''
+        local r; [ -t 1 ] && r=$'\033[24m' || r=''
         echo "NAME"
         echo "  $SCRIPT_NAME - generate .project files for B2C Commerce cartridges"
         echo "SYNOPSIS"
@@ -36,7 +38,7 @@ _dot_project() {
     }
 
     __unset() {
-        unset -f __unset _show_help
+        unset -f __unset _error _show_help
     }
     trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
@@ -72,7 +74,7 @@ _dot_project() {
 DOT_PROJECT_TEMPLATE
                 echo "Generated $project_file"
             else
-                echo "ERROR: Failed to create $project_file" >&2
+                _error "Failed to create $project_file"
             fi
         fi
     done

@@ -109,7 +109,7 @@ test_readonly_directory_fails() {
     chmod 555 "$TEST_DIR/cv_readonly/readonly_cart"
     run_script "$TEST_DIR/cv_readonly"
     assert_rc "readonly exits 0 despite error" 0
-    assert_err_contains "error message" "ERROR: Failed to create $TEST_DIR/cv_readonly/readonly_cart/.project"
+    assert_err_contains "error message" "[ERR][dot-project] Failed to create $TEST_DIR/cv_readonly/readonly_cart/.project"
     chmod 755 "$TEST_DIR/cv_readonly/readonly_cart" # cleanup for temp dir removal
 }
 
