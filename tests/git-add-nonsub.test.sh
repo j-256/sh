@@ -115,17 +115,17 @@ SHIM
     mkdir -p "$TEST_DIR/myrepo/.git"
     run_script "$TEST_DIR/myrepo"
     assert_rc "not in outer repo exits 2" 2
-    assert_err_contains "error message" "not inside a git repository"
+    assert_err_contains "error message" "Not inside a git repository"
 }
 
 test_successful_backup_add_restore() {
     mkdir -p "$TEST_DIR/myrepo/.git"
     run_script "$TEST_DIR/myrepo"
     assert_rc "success exits 0" 0
-    assert_stdout_contains "backup created" "Backup created at"
+    assert_err_contains "backup created" "Backup created at"
     assert_contains "git add ran" "$(get_git_log)" "git -C $TEST_DIR/myrepo add ."
-    assert_stdout_contains "restore message" "Restored .git directory"
-    assert_stdout_contains "git add success" "git add completed successfully"
+    assert_err_contains "restore message" "Restored .git directory"
+    assert_err_contains "git add success" "git add completed successfully"
 }
 
 test_backup_failure() {
@@ -199,10 +199,10 @@ test_info_messages_on_success() {
     mkdir -p "$TEST_DIR/myrepo/.git"
     run_script "$TEST_DIR/myrepo"
     assert_rc "info check exits 0" 0
-    assert_stdout_contains "backup info" "[INF] Backup created at"
-    assert_stdout_contains "git add info" "[INF] Running git add on"
-    assert_stdout_contains "completion info" "[INF] git add completed successfully"
-    assert_stdout_contains "restore info" "[INF] Restored .git directory"
+    assert_err_contains "backup info" "[INF][git-add-nonsub] Backup created at"
+    assert_err_contains "git add info" "[INF][git-add-nonsub] Running git add on"
+    assert_err_contains "completion info" "[INF][git-add-nonsub] git add completed successfully"
+    assert_err_contains "restore info" "[INF][git-add-nonsub] Restored .git directory"
 }
 
 test_git_directory_restored_to_correct_location() {
@@ -220,14 +220,14 @@ test_relative_path_directory() {
     env PATH="$SHIM_DIR:$PATH" /bin/bash "$UNDER_TEST" "myrepo" >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
     assert_rc "relative path exits 0" 0
-    assert_stdout_contains "backup created" "Backup created at"
+    assert_err_contains "backup created" "Backup created at"
 }
 
 test_absolute_path_directory() {
     mkdir -p "$TEST_DIR/myrepo/.git"
     run_script "$TEST_DIR/myrepo"
     assert_rc "absolute path exits 0" 0
-    assert_stdout_contains "backup created" "Backup created at"
+    assert_err_contains "backup created" "Backup created at"
 }
 
 # --- run ---

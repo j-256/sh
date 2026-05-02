@@ -12,10 +12,10 @@ From your outer repository's working tree:
 
 ```bash
 $ git-add-nonsub vendor/some-lib
-[INF] Backup created at /var/folders/.../tmp.xxxxx.
-[INF] Running git add on 'vendor/some-lib'...
-[INF] git add completed successfully.
-[INF] Restored .git directory.
+[INF][git-add-nonsub] Backup created at /var/folders/.../tmp.xxxxx
+[INF][git-add-nonsub] Running git add on 'vendor/some-lib'...
+[INF][git-add-nonsub] git add completed successfully
+[INF][git-add-nonsub] Restored .git directory
 ```
 
 Now `vendor/some-lib` is staged in your outer repo with all its files, not as a submodule pointer.

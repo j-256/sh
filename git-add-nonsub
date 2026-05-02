@@ -18,8 +18,8 @@ _git_add_nonsub() {
     local git_backup=''
 
     _show_help() {
-        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
-        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        local s; [ -t 1 ] && s=$'\033[4m'
+        local r; [ -t 1 ] && r=$'\033[24m'
         echo "NAME"
         echo "  $SCRIPT_NAME - temporarily move a nested .git aside so git add stages files"
         echo "SYNOPSIS"
@@ -52,27 +52,27 @@ _git_add_nonsub() {
         echo "  possible."
     }
 
-    _error() { echo "[$SCRIPT_NAME] ERROR: $*" >&2; }
-    _info() { echo "[INF] $*"; }
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+    _info()  { echo "[INF][$SCRIPT_NAME] $*" >&2; }
 
     _backup_git() {
         local target_dir="$1"
         git_backup="$(mktemp -d)"
         if ! mv "$target_dir/.git" "$git_backup"; then
-            _error "Failed to move .git to $git_backup."
+            _error "Failed to move .git to $git_backup"
             return 1
         fi
-        _info "Backup created at $git_backup."
+        _info "Backup created at $git_backup"
     }
 
     _restore_git() {
         local target_dir="$1"
         # Move the backup to $target_dir
         if ! mv "$git_backup" "$target_dir/.git"; then
-            _error "Failed to restore $git_backup to $target_dir/.git."
+            _error "Failed to restore $git_backup to $target_dir/.git"
             return 1
         fi
-        _info "Restored .git directory."
+        _info "Restored .git directory"
     }
 
     # Emergency restore for INT/TERM/HUP: only acts if we moved .git and haven't
@@ -92,7 +92,7 @@ _git_add_nonsub() {
 
     # Parse arguments
     if [ $# -eq 0 ]; then
-        _error "No directory specified. Run \`$SCRIPT_NAME -h\` for usage."
+        _error "No directory specified. Run \`$SCRIPT_NAME -h\` for usage"
         return 2
     fi
 
@@ -103,14 +103,14 @@ _git_add_nonsub() {
                 return 0
                 ;;
             -*)
-                _error "Unknown option: $1. Run \`$SCRIPT_NAME -h\` for usage."
+                _error "Unknown option: $1. Run \`$SCRIPT_NAME -h\` for usage"
                 return 2
                 ;;
             *)
                 if [ -z "$dir" ]; then
                     dir="$1"
                 else
-                    _error "Unexpected argument: $1. Run \`$SCRIPT_NAME -h\` for usage."
+                    _error "Unexpected argument: $1. Run \`$SCRIPT_NAME -h\` for usage"
                     return 2
                 fi
                 shift
@@ -120,13 +120,13 @@ _git_add_nonsub() {
 
     # Ensure the directory exists
     if [ ! -d "$dir" ]; then
-        _error "Directory '$dir' does not exist."
+        _error "Directory '$dir' does not exist"
         return 2
     fi
 
     # Ensure the directory contains a .git folder
     if [ ! -d "$dir/.git" ]; then
-        _error "No .git directory found in '$dir'."
+        _error "No .git directory found in '$dir'"
         return 2
     fi
 
@@ -134,7 +134,7 @@ _git_add_nonsub() {
     # repo, otherwise `git add` (run from inside "$dir" after the .git move)
     # has no repo to stage into and would fail cryptically.
     if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-        _error "not inside a git repository. Run from an outer repo's working tree."
+        _error "Not inside a git repository. Run from an outer repo's working tree"
         return 2
     fi
 
@@ -148,7 +148,7 @@ _git_add_nonsub() {
         _info "Running git add on '$dir'..."
         local add_rc=0
         if git -C "$dir" add .; then
-            _info "git add completed successfully."
+            _info "git add completed successfully"
         else
             _error "git add failed. Restoring .git..."
             add_rc=1
@@ -163,7 +163,7 @@ _git_add_nonsub() {
             return 1
         fi
     else
-        _error "Failed to back up .git. Exiting."
+        _error "Failed to back up .git. Exiting"
         return 1
     fi
 }
