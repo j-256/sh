@@ -70,20 +70,20 @@ test_help_short_flag() {
 test_no_arguments() {
     run_script
     assert_rc "no args exits 1" 1
-    assert_err_contains "no args error" "Must provide two files to swap. You specified 0."
+    assert_err_contains "no args error" "[ERR][swap] Must provide two files to swap (received 0). Run \`swap -h\` for usage"
 }
 
 test_one_argument() {
     run_script "file1"
     assert_rc "one arg exits 1" 1
-    assert_err_contains "one arg error" "Must provide two files to swap. You specified 1."
+    assert_err_contains "one arg error" "[ERR][swap] Must provide two files to swap (received 1). Run \`swap -h\` for usage"
 }
 
 test_first_file_missing() {
     touch "$TEST_DIR/file2"
     run_script "$TEST_DIR/nosuch" "$TEST_DIR/file2"
     assert_rc "first missing exits 2" 2
-    assert_err_contains "first missing error" "File '$TEST_DIR/nosuch' does not exist."
+    assert_err_contains "first missing error" "[ERR][swap] File '$TEST_DIR/nosuch' does not exist"
 }
 
 test_first_file_is_directory() {
@@ -91,14 +91,14 @@ test_first_file_is_directory() {
     touch "$TEST_DIR/file2"
     run_script "$TEST_DIR/dir1" "$TEST_DIR/file2"
     assert_rc "first dir exits 3" 3
-    assert_err_contains "first dir error" "'$TEST_DIR/dir1' is a directory."
+    assert_err_contains "first dir error" "[ERR][swap] '$TEST_DIR/dir1' is a directory"
 }
 
 test_second_file_missing() {
     touch "$TEST_DIR/file1"
     run_script "$TEST_DIR/file1" "$TEST_DIR/nosuch"
     assert_rc "second missing exits 4" 4
-    assert_err_contains "second missing error" "File '$TEST_DIR/nosuch' does not exist."
+    assert_err_contains "second missing error" "[ERR][swap] File '$TEST_DIR/nosuch' does not exist"
 }
 
 test_second_file_is_directory() {
@@ -106,7 +106,7 @@ test_second_file_is_directory() {
     mkdir -p "$TEST_DIR/dir2"
     run_script "$TEST_DIR/file1" "$TEST_DIR/dir2"
     assert_rc "second dir exits 5" 5
-    assert_err_contains "second dir error" "'$TEST_DIR/dir2' is a directory."
+    assert_err_contains "second dir error" "[ERR][swap] '$TEST_DIR/dir2' is a directory"
 }
 
 test_successful_swap() {
@@ -122,21 +122,21 @@ test_first_mv_fails() {
     touch "$TEST_DIR/file1" "$TEST_DIR/file2"
     FAIL_MV_AT=first run_script "$TEST_DIR/file1" "$TEST_DIR/file2"
     assert_rc "first mv fails exits 6" 6
-    assert_err_contains "first mv error" "Failed to move '$TEST_DIR/file1' to temporary file"
+    assert_err_contains "first mv error" "[ERR][swap] Failed to move '$TEST_DIR/file1' to temporary file"
 }
 
 test_second_mv_fails() {
     touch "$TEST_DIR/file1" "$TEST_DIR/file2"
     FAIL_MV_AT=second run_script "$TEST_DIR/file1" "$TEST_DIR/file2"
     assert_rc "second mv fails exits 7" 7
-    assert_err_contains "second mv error" "Failed to move '$TEST_DIR/file2' to '$TEST_DIR/file1'."
+    assert_err_contains "second mv error" "[ERR][swap] Failed to move '$TEST_DIR/file2' to '$TEST_DIR/file1'"
 }
 
 test_third_mv_fails() {
     touch "$TEST_DIR/file1" "$TEST_DIR/file2"
     FAIL_MV_AT=third run_script "$TEST_DIR/file1" "$TEST_DIR/file2"
     assert_rc "third mv fails exits 8" 8
-    assert_err_contains "third mv error" "Failed to move temporary file to '$TEST_DIR/file2'."
+    assert_err_contains "third mv error" "[ERR][swap] Failed to move temporary file to '$TEST_DIR/file2'"
 }
 
 test_swap_preserves_permissions() {

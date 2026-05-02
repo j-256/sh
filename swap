@@ -13,8 +13,8 @@ _swap() {
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="swap" ;; esac
 
     _show_help() {
-        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
-        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        local s; [ -t 1 ] && s=$'\033[4m'
+        local r; [ -t 1 ] && r=$'\033[24m'
         echo "NAME"
         echo "  $SCRIPT_NAME - swap two files by renaming"
         echo "SYNOPSIS"
@@ -38,7 +38,7 @@ _swap() {
         echo "  8  Failed to move temp to second (no restore attempted: second already moved)"
     }
 
-    _error() { echo "[$SCRIPT_NAME] ERROR: $*" >&2; }
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
 
     __unset() {
         unset -f __unset _show_help _error
@@ -53,7 +53,7 @@ _swap() {
     esac
 
     if [ $# -lt 2 ]; then
-        _error "Must provide two files to swap. You specified $#."
+        _error "Must provide two files to swap (received $#). Run \`$SCRIPT_NAME -h\` for usage"
         return 1
     fi
     local file1="$1"
@@ -61,19 +61,19 @@ _swap() {
 
     # Validate first file
     if [ ! -e "$file1" ]; then
-        _error "File '$file1' does not exist."
+        _error "File '$file1' does not exist"
         return 2
     elif [ -d "$file1" ]; then
-        _error "'$file1' is a directory."
+        _error "'$file1' is a directory"
         return 3
     fi
 
     # Validate second file
     if [ ! -e "$file2" ]; then
-        _error "File '$file2' does not exist."
+        _error "File '$file2' does not exist"
         return 4
     elif [ -d "$file2" ]; then
-        _error "'$file2' is a directory."
+        _error "'$file2' is a directory"
         return 5
     fi
 
@@ -86,19 +86,19 @@ _swap() {
 
     # Perform the swap using `mv`. Return distinct codes for each failure point.
     if ! mv "$file1" "$temp_file"; then # file1 -> temp
-        _error "Failed to move '$file1' to temporary file '$temp_file'."
+        _error "Failed to move '$file1' to temporary file '$temp_file'"
         return 6
     fi
     if ! mv "$file2" "$file1"; then # file2 -> file1
-        _error "Failed to move '$file2' to '$file1'."
+        _error "Failed to move '$file2' to '$file1'"
         # Move failed - Attempt to restore the original file
         if ! mv "$temp_file" "$file1"; then
-            _error "Failed to restore '$temp_file' to '$file1'."
+            _error "Failed to restore '$temp_file' to '$file1'"
         fi
         return 7
     fi
     if ! mv "$temp_file" "$file2"; then # temp -> file2
-        _error "Failed to move temporary file to '$file2'."
+        _error "Failed to move temporary file to '$file2'"
         return 8
     fi
 
