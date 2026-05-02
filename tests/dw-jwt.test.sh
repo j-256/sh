@@ -121,7 +121,7 @@ test_nonexistent_key_file() {
 test_malformed_key_file() {
     run_script "test-client-id" "$TEST_DIR/keys/bad.key"
     assert_rc "malformed key fails" 1
-    assert_err_contains "error mentions signing failure" "signing failed"
+    assert_err_contains "error mentions signing failure" "Signing failed"
     local out; out="$(get_stdout)"
     assert_eq "no JWT printed on failure" "$out" ""
 }
