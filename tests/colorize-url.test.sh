@@ -72,7 +72,7 @@ test_help_short() {
 test_no_url_error() {
     run_script
     assert_rc "no url exits 2" 2
-    assert_err_contains "error message" "ERROR: No URL provided"
+    assert_err_contains "error message" "[ERR][colorize-url] No URL provided"
 }
 
 test_simple_url() {
