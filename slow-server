@@ -18,9 +18,11 @@ _slow_server() {
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="slow-server" ;; esac
 
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+
     _show_help() {
-        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
-        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        local s; [ -t 1 ] && s=$'\033[4m'
+        local r; [ -t 1 ] && r=$'\033[24m'
         echo "NAME"
         echo "  $SCRIPT_NAME - start a web server that responds after a configurable delay"
         echo "SYNOPSIS"
@@ -80,7 +82,7 @@ _slow_server() {
     }
 
     __unset() {
-        unset -f __unset _show_help _slow_response
+        unset -f __unset _error _show_help _slow_response
     }
     trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
@@ -93,7 +95,7 @@ _slow_server() {
 
     # Check for socat dependency
     if ! command -v socat >/dev/null 2>&1; then
-        echo "[$SCRIPT_NAME] ERROR: socat is required" >&2
+        _error "socat is required"
         return 3
     fi
 
