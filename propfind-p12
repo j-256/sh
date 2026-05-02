@@ -14,11 +14,11 @@ _propfind_p12() {
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="propfind-p12" ;; esac
 
-    _error() { echo "[$SCRIPT_NAME] ERROR: $*" >&2; }
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
 
     _show_help() {
-        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
-        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        local s; [ -t 1 ] && s=$'\033[4m'
+        local r; [ -t 1 ] && r=$'\033[24m'
         echo "NAME"
         echo "  $SCRIPT_NAME - WebDAV PROPFIND with p12 client certificate auth"
         echo "SYNOPSIS"
@@ -67,7 +67,7 @@ _propfind_p12() {
             -t|--token)
                 shift
                 if [ $# -eq 0 ] || [ -z "$1" ]; then
-                    _error "-t/--token requires a value. Run \`$SCRIPT_NAME -h\` for usage."
+                    _error "-t/--token requires a value. Run \`$SCRIPT_NAME -h\` for usage"
                     return 2
                 fi
                 token="$1"
@@ -89,15 +89,15 @@ _propfind_p12() {
     local p12_password="${positional[2]-}"
 
     if [ -z "$hostname" ]; then
-        _error "hostname is required. Run \`$SCRIPT_NAME -h\` for usage."
+        _error "hostname is required. Run \`$SCRIPT_NAME -h\` for usage"
         return 2
     fi
     if [ -z "$code_version" ]; then
-        _error "code_version is required. Run \`$SCRIPT_NAME -h\` for usage."
+        _error "code_version is required. Run \`$SCRIPT_NAME -h\` for usage"
         return 2
     fi
     if [ -z "$p12_password" ]; then
-        _error "p12_password is required. Run \`$SCRIPT_NAME -h\` for usage."
+        _error "p12_password is required. Run \`$SCRIPT_NAME -h\` for usage"
         return 2
     fi
 
@@ -106,7 +106,7 @@ _propfind_p12() {
         token="${SFCC_TOKEN-}"
     fi
     if [ -z "$token" ]; then
-        _error "token is required (use -t/--token or set SFCC_TOKEN). Run \`$SCRIPT_NAME -h\` for usage."
+        _error "token is required (use -t/--token or set SFCC_TOKEN). Run \`$SCRIPT_NAME -h\` for usage"
         return 2
     fi
 
@@ -114,7 +114,7 @@ _propfind_p12() {
     local cacert="${hostname}_01.crt"
 
     if [ ! -f "$p12" ]; then
-        _error "p12 file not found: $p12. Use 'generate-p12' to create one."
+        _error "p12 file not found: $p12. Use 'generate-p12' to create one"
         return 4
     fi
     if [ ! -f "$cacert" ]; then
