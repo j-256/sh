@@ -17,7 +17,7 @@ _pkce() {
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="pkce" ;; esac
 
-    _error() { echo "[$SCRIPT_NAME] ERROR: $*" >&2; }
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
 
     # Converts base64 to base64-url (URL-safe version)
     _base64_to_base64url() {
@@ -79,7 +79,7 @@ _pkce() {
     case "$1" in
         "") delimiter='\t' ;;
         -n|--newline) delimiter='\n' ;;
-        *) _error "Unknown option: $1. Run \`$SCRIPT_NAME -h\` for usage."; return 2 ;;
+        *) _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
     esac
 
     # RFC7636 specifies code verifier should be 43 to 128 random characters
