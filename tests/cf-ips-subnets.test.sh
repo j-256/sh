@@ -114,14 +114,14 @@ test_curl_empty_response() {
     : > "$TEST_DIR/curl.response"
     run_script
     assert_rc "empty response exits 1" 1
-    assert_err_contains "fetch error" "ERROR: Failed to fetch Cloudflare IPs"
+    assert_err_contains "fetch error" "[ERR][cf-ips-subnets] Failed to fetch Cloudflare IPs"
 }
 
 test_curl_whitespace_only() {
     printf '\n\n\n' > "$TEST_DIR/curl.response"
     run_script
     assert_rc "whitespace exits 1" 1
-    assert_err_contains "whitespace error" "ERROR: Failed to fetch Cloudflare IPs"
+    assert_err_contains "whitespace error" "[ERR][cf-ips-subnets] Failed to fetch Cloudflare IPs"
 }
 
 test_cidr_greater_than_24() {

@@ -13,10 +13,12 @@ _cf_ips_subnets() {
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="cf-ips-subnets" ;; esac
 
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+
     _show_help() {
-        # No user-facing placeholders, so tput smul/rmul are unused here.
-        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
-        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        # No user-facing placeholders, so $s/$r are unused here.
+        local s; [ -t 1 ] && s=$'\033[4m'
+        local r; [ -t 1 ] && r=$'\033[24m'
         echo "NAME"
         echo "  $SCRIPT_NAME - expand Cloudflare IPv4 ranges into /16 and /24 subnets"
         echo "SYNOPSIS"
@@ -39,7 +41,7 @@ _cf_ips_subnets() {
     }
 
     __unset() {
-        unset -f __unset _show_help
+        unset -f __unset _show_help _error
     }
     trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
@@ -51,11 +53,11 @@ _cf_ips_subnets() {
     esac
 
     if ! command -v curl >/dev/null 2>&1; then
-        echo "[$SCRIPT_NAME] ERROR: curl is required" >&2
+        _error "curl is required"
         return 3
     fi
     if ! command -v ipcalc >/dev/null 2>&1; then
-        echo "[$SCRIPT_NAME] ERROR: ipcalc is required (https://github.com/kjokjo/ipcalc)" >&2
+        _error "ipcalc is required (https://github.com/kjokjo/ipcalc)"
         return 3
     fi
 
@@ -66,7 +68,7 @@ _cf_ips_subnets() {
     done < <(curl -s https://www.cloudflare.com/ips-v4)
 
     if [ ${#cf[@]} -eq 0 ]; then
-        echo "ERROR: Failed to fetch Cloudflare IPs" >&2
+        _error "Failed to fetch Cloudflare IPs"
         return 1
     fi
 
@@ -76,7 +78,7 @@ _cf_ips_subnets() {
     for i in "${cf[@]}"; do
         cidr="${i:(-2)}"
         if [ "$cidr" -gt 24 ]; then
-            echo "Cannot allowlist ranges greater than /24" >&2
+            _error "Cannot allowlist ranges greater than /24"
             return 1
         fi
         if [ "$cidr" -gt 16 ]; then
