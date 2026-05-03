@@ -27,6 +27,10 @@ _test_runner() {
         echo "  Finds and runs all .test.sh files in the same directory."
         echo "  If one or more names are given, only runs tests whose script name"
         echo "  (basename minus .test.sh) exactly matches one of them."
+        echo "  Unmatched names are reported and cause a non-zero exit."
+        echo "  When exactly one name is given and it matches, the per-file header"
+        echo "  and aggregate summary are suppressed -- the test file's own summary"
+        echo "  line is enough."
         echo "OPTIONS"
         echo "  -v          Pass -v (verbose) to each test file"
         echo "  -h, --help  Show this help message"
@@ -51,6 +55,29 @@ _test_runner() {
     local script_dir
     script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+    # Pre-compute which names matched a real file. Names that never match
+    # are reported after the run and force a non-zero exit.
+    local matched_count=0
+    local unmatched_names=""
+    if [ "${#names[@]}" -gt 0 ]; then
+        local n
+        for n in "${names[@]}"; do
+            if [ -f "$script_dir/$n.test.sh" ]; then
+                matched_count=$((matched_count + 1))
+            else
+                unmatched_names="$unmatched_names  $n"$'\n'
+            fi
+        done
+    fi
+
+    # Solo-match mode: exactly one name was given and it resolved to a file.
+    # Skip the per-file header and the aggregate summary -- the test file's
+    # own summary line is sufficient when there's only one file running.
+    local solo=0
+    if [ "${#names[@]}" -eq 1 ] && [ "$matched_count" -eq 1 ]; then
+        solo=1
+    fi
+
     local pass=0
     local fail=0
     local failed_files=""
@@ -74,7 +101,7 @@ _test_runner() {
             [ "$matched" -eq 1 ] || continue
         fi
 
-        echo "--- $filename ---"
+        [ "$solo" -eq 1 ] || echo "--- $filename ---"
 
         local rc=0
         /bin/bash "$test_file" $verbose || rc=$?
@@ -87,18 +114,27 @@ _test_runner() {
         fi
     done
 
-    local total=$((pass + fail))
-    echo ""
-    echo "=== $SCRIPT_NAME ==="
-    echo "$total files: $pass passed, $fail failed"
-
-    if [ "$fail" -ne 0 ]; then
+    if [ "$solo" -eq 0 ]; then
+        local total=$((pass + fail))
         echo ""
-        echo "Failed:"
-        printf '%s' "$failed_files"
-        return 1
+        echo "=== $SCRIPT_NAME ==="
+        echo "$total files: $pass passed, $fail failed"
+
+        if [ "$fail" -ne 0 ]; then
+            echo ""
+            echo "Failed:"
+            printf '%s' "$failed_files"
+        fi
+
+        if [ -n "$unmatched_names" ]; then
+            echo ""
+            echo "No match:"
+            printf '%s' "$unmatched_names"
+        fi
     fi
 
+    [ "$fail" -ne 0 ] && return 1
+    [ -n "$unmatched_names" ] && return 1
     return 0
 }
 
