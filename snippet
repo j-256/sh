@@ -75,9 +75,39 @@ _snippet() {
             cat # print input as-is
         fi
     }
+    _expand_short_opts() {
+        # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
+        # $2..$N = "$@"
+        # Populates _EXPANDED; caller does: set -- "${_EXPANDED[@]}"; unset _EXPANDED
+        local value_opts="$1"; shift
+        _EXPANDED=()
+        local passthru=""
+        local arg
+        local rest
+        local c
+        for arg in "$@"; do
+            if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
+            case "$arg" in
+                --)          passthru=1; _EXPANDED+=("$arg") ;;
+                --*|-|"")    _EXPANDED+=("$arg") ;;
+                -[a-zA-Z]?*)
+                    rest="${arg#-}"
+                    while [ -n "$rest" ]; do
+                        c="${rest%"${rest#?}"}"; rest="${rest#?}"
+                        _EXPANDED+=("-$c")
+                        case "$value_opts" in *"$c"*)
+                            [ -n "$rest" ] && _EXPANDED+=("$rest")
+                            rest="" ;;
+                        esac
+                    done ;;
+                *)           _EXPANDED+=("$arg") ;;
+            esac
+        done
+    }
+
     # Unset helper functions before returning
     __unset() {
-        unset -f __unset _error _show_help _dropfirst _droplast
+        unset -f __unset _error _show_help _dropfirst _droplast _expand_short_opts
     }
     trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
@@ -86,6 +116,9 @@ _snippet() {
         _show_help
         return 0
     fi
+
+    _expand_short_opts "seflt" "$@"
+    set -- "${_EXPANDED[@]}"; unset _EXPANDED
 
     # Parse parameters
     while [ $# -gt 0 ]; do
@@ -99,6 +132,11 @@ _snippet() {
                 start_pattern="$2"
                 shift 2
                 ;;
+            --start=*|--start-pattern=*)
+                start_pattern="${1#*=}"
+                [ -n "$start_pattern" ] || { _error "Missing value for '${1%%=*}'. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                shift
+                ;;
             -e|--end|--end-pattern)
                 # Required value: Ensure $2 exists
                 if [ -z "$2" ]; then
@@ -107,6 +145,11 @@ _snippet() {
                 fi
                 end_pattern="$2"
                 shift 2
+                ;;
+            --end=*|--end-pattern=*)
+                end_pattern="${1#*=}"
+                [ -n "$end_pattern" ] || { _error "Missing value for '${1%%=*}'. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                shift
                 ;;
             # Drop first n lines of snippet
             -f|--trim-first|--trim-start)
@@ -118,6 +161,11 @@ _snippet() {
                 trim_first="$2"
                 shift 2
                 ;;
+            --trim-first=*|--trim-start=*)
+                trim_first="${1#*=}"
+                [ -n "$trim_first" ] || { _error "Missing value for '${1%%=*}'. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                shift
+                ;;
             # Drop last n lines of snippet
             -l|--trim-last|--trim-end)
                 # Required value: Ensure $2 exists
@@ -127,6 +175,11 @@ _snippet() {
                 fi
                 trim_last="$2"
                 shift 2
+                ;;
+            --trim-last=*|--trim-end=*)
+                trim_last="${1#*=}"
+                [ -n "$trim_last" ] || { _error "Missing value for '${1%%=*}'. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                shift
                 ;;
             # Drop first and last n lines of snippet
             -t|--trim)
@@ -138,6 +191,12 @@ _snippet() {
                 trim_first="$2"
                 trim_last="$2"
                 shift 2
+                ;;
+            --trim=*)
+                trim_first="${1#*=}"
+                [ -n "$trim_first" ] || { _error "Missing value for '--trim'. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                trim_last="$trim_first"
+                shift
                 ;;
             -h|--help)
                 _show_help
