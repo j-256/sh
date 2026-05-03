@@ -1,6 +1,6 @@
 {
   "private": true,
   "scripts": {
-    "test": "/bin/bash test-runner.sh"
+    "test": "/bin/bash ./tests/test-runner.sh"
   }
 }
