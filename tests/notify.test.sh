@@ -224,25 +224,25 @@ test_missing_message() {
 test_missing_title_value() {
     run_script --title
     assert_rc "missing title value" 2
-    assert_err_contains "error message" "Missing value for --title"
+    assert_err_contains "error message" "-t|--title requires a value"
 }
 
 test_missing_subtitle_value() {
     run_script -s
     assert_rc "missing subtitle value" 2
-    assert_err_contains "error message" "Missing value for -s"
+    assert_err_contains "error message" "-s|--subtitle requires a value"
 }
 
 test_missing_sound_value() {
     run_script --sound
     assert_rc "missing sound value" 2
-    assert_err_contains "error message" "Missing value for --sound"
+    assert_err_contains "error message" "--sound requires a value"
 }
 
 test_unknown_option() {
     run_script --unknown "Test"
     assert_rc "unknown option" 2
-    assert_err_contains "error message" "Unknown option: --unknown"
+    assert_err_contains "error message" "Unknown argument '--unknown'"
 }
 
 test_osascript_not_found() {

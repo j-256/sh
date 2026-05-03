@@ -89,11 +89,42 @@ _notify() {
         printf '%s\n' "$sounds" | sort
     }
 
+    _expand_short_opts() {
+        # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
+        # $2..$N = "$@"
+        # Populates _EXPANDED; caller does: set -- "${_EXPANDED[@]}"; unset _EXPANDED
+        local value_opts="$1"; shift
+        _EXPANDED=()
+        local passthru=""
+        local arg
+        local rest
+        local c
+        for arg in "$@"; do
+            if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
+            case "$arg" in
+                --)          passthru=1; _EXPANDED+=("$arg") ;;
+                --*|-|"")    _EXPANDED+=("$arg") ;;
+                -[a-zA-Z]?*)
+                    rest="${arg#-}"
+                    while [ -n "$rest" ]; do
+                        c="${rest%"${rest#?}"}"; rest="${rest#?}"
+                        _EXPANDED+=("-$c")
+                        case "$value_opts" in *"$c"*)
+                            [ -n "$rest" ] && _EXPANDED+=("$rest")
+                            rest="" ;;
+                        esac
+                    done ;;
+                *)           _EXPANDED+=("$arg") ;;
+            esac
+        done
+    }
+
     __unset() {
         unset -f _color
         unset -f _error
         unset -f _show_help
         unset -f _list_sounds
+        unset -f _expand_short_opts
         unset -f __unset
     }
 
@@ -112,6 +143,9 @@ _notify() {
     local list_sounds=""
     local -a args=()
 
+    _expand_short_opts "ts" "$@"
+    set -- "${_EXPANDED[@]}"; unset _EXPANDED
+
     while [ $# -gt 0 ]; do
         case "$1" in
             -h|--help)
@@ -127,39 +161,33 @@ _notify() {
                 shift
                 ;;
             -t|--title)
-                if [ $# -lt 2 ]; then
-                    _error "Missing value for $1"
-                    return 2
-                fi
+                [ -n "${2-}" ] || { _error "-t|--title requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 title="$2"
                 shift 2
                 ;;
             --title=*)
                 title="${1#*=}"
+                [ -n "$title" ] || { _error "-t|--title requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift
                 ;;
             -s|--subtitle)
-                if [ $# -lt 2 ]; then
-                    _error "Missing value for $1"
-                    return 2
-                fi
+                [ -n "${2-}" ] || { _error "-s|--subtitle requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 subtitle="$2"
                 shift 2
                 ;;
             --subtitle=*)
                 subtitle="${1#*=}"
+                [ -n "$subtitle" ] || { _error "-s|--subtitle requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift
                 ;;
             --sound)
-                if [ $# -lt 2 ]; then
-                    _error "Missing value for $1"
-                    return 2
-                fi
+                [ -n "${2-}" ] || { _error "--sound requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 sound="$2"
                 shift 2
                 ;;
             --sound=*)
                 sound="${1#*=}"
+                [ -n "$sound" ] || { _error "--sound requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift
                 ;;
             --)
@@ -170,7 +198,7 @@ _notify() {
                 done
                 ;;
             -*)
-                _error "Unknown option: $1"
+                _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"
                 return 2
                 ;;
             *)
