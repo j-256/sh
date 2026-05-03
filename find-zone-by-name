@@ -31,8 +31,8 @@ _find_zone_by_name() {
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
 
     _show_help() {
-        local s=$'\033[4m' r=$'\033[24m'
-        [ -t 1 ] || { s=''; r=''; }
+        local s; [ -t 1 ] && s=$'\033[4m'
+        local r; [ -t 1 ] && r=$'\033[24m'
         echo "NAME"
         echo "  $SCRIPT_NAME - Salesforce Commerce Cloud SCAPI helper for finding a CDN zone by name"
         echo "SYNOPSIS"
