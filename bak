@@ -6,7 +6,7 @@
 #
 # Options:
 #   -v, --verbose  Print filenames as they are backed up
-#   -d, --dry-run  Simulate actions without making changes
+#   -n, --dry-run  Simulate actions without making changes
 #   -h, --help     Show help message
 #
 # Backs up files by moving (renaming) them from "file.ext"->"file.ext.bak",
@@ -29,11 +29,11 @@ _bak() {
         echo "NAME"
         echo "  $SCRIPT_NAME - move ${s}file${r} to ${s}file.bak${r}"
         echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME [-v | -d] [--] [${s}file${r} ${s}...${r}]"
+        echo "  $SCRIPT_NAME [-v | -n] [--] [${s}file${r} ${s}...${r}]"
         echo "  $SCRIPT_NAME -h"
         echo "OPTIONS"
         echo "  -v, --verbose      Print filenames as they are backed up"
-        echo "  -d, --dry-run      Simulate actions without making changes"
+        echo "  -n, --dry-run      Simulate actions without making changes"
         echo "  -h, --help         Show this help message"
         echo "EXIT STATUS"
         echo "  0  Success"
@@ -85,11 +85,44 @@ _bak() {
         _move_file "$file" "$file.bak" || return 1
     }
 
+    _expand_short_opts() {
+        # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
+        # $2..$N = "$@"
+        # Populates _EXPANDED; caller does: set -- "${_EXPANDED[@]}"; unset _EXPANDED
+        local value_opts="$1"; shift
+        _EXPANDED=()
+        local passthru=""
+        local arg
+        local rest
+        local c
+        for arg in "$@"; do
+            if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
+            case "$arg" in
+                --)       passthru=1; _EXPANDED+=("$arg") ;;
+                --*|-|"") _EXPANDED+=("$arg") ;;
+                -??*)
+                    rest="${arg#-}"
+                    while [ -n "$rest" ]; do
+                        c="${rest%"${rest#?}"}"; rest="${rest#?}"
+                        _EXPANDED+=("-$c")
+                        case "$value_opts" in *"$c"*)
+                            [ -n "$rest" ] && _EXPANDED+=("$rest")
+                            rest="" ;;
+                        esac
+                    done ;;
+                *)        _EXPANDED+=("$arg") ;;
+            esac
+        done
+    }
+
     # Clean up inner functions when returning
     __unset() {
-        unset -f __unset _show_help _error _verbose _dry_run _backup _move_file
+        unset -f __unset _show_help _error _verbose _dry_run _backup _move_file _expand_short_opts
     }
     trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
+
+    _expand_short_opts "" "$@"
+    set -- "${_EXPANDED[@]}"; unset _EXPANDED
 
     # Parse parameters
     while [ $# -gt 0 ]; do
@@ -98,7 +131,7 @@ _bak() {
                 verbose=true
                 shift
                 ;;
-            -d|--dry-run)
+            -n|--dry-run)
                 dry_run=true
                 shift
                 ;;

@@ -136,7 +136,7 @@ test_verbose_long_flag() {
 
 test_dry_run_mode() {
     echo "content" > "$TEST_DIR/files/dryrun.txt"
-    run_script -d "$TEST_DIR/files/dryrun.txt"
+    run_script -n "$TEST_DIR/files/dryrun.txt"
     assert_rc "dry run exits 0" 0
     assert_stdout_contains "shows would move" "Would move"
     assert_file_exists "original still exists" "dryrun.txt"
@@ -154,7 +154,7 @@ test_dry_run_long_flag() {
 test_dry_run_with_chain() {
     echo "original" > "$TEST_DIR/files/chain.txt"
     echo "backup" > "$TEST_DIR/files/chain.txt.bak"
-    run_script -d "$TEST_DIR/files/chain.txt"
+    run_script -n "$TEST_DIR/files/chain.txt"
     assert_rc "dry run chain" 0
     assert_file_exists "original unchanged" "chain.txt"
     assert_file_exists "backup unchanged" "chain.txt.bak"
@@ -209,10 +209,35 @@ test_backup_only_exists() {
 
 test_verbose_and_dry_run() {
     echo "content" > "$TEST_DIR/files/both.txt"
-    run_script -v -d "$TEST_DIR/files/both.txt"
+    run_script -v -n "$TEST_DIR/files/both.txt"
     assert_rc "both flags" 0
     assert_stdout_contains "shows would move" "Would move"
     assert_file_exists "file unchanged" "both.txt"
+}
+
+test_bundled_short_opts() {
+    echo "content" > "$TEST_DIR/files/bundle.txt"
+    run_script -vn "$TEST_DIR/files/bundle.txt"
+    assert_rc "bundled -vn exits 0" 0
+    assert_stdout_contains "bundled verbose active" "Would move"
+    assert_file_exists "bundled dry-run leaves file" "bundle.txt"
+    assert_file_not_exists "bundled dry-run makes no backup" "bundle.txt.bak"
+}
+
+test_bundled_short_opts_reversed() {
+    echo "content" > "$TEST_DIR/files/bundle2.txt"
+    run_script -nv "$TEST_DIR/files/bundle2.txt"
+    assert_rc "bundled -nv exits 0" 0
+    assert_stdout_contains "reversed bundle still verbose" "Would move"
+    assert_file_exists "reversed bundle leaves file" "bundle2.txt"
+}
+
+test_interleaved_positional_and_flag() {
+    echo "content" > "$TEST_DIR/files/interleave.txt"
+    run_script "$TEST_DIR/files/interleave.txt" -v
+    assert_rc "interleaved order exits 0" 0
+    assert_stdout_contains "flag after positional works" "Moving"
+    assert_file_exists "interleaved backup created" "interleave.txt.bak"
 }
 
 test_file_with_spaces() {
