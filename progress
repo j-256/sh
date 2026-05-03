@@ -68,6 +68,39 @@ _progress() {
         echo "  stty"
     }
 
+    _expand_short_opts() {
+        # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
+        # $2..$N = "$@"
+        # Populates _EXPANDED; caller does: set -- "${_EXPANDED[@]}"; unset _EXPANDED
+        local value_opts="$1"; shift
+        _EXPANDED=()
+        local passthru=""
+        local arg
+        local rest
+        local c
+        for arg in "$@"; do
+            if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
+            case "$arg" in
+                --)          passthru=1; _EXPANDED+=("$arg") ;;
+                --*|-|"")    _EXPANDED+=("$arg") ;;
+                -[a-zA-Z]?*)
+                    rest="${arg#-}"
+                    while [ -n "$rest" ]; do
+                        c="${rest%"${rest#?}"}"; rest="${rest#?}"
+                        _EXPANDED+=("-$c")
+                        case "$value_opts" in *"$c"*)
+                            [ -n "$rest" ] && _EXPANDED+=("$rest")
+                            rest="" ;;
+                        esac
+                    done ;;
+                *)           _EXPANDED+=("$arg") ;;
+            esac
+        done
+    }
+
+    _expand_short_opts "wpr" "$@"
+    set -- "${_EXPANDED[@]}"; unset _EXPANDED
+
     # Parse options
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -86,13 +119,28 @@ _progress() {
                 [ "$2" ] || { _error "Missing value for width option. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 bar_width="$2" && shift 2
             ;;
+            --width=*)
+                bar_width="${1#*=}"
+                [ -n "$bar_width" ] || { _error "Missing value for width option. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                shift
+            ;;
             -p|--progress-char)
                 [ "$2" ] || { _error "Missing value for progress character option. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 progress_char="$2" && shift 2
             ;;
+            --progress-char=*)
+                progress_char="${1#*=}"
+                [ -n "$progress_char" ] || { _error "Missing value for progress character option. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                shift
+            ;;
             -r|--remaining-char)
                 [ "$2" ] || { _error "Missing value for remaining character option. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 remaining_char="$2" && shift 2
+            ;;
+            --remaining-char=*)
+                remaining_char="${1#*=}"
+                [ -n "$remaining_char" ] || { _error "Missing value for remaining character option. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                shift
             ;;
             *)
                 if [ -z "$current" ]; then current="$1"
@@ -201,7 +249,7 @@ _progress() {
     }
 
     __unset() {
-        unset -f __unset _error _show_help _select_out_fd _is_tty_fd _get_term_cols _print_on_fd
+        unset -f __unset _error _show_help _select_out_fd _is_tty_fd _get_term_cols _print_on_fd _expand_short_opts
     }
     trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
