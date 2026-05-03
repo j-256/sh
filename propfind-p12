@@ -51,13 +51,47 @@ _propfind_p12() {
         echo "  generate-p12, verify-p12"
     }
 
+    _expand_short_opts() {
+        # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
+        # $2..$N = "$@"
+        # Populates _EXPANDED; caller does: set -- "${_EXPANDED[@]}"; unset _EXPANDED
+        local value_opts="$1"; shift
+        _EXPANDED=()
+        local passthru=""
+        local arg
+        local rest
+        local c
+        for arg in "$@"; do
+            if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
+            case "$arg" in
+                --)       passthru=1; _EXPANDED+=("$arg") ;;
+                --*|-|"") _EXPANDED+=("$arg") ;;
+                -??*)
+                    rest="${arg#-}"
+                    while [ -n "$rest" ]; do
+                        c="${rest%"${rest#?}"}"; rest="${rest#?}"
+                        _EXPANDED+=("-$c")
+                        case "$value_opts" in *"$c"*)
+                            [ -n "$rest" ] && _EXPANDED+=("$rest")
+                            rest="" ;;
+                        esac
+                    done ;;
+                *)        _EXPANDED+=("$arg") ;;
+            esac
+        done
+    }
+
     __unset() {
-        unset -f __unset _show_help _error
+        unset -f __unset _show_help _error _expand_short_opts
     }
     trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
     local token=""
     local positional=()
+
+    _expand_short_opts "t" "$@"
+    set -- "${_EXPANDED[@]}"; unset _EXPANDED
+
     while [ $# -gt 0 ]; do
         case "$1" in
             -h|--help)
@@ -75,6 +109,7 @@ _propfind_p12() {
                 ;;
             --token=*)
                 token="${1#*=}"
+                [ -n "$token" ] || { _error "-t/--token requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift
                 ;;
             *)
