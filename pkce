@@ -55,18 +55,55 @@ _pkce() {
         echo "  openssl"
     }
 
+    _expand_short_opts() {
+        # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
+        # $2..$N = "$@"
+        # Populates _EXPANDED; caller does: set -- "${_EXPANDED[@]}"; unset _EXPANDED
+        local value_opts="$1"; shift
+        _EXPANDED=()
+        local passthru=""
+        local arg
+        local rest
+        local c
+        for arg in "$@"; do
+            if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
+            case "$arg" in
+                --)          passthru=1; _EXPANDED+=("$arg") ;;
+                --*|-|"")    _EXPANDED+=("$arg") ;;
+                -[a-zA-Z]?*)
+                    rest="${arg#-}"
+                    while [ -n "$rest" ]; do
+                        c="${rest%"${rest#?}"}"; rest="${rest#?}"
+                        _EXPANDED+=("-$c")
+                        case "$value_opts" in *"$c"*)
+                            [ -n "$rest" ] && _EXPANDED+=("$rest")
+                            rest="" ;;
+                        esac
+                    done ;;
+                *)           _EXPANDED+=("$arg") ;;
+            esac
+        done
+    }
+
     __unset() {
-        unset -f __unset _base64_to_base64url _show_help _error
+        unset -f __unset _base64_to_base64url _show_help _error _expand_short_opts
     }
     trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
-    # Separate by newline if `-n` is provided, otherwise use a tab character
-    case "$1" in # no need to loop through $@ as there is only a single argument (which is optional)
-        -h|--help)
-            _show_help
-            return 0
-            ;;
-    esac
+    # Default to tab-separated output; -n|--newline switches to newline.
+    local delimiter='\t'
+
+    _expand_short_opts "" "$@"
+    set -- "${_EXPANDED[@]}"; unset _EXPANDED
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -h|--help) _show_help; return 0 ;;
+            -n|--newline) delimiter='\n'; shift ;;
+            -*) _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+            *)  _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+        esac
+    done
 
     # Fail fast if openssl is missing -- otherwise openssl-rand (below) yields
     # an empty verifier and the subsequent dgst call silently produces garbage.
@@ -74,13 +111,6 @@ _pkce() {
         _error "openssl is required"
         return 3
     fi
-
-    local delimiter
-    case "$1" in
-        "") delimiter='\t' ;;
-        -n|--newline) delimiter='\n' ;;
-        *) _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
-    esac
 
     # RFC7636 specifies code verifier should be 43 to 128 random characters
     # 32 bytes in base64 is 43 characters (unpadded)
