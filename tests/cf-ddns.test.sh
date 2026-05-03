@@ -94,12 +94,6 @@ exit 0
 SHIM
     chmod +x "$SHIM_DIR/dig"
 
-    # tput shim: handle color codes
-    cat > "$SHIM_DIR/tput" <<'SHIM'
-#!/bin/bash
-exit 0
-SHIM
-    chmod +x "$SHIM_DIR/tput"
 }
 
 # --- helpers ---
@@ -153,13 +147,13 @@ test_missing_dig() {
 test_missing_api_token() {
     run_script
     assert_rc "missing token" 2
-    assert_err_contains "token error" "must provide an API bearer token"
+    assert_err_contains "token error" "Must provide an API bearer token"
 }
 
 test_missing_domain() {
     run_script "token123"
     assert_rc "missing domain" 2
-    assert_err_contains "domain error" "must provide a domain name"
+    assert_err_contains "domain error" "Must provide a domain name"
 }
 
 test_ip_detection_failure() {
@@ -192,18 +186,18 @@ SHIM
 
     run_script "token123" "example.com"
     assert_rc "already up to date" 0
-    assert_stdout_contains "up to date message" "DNS IP address already up-to-date"
+    assert_err_contains "up to date message" "DNS IP address already up-to-date"
 }
 
 test_dns_update_needed() {
     # dig returns different IP than ipify
     run_script "token123" "example.com"
     assert_rc "dns update" 0
-    assert_stdout_contains "device ip" "Device's IP: 203.0.113.42"
-    assert_stdout_contains "domain ip" "Domain's IP: 192.0.2.10"
-    assert_stdout_contains "updating" "IP addresses do not match, updating DNS"
-    assert_stdout_contains "deleting" "Deleting A record for 192.0.2.10"
-    assert_stdout_contains "creating" "Creating A record for 203.0.113.42"
+    assert_err_contains "device ip" "Device's IP: 203.0.113.42"
+    assert_err_contains "domain ip" "Domain's IP: 192.0.2.10"
+    assert_err_contains "updating" "IP addresses do not match, updating DNS"
+    assert_err_contains "deleting" "Deleting A record for 192.0.2.10"
+    assert_err_contains "creating" "Creating A record for 203.0.113.42"
 }
 
 test_domain_no_ip() {
@@ -216,7 +210,7 @@ SHIM
 
     run_script "token123" "example.com"
     assert_rc "no current ip" 0
-    assert_stdout_contains "none message" "Domain's IP: NONE"
+    assert_err_contains "none message" "Domain's IP: NONE"
 }
 
 test_zone_not_found() {
@@ -313,8 +307,8 @@ SHIM
     run_script "token123" "example.com"
     assert_rc "no a records" 0
     assert_err_contains "no records message" "No existing A records"
-    assert_stdout_contains "creating only" "Creating A record for 203.0.113.42"
-    assert_stdout_not_contains "no delete" "Deleting A record"
+    assert_err_contains "creating only" "Creating A record for 203.0.113.42"
+    assert_err_not_contains "no delete" "Deleting A record"
 }
 
 test_multiple_a_records() {
@@ -370,8 +364,8 @@ SHIM
 
     run_script "token123" "example.com"
     assert_rc "multiple records" 0
-    assert_contains "delete first" "$(get_stdout)" "Deleting A record for 192.0.2.10"
-    assert_contains "delete second" "$(get_stdout)" "Deleting A record for 192.0.2.11"
+    assert_contains "delete first" "$(get_stderr)" "Deleting A record for 192.0.2.10"
+    assert_contains "delete second" "$(get_stderr)" "Deleting A record for 192.0.2.11"
 }
 
 test_delete_record_api_failure() {

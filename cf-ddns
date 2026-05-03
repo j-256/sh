@@ -21,13 +21,13 @@ _cf_ddns() {
 
     # Clean up inner functions on return
     __unset() {
-        unset -f __unset _show_help _msg _info _warn _error _dbg _exception _curl _get_zones _get_dns_records _delete_dns_record _create_dns_record _outgoing_ip _api_success
+        unset -f __unset _show_help _color _info _warn _error _debug _exception _curl _get_zones _get_dns_records _delete_dns_record _create_dns_record _outgoing_ip _api_success
     }
     trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
     _show_help() {
-        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
-        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        local s; [ -t 1 ] && s=$'\033[4m'
+        local r; [ -t 1 ] && r=$'\033[24m'
         echo "NAME"
         echo "  $SCRIPT_NAME - update Cloudflare DNS to this machine's outbound IP"
         echo "SYNOPSIS"
@@ -59,27 +59,33 @@ _cf_ddns() {
         echo "  Zone.Zone, Zone.DNS"
     }
 
+    _color() { [ -t 2 ] && [ -z "${NO_COLOR:-}" ] && printf '%s' "$1"; }
+    _error() { printf '%s[ERR][%s] %s%s\n' "$(_color $'\033[31m')" "$SCRIPT_NAME" "$*" "$(_color $'\033[0m')" >&2; }
+    _warn()  { printf '%s[WRN][%s] %s%s\n' "$(_color $'\033[33m')" "$SCRIPT_NAME" "$*" "$(_color $'\033[0m')" >&2; }
+    _info()  { printf '%s[INF][%s] %s%s\n' "$(_color $'\033[2m')"  "$SCRIPT_NAME" "$*" "$(_color $'\033[0m')" >&2; }
+    _debug() { [ -z "$DDNS_DEBUG" ] && return 0; printf '%s[DBG][%s] %s%s\n' "$(_color $'\033[36m')" "$SCRIPT_NAME" "$*" "$(_color $'\033[0m')" >&2; }
+
     case "$1" in
         -h|--help) _show_help; return 0 ;;
     esac
 
-    # Check dependencies (before _error is defined, so shape the prefix manually)
+    # Check dependencies
     local dep
     for dep in jq curl dig; do
         if ! command -v "$dep" >/dev/null 2>&1; then
-            echo "[$SCRIPT_NAME] ERROR: $dep is required" >&2
+            _error "$dep is required"
             return 3
         fi
     done
 
     #/# Script Parameters #\#
     if [ -z "${1:-}" ]; then
-        echo "[$SCRIPT_NAME] ERROR: must provide an API bearer token. Run \`$SCRIPT_NAME -h\` for usage." >&2
+        _error "Must provide an API bearer token. Run \`$SCRIPT_NAME -h\` for usage"
         return 2
     fi
     local api_token="$1"; shift
     if [ -z "${1:-}" ]; then
-        echo "[$SCRIPT_NAME] ERROR: must provide a domain name. Run \`$SCRIPT_NAME -h\` for usage." >&2
+        _error "Must provide a domain name. Run \`$SCRIPT_NAME -h\` for usage"
         return 2
     fi
     local domain="$1"; shift
@@ -87,28 +93,6 @@ _cf_ddns() {
     #\# #/#
 
     ###/### Local Functions ###\###
-    #/# Formatted echoes #\#
-    # for i in {0..15}; do tput setaf "$i"; echo "[WAR] This is a test string $i"; done; tput sgr0;
-    _msg() {
-        local color_index="${1:?"ANSI color code is required [0..15]"}" && shift
-        local prefix="${1:?"log prefix is required"}" && shift
-        tput setaf "$color_index" \
-        && echo "$prefix$*" \
-        && tput sgr0
-    }
-    _info() {
-        _msg 7 "[INF] " "$*" # 7 = white, 8 = gray (bright black)
-    }
-    _warn() {
-        _msg 3 "[WAR] " "$*" >&2 # 3 = yellow
-    }
-    _error() {
-        _msg 9 "[ERR] " "$*" >&2 # 9 = bright red
-    }
-    _dbg() {
-        [ "$DDNS_DEBUG" ] && \
-        _msg 14 "[DBG] " "$*" >&2 # 14 = bright cyan
-    }
     _exception() {
         local error_message="${1:?"error message is required"}"
         local log_file="${2:?"log file is required"}"
@@ -134,18 +118,18 @@ _cf_ddns() {
 
     #/# API calls #\#
     _get_zones() {
-        _dbg "GET /zones"
+        _debug "GET /zones"
         _curl GET "/zones"
     }
     _get_dns_records() {
         local zone_id="${1:?"zone ID is required"}"
-        _dbg "GET /zones/$zone_id/dns_records"
+        _debug "GET /zones/$zone_id/dns_records"
         _curl GET "/zones/$zone_id/dns_records"
     }
     _delete_dns_record() {
         local zone_id="${1:?"zone ID is required"}"
         local record_id="${2:?"DNS record ID is required"}"
-        _dbg "DELETE /zones/$zone_id/dns_records/$record_id"
+        _debug "DELETE /zones/$zone_id/dns_records/$record_id"
         _curl DELETE "/zones/$zone_id/dns_records/$record_id"
     }
     _create_dns_record() {
@@ -153,7 +137,7 @@ _cf_ddns() {
         local domain="${2:?"domain name is required"}"
         local type="${3:?"DNS record type is required"}"
         local content="${4:?"DNS record content is required"}"
-        _dbg "POST /zones/$zone_id/dns_records"
+        _debug "POST /zones/$zone_id/dns_records"
         _curl POST "/zones/$zone_id/dns_records" \
             -H "Content-Type: application/json" \
             --data '{
@@ -178,12 +162,12 @@ _cf_ddns() {
 
     ###/### Main ###\###
     # Print log file name so user can tail if desired
-    _dbg "curl output logged to: $CURL_LOG_FILE"
+    _debug "curl output logged to: $CURL_LOG_FILE"
 
     # Get current outbound (inbound) IP
     local outgoing_ip
     if ! outgoing_ip="$(_outgoing_ip)"; then
-        _error "Failed to get device's IP!"
+        _error "Failed to get device's IP"
         return 1
     fi
     _info "Device's IP: $outgoing_ip"
@@ -197,13 +181,13 @@ _cf_ddns() {
         _info "DNS IP address already up-to-date"
         return 0
     else
-        _info "IP addresses do not match, updating DNS..."
+        _info "IP addresses do not match, updating DNS"
     fi
 
     # Get zone ID from domain name
     local zone_id
     if ! zone_id="$(_get_zones | jq -r '.result[] | select(.name=="'"$domain"'") | .id' 2>"/tmp/get_zones.$$.err")"; then
-        _exception "Unexpected error while retrieving zone ID for domain \"$domain\":" "/tmp/get_zones.$$.err"
+        _exception "Unexpected error while retrieving zone ID for domain \"$domain\"" "/tmp/get_zones.$$.err"
         return 1
     fi
     if [ -z "$zone_id" ]; then
@@ -214,11 +198,11 @@ _cf_ddns() {
     # Get all A records for zone
     local a_records
     if ! a_records="$(_get_dns_records "$zone_id" | jq -r '.result[] | select(.type=="A") | "\(.content)=\(.id)"' 2>"/tmp/get_dns_records.$$.err")"; then
-        _exception "Unexpected error while retrieving DNS records from zone \"$zone_id\" ($domain):" "/tmp/get_dns_records.$$.err"
+        _exception "Unexpected error while retrieving DNS records from zone \"$zone_id\" ($domain)" "/tmp/get_dns_records.$$.err"
         return 1
     fi
     if [ -z "$a_records" ]; then
-        _info "No existing A records in zone \"$zone_id\" ($domain)" >&2
+        _info "No existing A records in zone \"$zone_id\" ($domain)"
     fi
 
     # Delete all found A records - this is why we are not using PUT
@@ -231,7 +215,7 @@ _cf_ddns() {
         if _api_success "$delete_response"; then
             : #_info "Successfully deleted A record for $record_ip ($record_id)"
         else
-            _error "Delete DNS Record request failed, printing raw response:"
+            _error "Delete DNS Record request failed, printing raw response"
             echo "$delete_response" >&2
         fi
     done
@@ -242,7 +226,7 @@ _cf_ddns() {
     if _api_success "$create_response"; then
         : #_info "Successfully created A record for $outgoing_ip"
     else
-        _error "Create DNS Record request failed, printing raw response:"
+        _error "Create DNS Record request failed, printing raw response"
         echo "$create_response" >&2
     fi
     ###\### ###/###

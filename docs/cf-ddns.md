@@ -8,11 +8,11 @@ Designed to run periodically from the target host (via cron or systemd timer). F
 
 ```bash
 $ cf-ddns YOUR_API_TOKEN home.example.com
-[INF] Device's IP: 203.0.113.42
-[INF] Domain's IP: 198.51.100.8 (home.example.com)
-[INF] IP addresses do not match, updating DNS...
-[INF] Deleting A record for 198.51.100.8 (abc123...)
-[INF] Creating A record for 203.0.113.42
+[INF][cf-ddns] Device's IP: 203.0.113.42
+[INF][cf-ddns] Domain's IP: 198.51.100.8 (home.example.com)
+[INF][cf-ddns] IP addresses do not match, updating DNS
+[INF][cf-ddns] Deleting A record for 198.51.100.8 (abc123...)
+[INF][cf-ddns] Creating A record for 203.0.113.42
 ```
 
 The script deletes all existing A records for the domain before creating a new one pointing to the current IP. TTL is hardcoded to 60 seconds for fast propagation.
@@ -36,9 +36,9 @@ The script deletes all existing A records for the domain before creating a new o
 
 ```bash
 $ DDNS_DEBUG=1 cf-ddns YOUR_API_TOKEN home.example.com
-[DBG] curl output logged to: /tmp/curl.12345.log
-[DBG] GET /zones
-[INF] Device's IP: 203.0.113.42
+[DBG][cf-ddns] curl output logged to: /tmp/curl.12345.log
+[DBG][cf-ddns] GET /zones
+[INF][cf-ddns] Device's IP: 203.0.113.42
 ...
 ```
 
@@ -110,6 +110,6 @@ The delete-all-then-create approach ensures a clean state even if multiple A rec
 
 - **TTL:** Hardcoded to 60 seconds (`A_RECORD_TTL=60`) for fast propagation during IP changes.
 - **API version:** Uses Cloudflare API v4 (`https://api.cloudflare.com/client/v4`).
-- **Logging:** Colored output via `tput` -- info messages to stdout (white), warnings/errors to stderr (yellow/red), debug messages to stderr (cyan).
+- **Logging:** Colored output via raw ANSI escapes, guarded by TTY check and `NO_COLOR`. All diagnostic levels (`[INF]`, `[WRN]`, `[ERR]`, `[DBG]`) write to stderr in the shape `[LVL][cf-ddns] message`.
 - **Curl logs:** When `DDNS_DEBUG` is set, full curl stderr/stdout is logged to `/tmp/curl.$$.log` (where `$$` is the process ID).
 - **TCP DNS queries:** Uses `dig +tcp` to avoid issues on networks that block UDP DNS traffic.
