@@ -290,6 +290,130 @@ Palette: `[ERR]` red (`\033[31m`), `[WRN]` yellow (`\033[33m`), `[INF]` dim (`\0
 
 Default to the plain variant. Only reach for the colored variant when output disambiguation genuinely matters.
 
+## Argument Parsing
+
+Every script accepts three GNU-style input shapes, same as `curl`, `git`, and `grep`:
+
+- Bundled short flags: `-sv` == `-s -v`
+- Glued short-opt values: `-n5` == `-n 5`
+- `=`-joined long-opt values: `--num=5` == `--num 5`
+
+Scripts implement this via a preprocessor block that runs once before the parse loop, plus a `--foo=*)` arm next to every `-f|--foo)` arm that takes a value.
+
+### Canonical short options
+
+Reuse these letters with these meanings across scripts. New scripts that need one of these behaviors must use the listed letter; new scripts that pick a short option for a different purpose must avoid these letters.
+
+| Short | Long | Meaning |
+|-------|------|---------|
+| `-h` | `--help` | Show help |
+| `-v` | `--verbose` | Verbose output |
+| `-q` | `--quiet` | Suppress non-error output |
+| `-n` | `--dry-run` | Simulate, don't modify |
+| `-f` | `--force` | Force/overwrite |
+| `-d` | _(script-specific)_ | Reserved for script-specific use (data, duration, etc.) |
+
+`-n` for dry-run follows `make -n`, `rsync -n`, `git push -n` (mnemonic: "no execute"). `-d` is deliberately script-specific -- several scripts already use it for `--data`, `--duration`, etc., so it is not reserved for dry-run.
+
+Every short option must be paired with a long option unless the short is deliberately undocumented (rare -- prefer documenting and pairing). The long form is what shows up in scripts, docs, and error messages; the short is the typing shortcut.
+
+### Preprocessor
+
+Every script with short options defines `_expand_short_opts` inside the wrapper function and calls it immediately above the parse loop. The function body is identical across scripts; the call-site argument lists the letters that take a value (`""` if none).
+
+```bash
+_expand_short_opts() {
+    # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
+    # $2..$N = "$@"
+    # Populates _EXPANDED; caller does: set -- "${_EXPANDED[@]}"; unset _EXPANDED
+    local value_opts="$1"; shift
+    _EXPANDED=()
+    local passthru=""
+    local arg
+    local rest
+    local c
+    for arg in "$@"; do
+        if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
+        case "$arg" in
+            --)       passthru=1; _EXPANDED+=("$arg") ;;
+            --*|-|"") _EXPANDED+=("$arg") ;;
+            -??*)
+                rest="${arg#-}"
+                while [ -n "$rest" ]; do
+                    c="${rest%"${rest#?}"}"; rest="${rest#?}"
+                    _EXPANDED+=("-$c")
+                    case "$value_opts" in *"$c"*)
+                        [ -n "$rest" ] && _EXPANDED+=("$rest")
+                        rest="" ;;
+                    esac
+                done ;;
+            *)        _EXPANDED+=("$arg") ;;
+        esac
+    done
+}
+
+_expand_short_opts "nXHd" "$@"
+set -- "${_EXPANDED[@]}"; unset _EXPANDED
+```
+
+The call-site argument lists every short-option letter in the script that takes a value -- `"nwsXHdA"` in `curl-timing`, `""` in `bak`. A missing letter causes `-n5` to silently split into `-n -5`.
+
+`_expand_short_opts` is listed in `__unset` alongside the other inner functions.
+
+### Long options with `=`
+
+Every long option that takes a value has a sibling `--foo=*)` arm next to its `-f|--foo)` arm. Both arms guard against an empty value with the canonical missing-value phrasing from the Error Messages canon:
+
+```bash
+-n|--num)
+    [ -n "${2-}" ] || { _error "--num requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+    num_requests="$2"; shift 2 ;;
+--num=*)
+    num_requests="${1#*=}"
+    [ -n "$num_requests" ] || { _error "--num requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+    shift ;;
+```
+
+The `--num=*)` guard catches `--num=` (empty value after `=`), symmetric with how the `-n|--num)` arm catches a missing `$2`. Both paths emit the same canonical message.
+
+Long flag options (no value) have no `--foo=*)` arm. `--verbose=oops` falls through to `-*)` and errors with the canonical "Unknown argument" phrasing.
+
+### Parse loop shape
+
+Canonical structure, inside the wrapper function, after the `__unset` trap and before main logic:
+
+```bash
+_expand_short_opts "nXHd" "$@"
+set -- "${_EXPANDED[@]}"; unset _EXPANDED
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -h|--help) _show_help; return 0 ;;
+        -v|--verbose) verbose=1; shift ;;
+
+        -n|--num)
+            [ -n "${2-}" ] || { _error "--num requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+            num_requests="$2"; shift 2 ;;
+        --num=*)
+            num_requests="${1#*=}"
+            [ -n "$num_requests" ] || { _error "--num requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+            shift ;;
+
+        --) shift; while [ $# -gt 0 ]; do args+=("$1"); shift; done ;;
+        -*) _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+        *)  args+=("$1"); shift ;;
+    esac
+done
+```
+
+### Positional/option ordering
+
+Positionals and options may be freely interleaved. `bak file1 -v file2` is equivalent to `bak -v file1 file2`. The `*)` (positional) and option arms both `shift` and accumulate as they go, so ordering is a property of the parse-loop shape -- no extra code required. Use `--` to force the remainder as positional when a positional starts with `-`.
+
+### Scope
+
+Every long option is either a flag (no value) or requires a value -- never optional-value (`--color` defaulting when bare, taking a value only with `--color=always`). Long options are matched exactly; abbreviations like `--ver` for `--verbose` are unknown arguments.
+
 ## Dependencies
 
 When a script requires external tools, check for them early and fail with a clear message:
