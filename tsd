@@ -77,6 +77,11 @@ _tsd() {
     # Allow local timezone to be overridden, for testing
     local -r LOCALTIME="${TSD_LOCALTIME:-"/etc/localtime"}"
 
+    __unset() {
+        unset -f __unset _error _expand_short_opts
+    }
+    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
+
     _expand_short_opts "" "$@"
     set -- "${_EXPANDED[@]}"; unset _EXPANDED
 
@@ -338,7 +343,7 @@ _tsd() {
 
 _tsd "$@"
 __tsd_rc=$?
-unset -f _tsd _error _expand_short_opts
+unset -f _tsd
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __tsd_rc; return $__tsd_rc"
 fi
