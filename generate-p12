@@ -16,8 +16,8 @@ _generate_p12() {
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="generate-p12" ;; esac
 
     _show_help() {
-        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
-        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        local s; [ -t 1 ] && s=$'\033[4m'
+        local r; [ -t 1 ] && r=$'\033[24m'
         echo "NAME"
         echo "  $SCRIPT_NAME - generate a PKCS#12 client certificate for SFCC mTLS code uploads"
         echo "SYNOPSIS"
@@ -71,15 +71,12 @@ _generate_p12() {
     # However, any BM hostname or as little as "customer.realm" or "customer-realm" may be provided
 
     # Text formatting control characters for later use - by convention wrapped in {} when used below, for legibility
-    local red;     red="$(tput setaf 1)"
-    local teal;   teal="$(tput setaf 6)"
+    local teal=$'\033[36m'
     local default_color="$teal"
-    local bold;   bold="$(tput bold)" # start bolding text
-    local smul;   smul="$(tput smul)" # start underlining text
-    local rmul;   rmul="$(tput rmul)" # stop underlining text
-    local reset; reset="$(tput sgr0)" # reset all formatting to terminal default
-    # Note: There is no `tput unbold`. `tput bold` is $'\E[1m', which you would generally undo with
-    #  $'\E[0m' or $'\E[m', but those essentially match `tput sgr0`, clearing all formatting
+    local bold=$'\033[1m' # start bolding text
+    local smul=$'\033[4m' # start underlining text
+    local rmul=$'\033[24m' # stop underlining text
+    local reset=$'\033[0m' # reset all formatting to terminal default
 
     # Unset inner functions before returning
     __unset() {
@@ -108,15 +105,21 @@ _generate_p12() {
     _bold() {
         _color "$bold$default_color" "$@"
     }
-    # Prints red text to stderr, with [ERR] preceding each line
+    # Prints diagnostic messages to stderr with canonical [ERR][SCRIPT_NAME] shape, in red on TTY
     _error() {
+        local red_on=''
+        local reset=''
+        if [ -t 2 ] && [ -z "${NO_COLOR:-}" ]; then
+            red_on=$'\033[31m'
+            reset=$'\033[0m'
+        fi
         if [ -t 0 ]; then
             local arg
             for arg in "$@"; do
-                _color "$red" "[ERR] $arg" >&2
+                printf '%s[ERR][%s] %s%s\n' "$red_on" "$SCRIPT_NAME" "$arg" "$reset" >&2
             done
         else
-            _color "$red" "[ERR] $(cat)" >&2
+            printf '%s[ERR][%s] %s%s\n' "$red_on" "$SCRIPT_NAME" "$(cat)" "$reset" >&2
         fi
     }
     # Checks if file(s) exist and prints an error message if not
