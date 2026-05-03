@@ -39,6 +39,35 @@ _tsd() {
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="tsd" ;; esac
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+    _expand_short_opts() {
+        # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
+        # $2..$N = "$@"
+        # Populates _EXPANDED; caller does: set -- "${_EXPANDED[@]}"; unset _EXPANDED
+        local value_opts="$1"; shift
+        _EXPANDED=()
+        local passthru=""
+        local arg
+        local rest
+        local c
+        for arg in "$@"; do
+            if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
+            case "$arg" in
+                --)          passthru=1; _EXPANDED+=("$arg") ;;
+                --*|-|"")    _EXPANDED+=("$arg") ;;
+                -[a-zA-Z]?*)
+                    rest="${arg#-}"
+                    while [ -n "$rest" ]; do
+                        c="${rest%"${rest#?}"}"; rest="${rest#?}"
+                        _EXPANDED+=("-$c")
+                        case "$value_opts" in *"$c"*)
+                            [ -n "$rest" ] && _EXPANDED+=("$rest")
+                            rest="" ;;
+                        esac
+                    done ;;
+                *)           _EXPANDED+=("$arg") ;;
+            esac
+        done
+    }
     local input
     local unit # Set to default value later, if still unset after processing arguments
     local digits
@@ -47,6 +76,9 @@ _tsd() {
 
     # Allow local timezone to be overridden, for testing
     local -r LOCALTIME="${TSD_LOCALTIME:-"/etc/localtime"}"
+
+    _expand_short_opts "" "$@"
+    set -- "${_EXPANDED[@]}"; unset _EXPANDED
 
     #region parameter processing
     # Handle parameters
@@ -306,7 +338,7 @@ _tsd() {
 
 _tsd "$@"
 __tsd_rc=$?
-unset -f _tsd _error
+unset -f _tsd _error _expand_short_opts
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __tsd_rc; return $__tsd_rc"
 fi
