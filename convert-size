@@ -58,8 +58,38 @@ _convert_size() {
         esac
     }
 
+    _expand_short_opts() {
+        # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
+        # $2..$N = "$@"
+        # Populates _EXPANDED; caller does: set -- "${_EXPANDED[@]}"; unset _EXPANDED
+        local value_opts="$1"; shift
+        _EXPANDED=()
+        local passthru=""
+        local arg
+        local rest
+        local c
+        for arg in "$@"; do
+            if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
+            case "$arg" in
+                --)          passthru=1; _EXPANDED+=("$arg") ;;
+                --*|-|"")    _EXPANDED+=("$arg") ;;
+                -[a-zA-Z]?*)
+                    rest="${arg#-}"
+                    while [ -n "$rest" ]; do
+                        c="${rest%"${rest#?}"}"; rest="${rest#?}"
+                        _EXPANDED+=("-$c")
+                        case "$value_opts" in *"$c"*)
+                            [ -n "$rest" ] && _EXPANDED+=("$rest")
+                            rest="" ;;
+                        esac
+                    done ;;
+                *)        _EXPANDED+=("$arg") ;;
+            esac
+        done
+    }
+
     __unset() {
-        unset -f __unset _show_help _error _si_unit _binary_unit
+        unset -f __unset _show_help _error _si_unit _binary_unit _expand_short_opts
     }
     trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
@@ -73,6 +103,9 @@ _convert_size() {
         return 3
     fi
 
+    _expand_short_opts "ut" "$@"
+    set -- "${_EXPANDED[@]}"; unset _EXPANDED
+
     while [ $# -gt 0 ]; do
         case "$1" in
             -h|--help)
@@ -84,10 +117,22 @@ _convert_size() {
                 shift
                 unit="$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')"
                 ;;
+            --unit=*)
+                [ "$unit" ] && { _error "The -u|--unit option is specified more than once. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                unit="${1#*=}"
+                [ -n "$unit" ] || { _error "-u|--unit requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                unit="$(printf '%s' "$unit" | tr '[:lower:]' '[:upper:]')"
+                ;;
             -t|--to)
                 [ "$to" ] && { _error "The -t|--to option is specified more than once. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift
                 to="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+                ;;
+            --to=*)
+                [ "$to" ] && { _error "The -t|--to option is specified more than once. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                to="${1#*=}"
+                [ -n "$to" ] || { _error "-t|--to requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                to="$(printf '%s' "$to" | tr '[:upper:]' '[:lower:]')"
                 ;;
             *)
                 if [ "$size" ]; then

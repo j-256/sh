@@ -104,6 +104,19 @@ test_invalid_size_negative() {
     assert_err_contains "negative size error" "Invalid size: -500"
 }
 
+test_bundled_short_with_glued_value() {
+    # -tbinary equivalent to -t binary, glued via preprocessor
+    run_script -tbinary 500G
+    assert_rc "glued -tbinary exits 0" 0
+    assert_stdout_contains "glued -tbinary converts" "465.66G"
+}
+
+test_equals_long_option() {
+    run_script --to=binary 500G
+    assert_rc "--to=binary exits 0" 0
+    assert_stdout_contains "--to=binary converts" "465.66G"
+}
+
 test_invalid_unit() {
     run_script -t binary 500X
     assert_rc "invalid unit exits 2" 2
