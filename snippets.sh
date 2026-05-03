@@ -195,9 +195,8 @@ shell_func() {
     # Print usage (help) info - below mimics the format of most manpages
     _show_help() {
         # Underline only if output is a terminal (not a pipe or file)
-        # Fall back to empty string if tput is unavailable
-        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
-        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        local s; [ -t 1 ] && s=$'\033[4m'
+        local r; [ -t 1 ] && r=$'\033[24m'
         echo "NAME"
         echo "  $SCRIPT_NAME - do cool things"
         echo "SYNOPSIS"
