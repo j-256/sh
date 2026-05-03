@@ -2,6 +2,8 @@
 
 Standards for scripts in this repository.
 
+**See also:** [`DOCS.md`](DOCS.md) for how to write a `<script>.md` doc; [`TESTING.md`](TESTING.md) for how to write a `<script>.test.sh` test file.
+
 ## File Structure
 
 ```bash
@@ -151,6 +153,43 @@ This ensures:
 - Prefer POSIX-compatible patterns where reasonable (scripts may be run by zsh)
 - Quote variables in `[ ]` tests: `[ "$var" -eq 0 ]`, not `[ $var -eq 0 ]`
 - Prefer `if ...; then ...; else ...; fi` to `A && B || C` (SC2015): the chained form silently runs `C` if `B` fails, not only when `A` fails. The two are equivalent only when `B` can't fail, which is usually not worth relying on -- `echo`/`true` are fine but user-defined functions and external commands aren't.
+- Prefer `cmd || :` over `cmd || true` for "ignore failure" patterns. `:` is the POSIX null utility -- intentional, minimal, and reads as "no-op" at a glance. `|| true` works but relies on reading `true` as a no-op keyword rather than a command; `|| :` makes the intent unambiguous.
+
+## Exit Codes
+
+Usage `--help` should document exactly the codes the script uses, with short descriptions. The canonical meanings:
+
+| Code | Meaning |
+|------|---------|
+| `0` | Success |
+| `1` | Runtime failure (network, filesystem, external command failed) |
+| `2` | Usage error (missing arg, unknown flag, bad flag value, precondition not met) |
+| `3` | Dependency error (required tool not installed) |
+| `4`+ | Script-specific (document in `--help` EXIT STATUS section) |
+
+Reserve `2` strictly for usage/precondition issues so callers can distinguish "the user invoked me wrong" from "something went wrong while running". Reserve `3` for missing external tools. Scripts with domain-specific failures (e.g. `pwgen`'s `5` for empty charset, `6` for invalid charset) extend with `4`+.
+
+Early-exit validation pattern:
+
+```bash
+# Usage validation (return 2)
+if [ -z "$1" ]; then
+    _error "Must provide an argument. Run \`$SCRIPT_NAME -h\` for usage"
+    return 2
+fi
+
+# Dependency check (return 3)
+if ! command -v jq >/dev/null 2>&1; then
+    _error "jq is required"
+    return 3
+fi
+
+# Runtime failure (return 1, later in the flow)
+if ! result=$(do_the_thing); then
+    _error "Failed to do the thing"
+    return 1
+fi
+```
 
 ## Error Messages
 
@@ -176,10 +215,18 @@ The severity token leads so `grep '^\[ERR\]'` is greppable across the repo witho
 
 ### Casing and punctuation
 
-- Capitalize prose-led messages (`"Invalid argument"`, `"Missing value"`, `"Unknown option"`).
+- Capitalize prose-led messages (`"Invalid argument"`, `"Missing value"`, `"Unknown argument"`).
 - Preserve literal casing for identifier-led messages (`"client_id is required"`, `"jq is required"`, `"$dir does not exist"`).
-- No trailing period on single-sentence messages. Matches Unix tradition (`git`, `cargo`, `brew`, `ls`).
+- No trailing period on single-sentence messages. Matches Unix tradition (`git`, `cargo`, `brew`, `ls`). This also applies to other trailing terminators like `!` and `:`.
 - Internal periods only where structurally required to separate sentences. The usage-hint pattern is the canonical case: `"... is required. Run \`$SCRIPT_NAME -h\` for usage"` -- the period closes the first sentence and the second has no trailing period. When a usage hint is appended, the message has exactly one internal period (between the two sentences) and no trailing period.
+
+**Prose-led vs identifier-led edge cases:**
+
+- Required positional-arg names are identifier-led: `"selector is required"`, `"domain is required"` (not `"Selector is required"`).
+- Command-name-led messages stay lowercase: `"git add failed. Restoring .git..."`, `"jq is required"`, `"mktemp failed"`.
+- Variable-value-led messages preserve the value's case: `"$dir does not exist"`, `"$src: No such file"`.
+- Proper nouns lead capitalized even when referring to an identifier: `"Chrome app not found at '$app'"`, `"DNS response empty"`.
+- Flag names in mid-sentence keep their literal form: `"Invalid --platform '$platform' (valid: mac|win|linux)"`.
 
 ### Usage hint
 
@@ -191,11 +238,30 @@ _error "Failed to get device's IP"                                      # runtim
 _error "jq is required"                                                 # dep error
 ```
 
+### Canonical phrasings
+
+Use these exact forms so error output stays consistent across the repo:
+
+| Situation | Phrasing |
+|-----------|----------|
+| Unknown flag / catch-all `*)` branch | `"Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"` |
+| Bad flag value | `"Invalid --flag '$value' (valid: opt1\|opt2\|opt3). Run \`$SCRIPT_NAME -h\` for usage"` |
+| Missing flag value | `"--flag requires a <type>. Run \`$SCRIPT_NAME -h\` for usage"` |
+| Missing required positional arg (prose-led) | `"Must provide <thing>. Run \`$SCRIPT_NAME -h\` for usage"` |
+| Missing required positional arg (identifier-led) | `"<identifier> is required. Run \`$SCRIPT_NAME -h\` for usage"` |
+| Duplicated flag | `"Multiple <things> not allowed (already set to '$value'). Run \`$SCRIPT_NAME -h\` for usage"` |
+| Dependency missing | `"<tool> is required"` (no hint) |
+| Runtime failure | `"Failed to <verb> <object>"` (no hint, no trailing period) |
+
+Single-quote interpolated values (`'$1'`, `'$value'`) so empty strings and whitespace are visible. Use `$SCRIPT_NAME` in the hint backticks (not a hardcoded name).
+
 ### Helper presence
 
 - `_error` is required in every script.
-- `_warn`, `_info`, `_debug` are defined only when the script calls them. Bash errors loudly at the call site if a caller uses an undefined helper.
-- `__unset` lists exactly the helpers the script defines.
+- `_warn`, `_info`, `_debug` are defined **only** when the script calls them. Do not define speculative helpers -- they become orphan code that `__unset` has to track and that future readers have to investigate. Bash errors loudly at the call site if a caller uses an undefined helper, so nothing is lost by omitting unused ones.
+- `__unset` lists exactly the helpers the script defines -- no more, no less.
+
+**Helper placement:** define helpers inside the wrapper function, before the cleanup trap and before any logic that might call them. When dependency-checking is part of the flow (e.g. before arg parsing), place helpers first so dep-check error paths can use `_error`.
 
 ### Default helper block (plain)
 
