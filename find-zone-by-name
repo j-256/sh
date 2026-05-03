@@ -66,8 +66,38 @@ _find_zone_by_name() {
         echo "  1   No matching zone found, or API request failed"
     }
 
+    _expand_short_opts() {
+        # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
+        # $2..$N = "$@"
+        # Populates _EXPANDED; caller does: set -- "${_EXPANDED[@]}"; unset _EXPANDED
+        local value_opts="$1"; shift
+        _EXPANDED=()
+        local passthru=""
+        local arg
+        local rest
+        local c
+        for arg in "$@"; do
+            if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
+            case "$arg" in
+                --)          passthru=1; _EXPANDED+=("$arg") ;;
+                --*|-|"")    _EXPANDED+=("$arg") ;;
+                -[a-zA-Z]?*)
+                    rest="${arg#-}"
+                    while [ -n "$rest" ]; do
+                        c="${rest%"${rest#?}"}"; rest="${rest#?}"
+                        _EXPANDED+=("-$c")
+                        case "$value_opts" in *"$c"*)
+                            [ -n "$rest" ] && _EXPANDED+=("$rest")
+                            rest="" ;;
+                        esac
+                    done ;;
+                *)           _EXPANDED+=("$arg") ;;
+            esac
+        done
+    }
+
     __unset() {
-        unset -f __unset _error _show_help
+        unset -f __unset _error _show_help _expand_short_opts
     }
     trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
@@ -78,18 +108,51 @@ _find_zone_by_name() {
     local instance="$J_INSTANCE"
     local target="$J_TARGET"
 
+    _expand_short_opts "jsrint" "$@"
+    set -- "${_EXPANDED[@]}"; unset _EXPANDED
+
     # Parse command-line options
     while [ $# -gt 0 ]; do
         case "$1" in
-            -j|--jwt|--token) jwt="$2"; shift 2;;
-            -s|--shortcode) shortcode="$2"; shift 2;;
-            -r|--realm) realm="$2"; shift 2;;
-            -i|--instance) instance="$2"; shift 2;;
-            -n|--name|-t|--target) target="$2"; shift 2;;
+            -j|--jwt|--token)
+                [ -n "${2-}" ] || { _error "-j|--jwt requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 1; }
+                jwt="$2"; shift 2 ;;
+            --jwt=*|--token=*)
+                jwt="${1#*=}"
+                [ -n "$jwt" ] || { _error "-j|--jwt requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 1; }
+                shift ;;
+            -s|--shortcode)
+                [ -n "${2-}" ] || { _error "-s|--shortcode requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 1; }
+                shortcode="$2"; shift 2 ;;
+            --shortcode=*)
+                shortcode="${1#*=}"
+                [ -n "$shortcode" ] || { _error "-s|--shortcode requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 1; }
+                shift ;;
+            -r|--realm)
+                [ -n "${2-}" ] || { _error "-r|--realm requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 1; }
+                realm="$2"; shift 2 ;;
+            --realm=*)
+                realm="${1#*=}"
+                [ -n "$realm" ] || { _error "-r|--realm requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 1; }
+                shift ;;
+            -i|--instance)
+                [ -n "${2-}" ] || { _error "-i|--instance requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 1; }
+                instance="$2"; shift 2 ;;
+            --instance=*)
+                instance="${1#*=}"
+                [ -n "$instance" ] || { _error "-i|--instance requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 1; }
+                shift ;;
+            -n|--name|-t|--target)
+                [ -n "${2-}" ] || { _error "-n|--name requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 1; }
+                target="$2"; shift 2 ;;
+            --name=*|--target=*)
+                target="${1#*=}"
+                [ -n "$target" ] || { _error "-n|--name requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 1; }
+                shift ;;
             -h|--help)
                 _show_help
-                return 0;;
-            *) _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 1;;
+                return 0 ;;
+            *) _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 1 ;;
         esac
     done
 
