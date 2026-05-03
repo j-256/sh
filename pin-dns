@@ -133,49 +133,10 @@ _pin_dns() {
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="pin-dns" ;; esac
 
-    _is_tty() { [ -t 2 ]; }
-
-    _c_reset() { printf '\033[0m'; }
-    _c_red() { printf '\033[31m'; }
-    _c_yellow() { printf '\033[33m'; }
-    _c_dim() { printf '\033[2m'; }
-    _c_bold() { printf '\033[1m'; }
-
-    _error() {
-        if _is_tty; then
-            _c_red; _c_bold
-            printf '%s\n' "[ERR] $*"
-            _c_reset
-        else
-            printf '%s\n' "[ERR] $*" >&2
-        fi >&2
-    }
-
-    _warn() {
-        if [ -n "$quiet" ]; then
-            return 0
-        fi
-        if _is_tty; then
-            _c_yellow; _c_bold
-            printf '%s\n' "[WRN] $*"
-            _c_reset
-        else
-            printf '%s\n' "[WRN] $*" >&2
-        fi >&2
-    }
-
-    _info() {
-        if [ -n "$quiet" ]; then
-            return 0
-        fi
-        if _is_tty; then
-            _c_dim
-            printf '%s\n' "[INF] $*"
-            _c_reset
-        else
-            printf '%s\n' "[INF] $*" >&2
-        fi >&2
-    }
+    _color() { [ -t 2 ] && [ -z "${NO_COLOR:-}" ] && printf '%s' "$1"; }
+    _error() { printf '%s[ERR][%s] %s%s\n' "$(_color $'\033[31m')" "$SCRIPT_NAME" "$*" "$(_color $'\033[0m')" >&2; }
+    _warn()  { [ -n "$quiet" ] && return 0; printf '%s[WRN][%s] %s%s\n' "$(_color $'\033[33m')" "$SCRIPT_NAME" "$*" "$(_color $'\033[0m')" >&2; }
+    _info()  { [ -n "$quiet" ] && return 0; printf '%s[INF][%s] %s%s\n' "$(_color $'\033[2m')"  "$SCRIPT_NAME" "$*" "$(_color $'\033[0m')" >&2; }
 
     _print_help() {
         # Keep this closely aligned with the header comment.
@@ -707,14 +668,14 @@ EOF
         local ua_version=""
 
         if ! [ -d "$chrome_app" ]; then
-            _error "Google Chrome not found at '$chrome_app'."
+            _error "Google Chrome not found at '$chrome_app'"
             return 1
         fi
 
         info_plist="$chrome_app/Contents/Info.plist"
         chrome_version="$(defaults read "$info_plist" CFBundleShortVersionString 2> /dev/null)"
         if [ -z "$chrome_version" ]; then
-            _error "Unable to determine Chrome version (failed to read $info_plist)."
+            _error "Unable to determine Chrome version (failed to read $info_plist)"
             return 1
         fi
 
@@ -775,7 +736,7 @@ EOF
         fi
 
         if ! _cmd_exists dig; then
-            _error "dig is required to resolve TARGET hostnames, but was not found in PATH."
+            _error "dig is required to resolve TARGET hostnames, but was not found in PATH"
             return 3
         fi
 
@@ -788,13 +749,13 @@ EOF
         fi
 
         if [ "$dig_rc" -ne 0 ]; then
-            _error "dig failed (exit $dig_rc) while resolving TARGET '$target'."
+            _error "dig failed (exit $dig_rc) while resolving TARGET '$target'"
             return 3
         fi
 
         ip="$(printf '%s\n' "$dig_out" | tail -n 1)"
         if [ -z "$ip" ]; then
-            _error "dig returned no results for TARGET '$target'."
+            _error "dig returned no results for TARGET '$target'"
             return 4
         fi
 
@@ -848,12 +809,7 @@ EOF
     }
 
     __unset() {
-        unset -f _is_tty
-        unset -f _c_reset
-        unset -f _c_red
-        unset -f _c_yellow
-        unset -f _c_dim
-        unset -f _c_bold
+        unset -f _color
         unset -f _error
         unset -f _warn
         unset -f _info
@@ -903,7 +859,7 @@ EOF
     local -a curl_args=()
 
     if ! _cmd_exists curl; then
-        _error "curl not found in PATH."
+        _error "curl not found in PATH"
         return 3
     fi
 
@@ -931,7 +887,7 @@ EOF
 
         if [ -n "$expect_curl_operand" ]; then
             if _looks_like_pin_dns_option_token "$arg"; then
-                _warn "Token '$arg' looks like a $SCRIPT_NAME option but is being used as the operand to curl option '$expect_curl_operand_for'; it will be passed to curl unchanged. If you intended $SCRIPT_NAME, move it, use --target=VALUE (or similar), or use --."
+                _warn "Token '$arg' looks like a $SCRIPT_NAME option but is being used as the operand to curl option '$expect_curl_operand_for'; it will be passed to curl unchanged. If you intended $SCRIPT_NAME, move it, use --target=VALUE (or similar), or use --"
             fi
             rest_pre_args+=("$arg")
             expect_curl_operand=""
@@ -1002,7 +958,7 @@ EOF
                 local opt="$arg"
                 i=$((i + 1))
                 if [ "$i" -ge "${#pre_args[@]}" ]; then
-                    _error "Missing value for $opt."
+                    _error "Missing value for $opt. Run \`$SCRIPT_NAME -h\` for usage"
                     return 2
                 fi
                 local val="${pre_args[$i]}"
@@ -1032,7 +988,7 @@ EOF
 
     # WARNING: useless -s / -S (only warn when pin-dns is still adding -sS)
     if [ -z "$no_silent" ] && _curl_args_has_silent_controls "${curl_args[@]}"; then
-        _warn "You passed curl -s/-S/--silent/--show-error, but $SCRIPT_NAME already adds curl -sS by default; use --no-silent if you want $SCRIPT_NAME to stop adding -sS."
+        _warn "You passed curl -s/-S/--silent/--show-error, but $SCRIPT_NAME already adds curl -sS by default; use --no-silent if you want $SCRIPT_NAME to stop adding -sS"
     fi
 
 
@@ -1213,7 +1169,7 @@ EOF
                     local hc1; hc1="$(_host_for_compare "$host")"
                     local hc2; hc2="$(_host_for_compare "$url_host")"
                     if [ "$hc1" != "$hc2" ]; then
-                        _warn "URL host '$url_host' does not match --host '$host'; using --host '$host' anyway."
+                        _warn "URL host '$url_host' does not match --host '$host'; using --host '$host' anyway"
                     fi
                 fi
             fi
@@ -1258,15 +1214,15 @@ EOF
 
         if [ -n "$hh" ] && [ "$pu" != "$hh" ] && { [ -z "$tt" ] || [ "$pu" != "$tt" ]; }; then
             if [ -n "$tt" ]; then
-                _warn "PATH_OR_URL host '$path_url_host' does not match HOSTNAME '$host' or TARGET '$target'; using HOSTNAME '$host' anyway."
+                _warn "PATH_OR_URL host '$path_url_host' does not match HOSTNAME '$host' or TARGET '$target'; using HOSTNAME '$host' anyway"
             else
-                _warn "PATH_OR_URL host '$path_url_host' does not match HOSTNAME '$host'; using HOSTNAME '$host' anyway."
+                _warn "PATH_OR_URL host '$path_url_host' does not match HOSTNAME '$host'; using HOSTNAME '$host' anyway"
             fi
         fi
     fi
 
     if [ -z "$host" ]; then
-        _error "Unable to determine HOSTNAME. Provide a URL (e.g. https://example.com) or use --host HOSTNAME."
+        _error "Unable to determine HOSTNAME (provide a URL or use --host HOSTNAME). Run \`$SCRIPT_NAME -h\` for usage"
         _print_help
         return 2
     fi
@@ -1300,7 +1256,7 @@ EOF
         local ua_out; ua_out="$(_get_user_agent)"
         local ua_rc=$?
         if [ "$ua_rc" -ne 0 ] || [ -z "$ua_out" ]; then
-            _warn "User-Agent detection failed; falling back to 'sfcc-test'."
+            _warn "User-Agent detection failed; falling back to 'sfcc-test'"
             ua="sfcc-test"
         else
             ua="$ua_out"
@@ -1394,7 +1350,7 @@ EOF
     "${cmd[@]}"
     local curl_rc=$?
     if [ "$curl_rc" -eq 126 ] || [ "$curl_rc" -eq 127 ]; then
-        _error "curl failed to execute (exit $curl_rc)."
+        _error "curl failed to execute (exit $curl_rc)"
         return 3
     fi
     return "$curl_rc"
