@@ -335,9 +335,9 @@ _expand_short_opts() {
     for arg in "$@"; do
         if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
         case "$arg" in
-            --)       passthru=1; _EXPANDED+=("$arg") ;;
-            --*|-|"") _EXPANDED+=("$arg") ;;
-            -??*)
+            --)          passthru=1; _EXPANDED+=("$arg") ;;
+            --*|-|"")    _EXPANDED+=("$arg") ;;
+            -[a-zA-Z]?*)
                 rest="${arg#-}"
                 while [ -n "$rest" ]; do
                     c="${rest%"${rest#?}"}"; rest="${rest#?}"
@@ -357,6 +357,8 @@ set -- "${_EXPANDED[@]}"; unset _EXPANDED
 ```
 
 The call-site argument lists every short-option letter in the script that takes a value -- `"nwsXHdA"` in `curl-timing`, `""` in `bak`. A missing letter causes `-n5` to silently split into `-n -5`.
+
+Tokens starting with `-` followed by a digit (`-500G`, `-42`) pass through unchanged rather than expanding as clusters. This matches how `curl` and GNU tools treat negative-number arguments -- no short option name is a digit, so `-[digit]...` is safely reserved for negative-value passthrough.
 
 `_expand_short_opts` is listed in `__unset` alongside the other inner functions.
 

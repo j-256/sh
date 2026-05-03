@@ -64,9 +64,9 @@ _propfind_p12() {
         for arg in "$@"; do
             if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
             case "$arg" in
-                --)       passthru=1; _EXPANDED+=("$arg") ;;
-                --*|-|"") _EXPANDED+=("$arg") ;;
-                -??*)
+                --)          passthru=1; _EXPANDED+=("$arg") ;;
+                --*|-|"")    _EXPANDED+=("$arg") ;;
+                -[a-zA-Z]?*)
                     rest="${arg#-}"
                     while [ -n "$rest" ]; do
                         c="${rest%"${rest#?}"}"; rest="${rest#?}"
