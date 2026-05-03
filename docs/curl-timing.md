@@ -1,5 +1,7 @@
 # curl-timing
 
+[View script](../curl-timing)
+
 Time HTTP requests with curl and get a quick statistics summary -- count, total, average, range, and IQR-based outliers -- in milliseconds. Point it at one URL to spot-check latency, or at several to compare endpoints head-to-head.
 
 Designed for the kind of quick-and-dirty measurement where you don't want to reach for `wrk` or `ab`, but "time it with a stopwatch five times" isn't rigorous enough. Timings are written to a text file so you can re-run `stats` or diff between runs later.

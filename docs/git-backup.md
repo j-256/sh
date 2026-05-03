@@ -1,5 +1,7 @@
 # git-backup
 
+[View script](../git-backup)
+
 Save work in progress to a remote branch without polluting your current branch. This creates a timestamped backup branch on the remote, pushes everything (tracked and untracked), then cleans up locally and restores your working state.
 
 Useful before risky operations like interactive rebases, hard resets, or experimental checkouts where you want an offsite safety copy but don't want the backup cluttering your local branch history. The remote acts as offsite storage -- you can pull the backup branch back later if something goes wrong.

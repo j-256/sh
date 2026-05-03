@@ -1,5 +1,7 @@
 # explode
 
+[View script](../explode)
+
 Move a directory's contents up one level, then remove the now-empty directory. The classic use case: you unzip `package-v1.2.3.zip` and it extracts to a single top-level folder `package-v1.2.3/` wrapping all the files you actually wanted at the current level.
 
 By default, `explode` aborts without changes if any item would collide with an existing file at the destination. Use `--force` to overwrite or `--dryrun` to preview what would happen.

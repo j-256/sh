@@ -1,5 +1,7 @@
 # pwgen
 
+[View script](../pwgen)
+
 Generate random passwords or strings with configurable length, charset, and character exclusions.
 
 Especially useful for sites with restrictive password requirements -- "must be exactly 12 characters, lowercase and numbers only, no special characters" becomes `pwgen -c '[:lower:][:digit:]' 12`.

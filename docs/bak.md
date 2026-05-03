@@ -1,5 +1,7 @@
 # bak
 
+[View script](../bak)
+
 Rename files in place by appending `.bak` to the name. When the `.bak` version already exists, it rotates recursively (`file.bak` → `file.bak.bak` → `file.bak.bak.bak`), so the single-`.bak` file is always the most recent backup.
 
 Useful before editing a config file by hand, destructive operations on production code, or anytime you want a quick snapshot without involving git.

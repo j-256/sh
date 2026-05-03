@@ -1,5 +1,7 @@
 # swap
 
+[View script](../swap)
+
 Atomically swap two files by renaming. Useful for rotating config files (`config.prod` ↔ `config.dev`), A/B testing file variants, or any quick swap without a temporary directory.
 
 Works in place using a temp file as intermediary. On partial failure, attempts to restore the original state.

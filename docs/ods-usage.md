@@ -1,5 +1,7 @@
 # ods-usage
 
+[View script](../ods-usage)
+
 Calculate On-Demand Sandbox (ODS) credits used from a Salesforce B2C Commerce ODS API response.
 
 Salesforce B2C Commerce's On-Demand Sandbox feature bills by credit consumption - sandboxes accrue credits per minute based on whether they're running (1x/2x/4x multiplier depending on instance size) or stopped (0.3x). The ODS API returns raw minute counts; this script crunches them into human-readable breakdowns by sandbox count, uptime/downtime per profile, and total credits used.

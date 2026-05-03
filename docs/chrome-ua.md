@@ -1,5 +1,7 @@
 # chrome-ua
 
+[View script](../chrome-ua)
+
 Print a realistic Chrome User-Agent string for scripted HTTP requests. Two modes:
 
 - **Default** — reads the version of Chrome installed on this machine and emits a UA matching it. Zero network. Useful when you want to mimic *your* browser for endpoints that return different content for Chrome vs. curl, or when reproducing a request as-if from your own session.

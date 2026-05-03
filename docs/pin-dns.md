@@ -1,5 +1,7 @@
 # pin-dns
 
+[View script](../pin-dns)
+
 curl wrapper that overrides DNS resolution for a hostname -- bypass CDNs, hit origin servers, or pin requests to a specific IP, without touching /etc/hosts or system DNS.
 
 Under the hood it builds a `curl --resolve` command for you and adds sensible defaults (silent mode, realistic User-Agent, curlrc disabled).

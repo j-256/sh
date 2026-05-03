@@ -1,5 +1,7 @@
 # git-add-nonsub
 
+[View script](../git-add-nonsub)
+
 Stage a git repository inside another git repository without treating it as a submodule.
 
 Git has a feature called **submodules** for linking one repo into another: when you `git add` a directory containing its own `.git`, git records only a pointer to a specific commit in the inner repo, not the actual files. Submodules are powerful but add workflow friction (everyone cloning the outer repo needs to run `git submodule update` to fetch the inner contents; updates require coordinated commits in both repos).

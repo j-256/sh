@@ -1,5 +1,7 @@
 # slow-server
 
+[View script](../slow-server)
+
 Test how your code handles slow responses -- without waiting for an actual slow server to come back online, or fighting with production timeouts. `slow-server` starts a local HTTP server that responds after whatever delay you ask for, letting you verify timeout logic, retry behavior, loading states, and health check thresholds.
 
 Built on `socat`, it's lightweight and easy to kill when you're done testing. You control the delay by hitting a URL with the millisecond value as the last path segment. Hit it with a non-numeric path and you get a 404, so you can test error handling too.

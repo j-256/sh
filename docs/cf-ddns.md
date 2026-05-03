@@ -1,5 +1,7 @@
 # cf-ddns
 
+[View script](../cf-ddns)
+
 Update a Cloudflare DNS A record to match this machine's current outbound IP address -- a lightweight dynamic DNS solution for home servers, dev machines, or any host behind a changing IP.
 
 Designed to run periodically from the target host (via cron or systemd timer). Fetches the machine's public IP from ipify.org, compares it to the domain's current DNS resolution via Google DNS, and updates Cloudflare only when they differ.

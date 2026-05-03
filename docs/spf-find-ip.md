@@ -1,5 +1,7 @@
 # spf-find-ip
 
+[View script](../spf-find-ip)
+
 Recursively search SPF records to find whether a specific IP address is authorized to send email for a domain. When you get an SPF soft-fail or are debugging email deliverability, this tells you whether the sending IP is actually covered by the domain's SPF chain.
 
 SPF records authorize sending IPs via `include:` directives that chain to other domains' records. A single lookup rarely shows the full picture -- you might see `include:_spf.google.com`, which itself includes more domains. This script walks the entire tree and highlights where the IP appears.

@@ -1,5 +1,7 @@
 # httpcode
 
+[View script](../httpcode)
+
 Quick reference for HTTP status codes. Look up what any status code means without leaving the terminal.
 
 This is a lookup tool that prints descriptions of HTTP status codes from embedded MDN reference data. Think of it as a cheat sheet: you see `418` in a log, run `httpcode 418`, and get the name and description instantly. For timing HTTP requests (phase breakdown, summary statistics, outlier detection), see [`curl-timing`](curl-timing.md?html).

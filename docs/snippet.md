@@ -1,5 +1,7 @@
 # snippet
 
+[View script](../snippet)
+
 Extract lines between start and end patterns from files or stdin. Like `sed -n '/START/,/END/p'` but easier to remember and with built-in trimming to exclude marker lines.
 
 Useful when you need to pull a specific section from a log, config, or document without copying the boundary lines themselves. Works with regex patterns and handles cases where the end marker is optional (extract from start to EOF).

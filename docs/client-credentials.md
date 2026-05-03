@@ -1,5 +1,7 @@
 # client-credentials
 
+[View script](../client-credentials)
+
 Fetch an OAuth2 access token using the `client_credentials` grant. Built for Salesforce Commerce Cloud endpoints (Account Manager and SLAS), but the pattern is standard OAuth2 -- point it at any token URL that speaks `client_credentials`.
 
 The token prints to stdout and is also exported into environment variables (`J_ACCESS_TOKEN`, `J_ACCESS_TOKEN_EXPIRES_AT`, and refresh tokens for SLAS), so you can source the script and use the values in subsequent commands without parsing stdout yourself.

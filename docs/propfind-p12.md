@@ -1,5 +1,7 @@
 # propfind-p12
 
+[View script](../propfind-p12)
+
 Smoke-test an mTLS-protected Salesforce B2C Commerce WebDAV endpoint using a `.p12` client certificate and Bearer token. Sends a PROPFIND request (WebDAV's equivalent of `ls`) to list cartridges in a specified code version, validating that your certificate, CA chain, and token all work together before you try to deploy code.
 
 Useful after generating a fresh `.p12` with `generate-p12`, or when troubleshooting "certificate required" errors from SFCC staging WebDAV mounts. If the PROPFIND succeeds and you see XML back, the entire mTLS chain is working. If it fails, you know your cert isn't ready for actual `dav` operations yet.

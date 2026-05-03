@@ -1,5 +1,7 @@
 # generate-p12
 
+[View script](../generate-p12)
+
 Generate a PKCS#12 (.p12) client certificate for Salesforce B2C Commerce staging sandbox code uploads that require mutual TLS authentication.
 
 When you need to upload code to an SFCC staging instance with MFA enabled, Business Manager won't accept username/password alone — you need a client certificate. This script takes a CA cert bundle (provided by Salesforce or your admin) and generates a .p12 file you can import into your system keychain and configure in UX Studio or your WebDAV client.

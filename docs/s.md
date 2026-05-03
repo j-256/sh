@@ -1,5 +1,7 @@
 # s
 
+[View script](../s)
+
 sfcc-ci wrapper with convenient shortcuts, enhanced output formatting, and human-readable token expiration for Salesforce B2C Commerce Cloud development.
 
 If you work with SFCC sandboxes regularly, `s` gives you faster access to the commands you run most often. It wraps the official `sfcc-ci` tool, adds shorthand aliases for common operations (like `s sbx mybox` instead of `sfcc-ci sandbox:list -j | jq ...`), and surfaces key details (like auth token expiration in your local timezone) that would otherwise require piping through multiple tools.

@@ -1,5 +1,7 @@
 # stats
 
+[View script](../stats)
+
 Calculate count, total, average, range, and outliers from a list of integers. Feed it numbers from a pipe and get a statistical summary -- useful for quick analysis of response times, file sizes, or any numeric column from a log.
 
 Outliers are detected using the 1.5 * IQR (Interquartile Range) method, the same approach used in box plots. This catches values that fall far outside the typical distribution without being overly sensitive to minor variations.

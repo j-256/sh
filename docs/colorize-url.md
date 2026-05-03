@@ -1,5 +1,7 @@
 # colorize-url
 
+[View script](../colorize-url)
+
 Apply distinct ANSI colors to URL components (scheme, host, path, query, fragment) for readability. Query string keys and values get separate colors.
 
 Useful when inspecting URLs in logs, debugging API requests, or comparing similar URLs -- the color-coding makes structural differences pop.

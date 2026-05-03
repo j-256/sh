@@ -1,5 +1,7 @@
 # progress
 
+[View script](../progress)
+
 Render a single-line progress bar with percentage completion.
 
 Designed for shell loops or long-running scripts. Instead of a one-liner `printf`, you get proper output stream management (defaults to stderr to keep stdout clean), automatic terminal width detection to prevent line wrapping, and smart behavior in both TTY and non-TTY contexts.

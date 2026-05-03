@@ -1,5 +1,7 @@
 # render-md
 
+[View script](../render-md)
+
 Render markdown to HTML and open it in your browser. The output uses GitHub-like styling with automatic dark/light mode.
 
 > **Note:** Unlike the other scripts in this repo, `render-md` is a Node.js CLI (a self-contained single file, but it needs Node ≥ 18 on your `$PATH`). Everything else in the catalog is bash. If you don't have Node yet, `brew install node` is the fast path; `pwa-prereqs --install` also handles it.

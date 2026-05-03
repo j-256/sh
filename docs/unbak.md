@@ -1,5 +1,7 @@
 # unbak
 
+[View script](../unbak)
+
 Restore backed-up files by renaming `file.ext.bak` to `file.ext`. This is the inverse of `bak` — when you've backed something up and want to undo that change, `unbak` puts the backed-up version back in place.
 
 The script won't overwrite an existing file at the destination — if `file.ext` already exists, it skips with an error. When you have multiple backup generations in a chain (`file.bak`, `file.bak.bak`, `file.bak.bak.bak`), `unbak` restores from the oldest to newest recursively, so you get back the entire history.

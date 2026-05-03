@@ -1,5 +1,7 @@
 # notify
 
+[View script](../notify)
+
 Show a macOS notification via osascript. Perfect for announcing when a long-running command finishes - pop a notification while you're in another tab or app, then come back when it's done.
 
 The notification appears in the top-right corner of your screen, plays a sound (optional), and shows up in Notification Center. Notifications are attributed to Script Editor (the osascript host app).

@@ -1,5 +1,7 @@
 # prompt
 
+[View script](../prompt)
+
 Interactive prompt with default value and placeholder -- for shell scripts that need to ask the user a question and get back a clean answer in a variable.
 
 Unlike plain `read`, this gives you a gray placeholder hint that disappears when the user starts typing, backspace that works the way you'd expect, and sane Ctrl-C behavior that doesn't leave your terminal broken. The result (or default, if they just press Enter) lands directly in a variable you specify.

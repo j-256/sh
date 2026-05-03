@@ -1,5 +1,7 @@
 # tsd
 
+[View script](../tsd)
+
 Convert a number to something you can actually read -- paste in a Unix timestamp and get a datetime, or paste in a duration and get hours/minutes/seconds.
 
 The name is short for "timestamp or duration." Give it a number, it figures out which one you meant. Timestamps come back as UTC and local time; durations come back broken into days, hours, minutes, seconds, and sub-second units down to nanoseconds.

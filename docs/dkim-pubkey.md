@@ -1,5 +1,7 @@
 # dkim-pubkey
 
+[View script](../dkim-pubkey)
+
 Extract the base64-encoded public key from a DKIM DNS record.
 
 DKIM records are published as TXT records at `<selector>._domainkey.<domain>`. This script queries that record, parses the response, and extracts just the public key value (the `p=` field) -- useful when you need to verify DKIM signatures, audit email authentication setup, or compare keys across selectors.

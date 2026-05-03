@@ -1,5 +1,7 @@
 # verify-p12
 
+[View script](../verify-p12)
+
 Quick smoke-test for Salesforce B2C Commerce WebDAV `/Cartridges` access. Sends a GET request to list cartridges and prints the HTTP status line plus directory links — if you see `200 OK` and a list of URLs, your auth works and your WebDAV endpoint is reachable.
 
 Supports both Bearer token auth (default) and Basic auth (via `--basic`). Optional `.p12` mTLS mode lets you validate client certificate authentication at the same time, turning the test into a full "can I deploy code to this instance?" check. Useful after generating a fresh cert with `generate-p12`, or when troubleshooting certificate errors before attempting actual `dav` uploads.

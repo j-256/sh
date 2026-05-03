@@ -1,5 +1,7 @@
 # install-bash
 
+[View script](../install-bash)
+
 Install the latest Bash from Homebrew and set it as your login shell.
 
 macOS ships with Bash 3.2 from 2007, frozen in time because Apple can't include GPLv3 software in the base system. That means no modern array handling, no parameter transformations like `${var,,}`, no associative arrays -- none of the features that arrived in Bash 4 and beyond. If you need to run modern shell scripts (or just want better tab completion and readline behavior), you need a newer Bash.

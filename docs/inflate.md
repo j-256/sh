@@ -1,5 +1,7 @@
 # inflate
 
+[View script](../inflate)
+
 Adjust historical USD amounts for inflation -- paste in a dollar amount and year, get back what that money is worth today.
 
 You're reading a 1985 article about a $50,000 salary, or a 1970s book that mentions $25 concert tickets. What does that actually mean in modern dollars? `inflate` fetches CPI data from the US Bureau of Labor Statistics and tells you the equivalent buying power in the most recent month available (typically 1-2 months behind current date).

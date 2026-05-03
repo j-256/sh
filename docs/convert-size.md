@@ -1,5 +1,7 @@
 # convert-size
 
+[View script](../convert-size)
+
 Convert file sizes between SI (1000-based) and binary (1024-based) unit systems.
 
 macOS and most Unix systems report file sizes in SI units (GB = 1,000,000,000 bytes), while Windows and binary-centric tooling uses binary units (GiB = 1,073,741,824 bytes). This script translates between the two when you need to compare sizes across systems or match what a specific OS will show.

@@ -1,5 +1,7 @@
 # pkce
 
+[View script](../pkce)
+
 Generate a PKCE (Proof Key for Code Exchange) code verifier and its corresponding SHA256 challenge for OAuth2 authorization flows.
 
 PKCE is an extension to OAuth2's authorization-code flow that prevents interception attacks. It's required by many OAuth2 providers for native apps and single-page applications, and increasingly recommended for all client types. Per RFC 7636, the client generates a random code verifier, computes a challenge from it, sends the challenge when requesting an authorization code, then sends the verifier when exchanging the code for tokens -- proving the same client is making both requests.

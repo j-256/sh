@@ -1,5 +1,7 @@
 # dw-jwt
 
+[View script](../dw-jwt)
+
 Generate an RS256-signed JWT for authenticating to Salesforce B2C Commerce (Demandware) APIs via OAuth2 client credentials.
 
 This script creates a JWT assertion signed with your private key, which you then exchange for an access token using the Account Manager OAuth2 endpoint. The token is valid for 30 minutes and includes the standard claims required by the SFCC `client_credentials` grant with `private_key_jwt` client authentication.
