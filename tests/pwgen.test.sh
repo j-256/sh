@@ -131,12 +131,21 @@ test_exclude_flag() {
     assert_not_contains "no 'e'" "$output" "e"
 }
 
-test_exclude_alias() {
-    run_script -l 5 -c "xyz" -x "x"
-    assert_rc "exclude alias exits 0" 0
+test_exclude_equals_form() {
+    run_script --length=5 --charset="xyz" --exclude="x"
+    assert_rc "exclude =-form exits 0" 0
     local output
     output="$(get_stdout)"
     assert_not_contains "no 'x'" "$output" "x"
+}
+
+test_bundled_short_opts_with_value() {
+    # -l5 equivalent to -l 5, glued via preprocessor
+    run_script -l5 -c "abc"
+    assert_rc "glued short-opt value exits 0" 0
+    local output
+    output="$(get_stdout)"
+    assert_eq "glued -l5 gives 5-char password" "${#output}" "5"
 }
 
 test_range_expansion() {

@@ -243,11 +243,44 @@ _pwgen() {
             s/\[:punct:\]/$(_escape_sed "$punct")/g;"
     }
 
+    _expand_short_opts() {
+        # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
+        # $2..$N = "$@"
+        # Populates _EXPANDED; caller does: set -- "${_EXPANDED[@]}"; unset _EXPANDED
+        local value_opts="$1"; shift
+        _EXPANDED=()
+        local passthru=""
+        local arg
+        local rest
+        local c
+        for arg in "$@"; do
+            if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
+            case "$arg" in
+                --)       passthru=1; _EXPANDED+=("$arg") ;;
+                --*|-|"") _EXPANDED+=("$arg") ;;
+                -??*)
+                    rest="${arg#-}"
+                    while [ -n "$rest" ]; do
+                        c="${rest%"${rest#?}"}"; rest="${rest#?}"
+                        _EXPANDED+=("-$c")
+                        case "$value_opts" in *"$c"*)
+                            [ -n "$rest" ] && _EXPANDED+=("$rest")
+                            rest="" ;;
+                        esac
+                    done ;;
+                *)        _EXPANDED+=("$arg") ;;
+            esac
+        done
+    }
+
     # Clean up functions to avoid polluting global namespace
     __unset() {
-        unset -f __unset _show_help _error _warn _escape_sed _expand_range _expand_all_ranges _expand_brackets _expand_posix _validate_charset
+        unset -f __unset _show_help _error _warn _escape_sed _expand_range _expand_all_ranges _expand_brackets _expand_posix _validate_charset _expand_short_opts
     }
     trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
+
+    _expand_short_opts "lce" "$@"
+    set -- "${_EXPANDED[@]}"; unset _EXPANDED
 
     # Handle arguments
     while [ $# -gt 0 ]; do
@@ -257,15 +290,30 @@ _pwgen() {
                 length="$2"
                 shift 2
                 ;;
+            --length=*)
+                length="${1#*=}"
+                [ -n "$length" ] || { _error "--length specified but no length provided. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                shift
+                ;;
             -c|--charset)
                 [ "$2" ] || { _error "$1 specified but no charset provided. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 charset="$2"
                 shift 2
                 ;;
-            -e|--exclude|-x)
+            --charset=*)
+                charset="${1#*=}"
+                [ -n "$charset" ] || { _error "--charset specified but no charset provided. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                shift
+                ;;
+            -e|--exclude)
                 [ "$2" ] || { _error "$1 specified but no charset provided. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 exclude="$2"
                 shift 2
+                ;;
+            --exclude=*)
+                exclude="${1#*=}"
+                [ -n "$exclude" ] || { _error "--exclude specified but no charset provided. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                shift
                 ;;
             -h|--help)
                 _show_help
