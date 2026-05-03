@@ -188,8 +188,38 @@ _curl_timing() {
         unset -f _color
     }
 
+    _expand_short_opts() {
+        # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
+        # $2..$N = "$@"
+        # Populates _EXPANDED; caller does: set -- "${_EXPANDED[@]}"; unset _EXPANDED
+        local value_opts="$1"; shift
+        _EXPANDED=()
+        local passthru=""
+        local arg
+        local rest
+        local c
+        for arg in "$@"; do
+            if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
+            case "$arg" in
+                --)          passthru=1; _EXPANDED+=("$arg") ;;
+                --*|-|"")    _EXPANDED+=("$arg") ;;
+                -[a-zA-Z]?*)
+                    rest="${arg#-}"
+                    while [ -n "$rest" ]; do
+                        c="${rest%"${rest#?}"}"; rest="${rest#?}"
+                        _EXPANDED+=("-$c")
+                        case "$value_opts" in *"$c"*)
+                            [ -n "$rest" ] && _EXPANDED+=("$rest")
+                            rest="" ;;
+                        esac
+                    done ;;
+                *)           _EXPANDED+=("$arg") ;;
+            esac
+        done
+    }
+
     __unset() {
-        unset -f __unset _error _show_help _req _stats _colorize_url
+        unset -f __unset _error _show_help _req _stats _colorize_url _expand_short_opts
     }
     trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
@@ -207,30 +237,61 @@ _curl_timing() {
     local -a headers=()
     local -a urls=()
 
+    _expand_short_opts "nwsXHdA" "$@"
+    set -- "${_EXPANDED[@]}"; unset _EXPANDED
+
     while [ "$#" -gt 0 ]; do
         case "$1" in
             -h|--help) _show_help; return 0 ;;
             -n|--num)
                 [ -n "${2-}" ] || { _error "--num requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 num_requests="$2"; shift 2 ;;
+            --num=*)
+                num_requests="${1#*=}"
+                [ -n "$num_requests" ] || { _error "--num requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                shift ;;
             -w|--warmup)
                 [ -n "${2-}" ] || { _error "--warmup requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 warmup="$2"; shift 2 ;;
+            --warmup=*)
+                warmup="${1#*=}"
+                [ -n "$warmup" ] || { _error "--warmup requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                shift ;;
             -s|--sleep)
                 [ -n "${2-}" ] || { _error "--sleep requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 sleep_dur="$2"; shift 2 ;;
+            --sleep=*)
+                sleep_dur="${1#*=}"
+                [ -n "$sleep_dur" ] || { _error "--sleep requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                shift ;;
             -X|--method)
                 [ -n "${2-}" ] || { _error "--method requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 method="$2"; method_set=1; shift 2 ;;
+            --method=*)
+                method="${1#*=}"
+                [ -n "$method" ] || { _error "--method requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                method_set=1; shift ;;
             -H|--header)
                 [ -n "${2-}" ] || { _error "--header requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 headers+=("$2"); shift 2 ;;
+            --header=*)
+                local _hdr="${1#*=}"
+                [ -n "$_hdr" ] || { _error "--header requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                headers+=("$_hdr"); shift ;;
             -d|--data)
                 [ -n "${2-}" ] || { _error "--data requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 data="$2"; data_set=1; shift 2 ;;
+            --data=*)
+                data="${1#*=}"
+                [ -n "$data" ] || { _error "--data requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                data_set=1; shift ;;
             -A|--user-agent)
                 [ -n "${2-}" ] || { _error "--user-agent requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 user_agent="$2"; shift 2 ;;
+            --user-agent=*)
+                user_agent="${1#*=}"
+                [ -n "$user_agent" ] || { _error "--user-agent requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                shift ;;
             --no-save) save=""; shift ;;
             -q|--quiet) quiet=1; shift ;;
             --) shift; while [ "$#" -gt 0 ]; do urls+=("$1"); shift; done ;;
