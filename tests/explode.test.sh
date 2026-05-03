@@ -152,38 +152,38 @@ test_collision_with_force() {
     assert_eq "force: original dir removed" "$(dir_exists "$TEST_DIR/collision" && echo "no" || echo "yes")" "yes"
 }
 
-test_dryrun_no_collision() {
+test_dry_run_no_collision() {
     create_test_dir "dryrun"
-    run_script --dryrun "$TEST_DIR/dryrun"
-    assert_rc "dryrun succeeds" 0
-    assert_stdout_contains "dryrun: shows move target" "Would move to $TEST_DIR:"
-    assert_stdout_contains "dryrun: lists file1" "file1.txt"
-    assert_stdout_contains "dryrun: lists file2" "file2.txt"
-    assert_stdout_contains "dryrun: lists subdir" "subdir"
-    assert_stdout_contains "dryrun: shows remove" "Would remove: $TEST_DIR/dryrun"
-    assert_eq "dryrun: dir still exists" "$(dir_exists "$TEST_DIR/dryrun" && echo "yes" || echo "no")" "yes"
-    assert_eq "dryrun: files not moved" "$(file_exists "$TEST_DIR/file1.txt" && echo "no" || echo "yes")" "yes"
+    run_script --dry-run "$TEST_DIR/dryrun"
+    assert_rc "dry-run succeeds" 0
+    assert_stdout_contains "dry-run: shows move target" "Would move to $TEST_DIR:"
+    assert_stdout_contains "dry-run: lists file1" "file1.txt"
+    assert_stdout_contains "dry-run: lists file2" "file2.txt"
+    assert_stdout_contains "dry-run: lists subdir" "subdir"
+    assert_stdout_contains "dry-run: shows remove" "Would remove: $TEST_DIR/dryrun"
+    assert_eq "dry-run: dir still exists" "$(dir_exists "$TEST_DIR/dryrun" && echo "yes" || echo "no")" "yes"
+    assert_eq "dry-run: files not moved" "$(file_exists "$TEST_DIR/file1.txt" && echo "no" || echo "yes")" "yes"
 }
 
-test_dryrun_with_collision() {
+test_dry_run_with_collision() {
     create_test_dir "dryrun"
     echo "existing" > "$TEST_DIR/file1.txt"
-    run_script --dryrun "$TEST_DIR/dryrun"
-    assert_rc "dryrun collision fails" 1
-    assert_err_contains "dryrun: collision error" "the following items already exist"
-    assert_err_contains "dryrun: aborts message" "Aborting"
-    assert_eq "dryrun: dir still exists" "$(dir_exists "$TEST_DIR/dryrun" && echo "yes" || echo "no")" "yes"
+    run_script --dry-run "$TEST_DIR/dryrun"
+    assert_rc "dry-run collision fails" 1
+    assert_err_contains "dry-run: collision error" "the following items already exist"
+    assert_err_contains "dry-run: aborts message" "Aborting"
+    assert_eq "dry-run: dir still exists" "$(dir_exists "$TEST_DIR/dryrun" && echo "yes" || echo "no")" "yes"
 }
 
-test_dryrun_with_force() {
+test_dry_run_with_force() {
     create_test_dir "dryrun"
     echo "existing" > "$TEST_DIR/file1.txt"
-    run_script --dryrun --force "$TEST_DIR/dryrun"
-    assert_rc "dryrun force succeeds" 0
-    assert_stdout_contains "dryrun force: shows overwrite" "Would overwrite (--force):"
-    assert_stdout_contains "dryrun force: lists collision" "file1.txt"
-    assert_eq "dryrun force: existing unchanged" "$(cat "$TEST_DIR/file1.txt")" "existing"
-    assert_eq "dryrun force: dir still exists" "$(dir_exists "$TEST_DIR/dryrun" && echo "yes" || echo "no")" "yes"
+    run_script --dry-run --force "$TEST_DIR/dryrun"
+    assert_rc "dry-run force succeeds" 0
+    assert_stdout_contains "dry-run force: shows overwrite" "Would overwrite (--force):"
+    assert_stdout_contains "dry-run force: lists collision" "file1.txt"
+    assert_eq "dry-run force: existing unchanged" "$(cat "$TEST_DIR/file1.txt")" "existing"
+    assert_eq "dry-run force: dir still exists" "$(dir_exists "$TEST_DIR/dryrun" && echo "yes" || echo "no")" "yes"
 }
 
 test_verbose() {
@@ -224,12 +224,21 @@ test_short_options() {
     assert_stdout_contains "short -v works" "file1.txt -> $TEST_DIR/"
 }
 
-test_dry_run_alternative() {
-    create_test_dir "dryrun2"
-    run_script --dry-run "$TEST_DIR/dryrun2"
-    assert_rc "dry-run alternative succeeds" 0
-    assert_stdout_contains "dry-run works" "Would move to"
-    assert_eq "dry-run: dir still exists" "$(dir_exists "$TEST_DIR/dryrun2" && echo "yes" || echo "no")" "yes"
+test_bundled_short_opts() {
+    create_test_dir "bundle"
+    run_script -nv "$TEST_DIR/bundle"
+    assert_rc "bundled -nv succeeds" 0
+    assert_stdout_contains "bundled: dry-run active" "Would move to"
+    assert_eq "bundled: dir still exists" "$(dir_exists "$TEST_DIR/bundle" && echo "yes" || echo "no")" "yes"
+}
+
+test_bundled_with_force() {
+    create_test_dir "bundle3"
+    echo "existing" > "$TEST_DIR/file1.txt"
+    run_script -nvf "$TEST_DIR/bundle3"
+    assert_rc "bundled -nvf succeeds" 0
+    assert_stdout_contains "bundled: force active" "Would overwrite (--force):"
+    assert_stdout_contains "bundled: dry-run active" "Would move to"
 }
 
 test_empty_directory() {

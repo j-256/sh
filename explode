@@ -6,7 +6,7 @@
 #
 # Options:
 #   -f, --force    Overwrite existing files at the destination
-#   -n, --dryrun   Show what would happen without making changes
+#   -n, --dry-run  Show what would happen without making changes
 #   -v, --verbose  List each item as it is moved
 #   -h, --help     Display this help message
 
@@ -29,18 +29,48 @@ _explode() {
         echo "  collide with existing files, unless --force is given."
         echo "OPTIONS"
         echo "  -f, --force    Overwrite existing files at the destination"
-        echo "  -n, --dryrun   Show what would happen without making changes"
+        echo "  -n, --dry-run  Show what would happen without making changes"
         echo "  -v, --verbose  List each item as it is moved"
         echo "  -h, --help     Display this help message"
         echo "EXIT STATUS"
-        echo "  0   Success (or help/dryrun completed)"
+        echo "  0   Success (or help/dry-run completed)"
         echo "  1   Usage error, collision without --force, or a move failed"
         echo "  2   Directory removal failed (items remain after attempted moves)"
     }
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
 
+    _expand_short_opts() {
+        # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
+        # $2..$N = "$@"
+        # Populates _EXPANDED; caller does: set -- "${_EXPANDED[@]}"; unset _EXPANDED
+        local value_opts="$1"; shift
+        _EXPANDED=()
+        local passthru=""
+        local arg
+        local rest
+        local c
+        for arg in "$@"; do
+            if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
+            case "$arg" in
+                --)       passthru=1; _EXPANDED+=("$arg") ;;
+                --*|-|"") _EXPANDED+=("$arg") ;;
+                -??*)
+                    rest="${arg#-}"
+                    while [ -n "$rest" ]; do
+                        c="${rest%"${rest#?}"}"; rest="${rest#?}"
+                        _EXPANDED+=("-$c")
+                        case "$value_opts" in *"$c"*)
+                            [ -n "$rest" ] && _EXPANDED+=("$rest")
+                            rest="" ;;
+                        esac
+                    done ;;
+                *)        _EXPANDED+=("$arg") ;;
+            esac
+        done
+    }
+
     __unset() {
-        unset -f __unset _show_help _error
+        unset -f __unset _show_help _error _expand_short_opts
     }
     trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
@@ -49,13 +79,16 @@ _explode() {
     local verbose=false
     local dir
 
+    _expand_short_opts "" "$@"
+    set -- "${_EXPANDED[@]}"; unset _EXPANDED
+
     while [ $# -gt 0 ]; do
         case "$1" in
             -f|--force)
                 force=true
                 shift
                 ;;
-            -n|--dryrun|--dry-run)
+            -n|--dry-run)
                 dryrun=true
                 shift
                 ;;
