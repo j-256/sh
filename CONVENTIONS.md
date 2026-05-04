@@ -414,7 +414,32 @@ Positionals and options may be freely interleaved. `bak file1 -v file2` is equiv
 
 ### Scope
 
-Every long option is either a flag (no value) or requires a value -- never optional-value (`--color` defaulting when bare, taking a value only with `--color=always`). Long options are matched exactly; abbreviations like `--ver` for `--verbose` are unknown arguments.
+Every long option is either a flag (no value) or requires a value -- never optional-value (`--color` defaulting when bare, taking a value only with `--color=always`). Exceptions are rare and called out per-script; see "Value-optional options" below for the recipe. Long options are matched exactly; abbreviations like `--ver` for `--verbose` are unknown arguments.
+
+### Value-optional options
+
+The Scope rule bans value-optional options by default because the shared preprocessor and the `--foo)`/`--foo=*)` arm pattern can't know per-option whether `$2` should be consumed -- they have to pick one rule and apply it uniformly. A script may opt in when (a) the value shape is narrow enough to be unambiguous against anything else that could follow (a narrow regex, a closed enum), and (b) the combined form is genuinely more ergonomic than a split `--watch --interval=5m`. See `client-credentials` (closed enum `-E|--env input|output|all`) for a working example.
+
+Recipe:
+
+1. Keep the short letter OUT of `_expand_short_opts`'s value-opts string. This preserves bundling (`-wF` == `-w -F`); the trade-off is that attached short (`-w5m`) stops working. Bundling is usually more valuable.
+
+2. In the space-form arm, `shift` onto the candidate, sniff-test it, and consume only on match. Leave the token as `$1` otherwise so the next loop iteration picks it up as a flag or positional:
+
+    ```bash
+    -w|--watch)
+        watch=true; shift
+        if [ -n "${1:-}" ] && printf '%s' "$1" | grep -qE '^[1-9][0-9]*[smh]?$'; then
+            interval="$1"; shift
+        fi
+        ;;
+    ```
+
+3. The `--foo=*)` arm is unchanged from the normal required-value pattern (empty value after `=` errors with the canonical missing-value phrasing). Bare `--foo` (no `=`) falls through to the space-form arm above.
+
+4. In `--help`, bracket the value name: `-w, --watch [interval]`.
+
+5. Leave a comment above the `_expand_short_opts` call citing this section and explaining why the letter is excluded from value-opts.
 
 ## Dependencies
 
