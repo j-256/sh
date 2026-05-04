@@ -147,7 +147,7 @@ This ensures:
 ## Style
 
 - Single space before inline comments: `cmd # comment`
-- No periods at end of comments
+- No trailing terminator (`.`, `!`, `:`) on comments, even on multi-sentence ones. Same rule as error messages, minus the colon carveout -- every comment sits above code, so "introduces follow-on output" is trivially true and the colon adds no signal.
 - `$(...)` for command substitution, not backticks
 - `command -v` to check for executables, not `which`
 - Prefer POSIX-compatible patterns where reasonable (scripts may be run by zsh)
@@ -217,7 +217,7 @@ The severity token leads so `grep '^\[ERR\]'` is greppable across the repo witho
 
 - Capitalize prose-led messages (`"Invalid argument"`, `"Missing value"`, `"Unknown argument"`).
 - Preserve literal casing for identifier-led messages (`"client_id is required"`, `"jq is required"`, `"$dir does not exist"`).
-- No trailing period on single-sentence messages. Matches Unix tradition (`git`, `cargo`, `brew`, `ls`). This also applies to other trailing terminators like `!` and `:`.
+- No trailing period or `!`, even on multi-sentence messages. Matches Unix tradition (`git`, `cargo`, `brew`, `ls`). A trailing `:` is fine when the message introduces follow-on output on the next line(s) -- the colon signals "see below" and is load-bearing, e.g. `_warn "$dir is not on your \$PATH. To fix, add this to your shell rc:"` followed by an `echo` of the command to paste.
 - Internal periods only where structurally required to separate sentences. The usage-hint pattern is the canonical case: `"... is required. Run \`$SCRIPT_NAME -h\` for usage"` -- the period closes the first sentence and the second has no trailing period. When a usage hint is appended, the message has exactly one internal period (between the two sentences) and no trailing period.
 
 **Prose-led vs identifier-led edge cases:**
