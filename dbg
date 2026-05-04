@@ -1,0 +1,235 @@
+#!/bin/bash
+# dbg - print variables as key-value pairs for debugging
+#
+# Usage:
+#   . dbg <ref> [<ref>...]
+#   . dbg -h
+#
+# Must be sourced, not executed. Resolves each reference in the caller's
+# shell and prints an assignment-like line to stderr:
+# - Scalars / whole arrays: output derived from `declare -p`
+# - arr[@]: one quoted token per element (preserves boundaries)
+# - arr[*]: single quoted token of the IFS-joined value
+# - arr[i] / map[key]: `<ref>=<quoted>` or `unset <ref>` if absent
+# - Exported scalars prefix with `export`
+#
+# Set __DBG_STRICT=true to reject refs containing eval-unsafe syntax
+# ($(...), backticks, ${...}, quotes, operators, newlines)
+
+# Reject executed invocations EXCEPT for --help -- a stranger running
+# `dbg --help` (natural) should see help, not a rejection
+# $0 is /path/to/bash or -bash when sourced by bash; ZSH_EVAL_CONTEXT contains
+# "file" when sourced by zsh; either indicates a sourced context
+__dbg__basename="${0##*'/'}"
+if { [ "$BASH_VERSION" ] && [ "${__dbg__basename#'-'}" != "bash" ]; } || { [ "$ZSH_VERSION" ] && [ "${ZSH_EVAL_CONTEXT#*"file"}" = "$ZSH_EVAL_CONTEXT" ]; }; then
+    case "$1" in
+        -h|--help) : ;;  # fall through to __dbg__main
+        *)
+            __dbg__script_name="$(basename "${BASH_SOURCE[0]}")"
+            case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) __dbg__script_name="" ;; esac
+            case "$__dbg__script_name" in ""|bash|sh|zsh|dash) __dbg__script_name="dbg" ;; esac
+            echo "[ERR][$__dbg__script_name] Must be sourced, not executed. Run \`$__dbg__script_name -h\` for usage" >&2
+            unset __dbg__basename __dbg__script_name
+            exit 2
+            ;;
+    esac
+fi
+unset __dbg__basename
+
+__dbg__main() {
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="dbg" ;; esac
+
+    __dbg__show_help() {
+        local s; [ -t 1 ] && s=$'\033[4m' || s=""
+        local r; [ -t 1 ] && r=$'\033[24m' || r=""
+        echo "NAME"
+        echo "  $SCRIPT_NAME - print variables as key-value pairs for debugging"
+        echo "SYNOPSIS"
+        echo "  . $SCRIPT_NAME ${s}ref${r} [${s}ref${r}...]"
+        echo "  . $SCRIPT_NAME -h"
+        echo "DESCRIPTION"
+        echo "  Must be sourced (not executed) because $SCRIPT_NAME reads variables"
+        echo "  from the caller's shell; an executed script runs in a subprocess and"
+        echo "  the caller's variables are not visible there."
+        echo "  Each ${s}ref${r} is resolved and printed as a shell-assignment-like line to"
+        echo "  stderr:"
+        echo "  - Scalars / whole arrays: output derived from \`declare -p\`"
+        echo "  - arr[@]: one quoted token per element (preserves boundaries)"
+        echo "  - arr[*]: single quoted token of the IFS-joined value"
+        echo "  - arr[i] / map[key]: \`${s}ref${r}=<quoted>\` or \`unset ${s}ref${r}\` if absent"
+        echo "  - Exported scalars prefix with \`export\`"
+        echo "  Values containing control characters (e.g. ESC) are rendered via"
+        echo "  \`printf %q\` for terminal safety; all other values use double-quoted"
+        echo "  readable form with \\ \" \$ \` escaped."
+        echo "OPTIONS"
+        echo "  ${s}ref${r}          Variable name or array element/whole-array reference"
+        echo "  -h, --help   Show this help message"
+        echo "ENVIRONMENT"
+        echo "  __DBG_STRICT  When \"true\", reject eval-unsafe reference syntax"
+        echo "                (quotes, \$(...), backticks, \${...}, operators, newlines)"
+        echo "EXIT STATUS"
+        echo "  0  Success"
+        echo "  2  Usage error (script was executed rather than sourced)"
+    }
+
+    __dbg__error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+
+    # Determine whether a variable/element reference is set (even if empty)
+    # Uses eval with ${ref+set} to test "set even if empty"; supports refs
+    # like arr[0], map[key]
+    __dbg__exists() {
+        local __dbg__ref="$1"
+        local __dbg__probe=''
+        eval '__dbg__probe=${'"$__dbg__ref"'+set}'
+        [ -n "$__dbg__probe" ]
+    }
+
+    # Quote a single value as a readable shell token for display
+    __dbg__q() {
+        # If the value contains control characters (e.g. ESC, newline), use %q for a safe,
+        # unambiguous token form. `case` handles newlines correctly; `grep '[[:cntrl:]]'`
+        # does not, because grep treats stdin as newline-separated records so the newline
+        # itself is never inside any record
+        case "$1" in
+            *[[:cntrl:]]*) printf %q "$1"; return ;;
+        esac
+        # Otherwise prefer double quotes for readability; escape \ " $ ` within the quotes
+        printf '"%s"' "$(printf %s "$1" | sed 's/[\\"$`]/\\&/g')"
+    }
+
+    __dbg__unset() {
+        unset -f __dbg__unset __dbg__show_help __dbg__error __dbg__exists __dbg__q
+    }
+    trap '__dbg__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
+
+    # Toggle: enable extra safety checks on references (guards eval usage) via $__DBG_STRICT
+    local __dbg__strict="${__DBG_STRICT:-false}"
+
+    local __dbg__arg
+    for __dbg__arg in "$@"; do
+        # Help flag -- refs can't start with `-`, so this is unambiguous
+        case "$__dbg__arg" in
+            -h|--help) __dbg__show_help; return 0 ;;
+        esac
+
+        # Optional safety guard (enabled by $__DBG_STRICT): this function evals refs, so reject
+        # constructs/operators that could change eval semantics
+        if [ "$__dbg__strict" = true ]; then
+            # shellcheck disable=SC2016 # "Expressions don't expand in single quotes, use double quotes for that."
+            case "$__dbg__arg" in
+                *'$('* | *'`'* | *'${'* | *';'* | *'|'* | *'&'* | *'>'* | *'<'* | *$'\n'* | *$'\r'* | *"'"* | *'"'*)
+                    __dbg__error "Unsupported reference '$__dbg__arg' (expected a simple name/ref; no quotes, \$(...), backticks, \${...}, operators, or newlines)"
+                    continue
+                    ;;
+            esac
+        fi
+
+        local __dbg__has_lbracket=false
+        local __dbg__has_rbracket=false
+        [ "${__dbg__arg#*'['}" != "$__dbg__arg" ] && __dbg__has_lbracket=true
+        [ "${__dbg__arg#*']'}" != "$__dbg__arg" ] && __dbg__has_rbracket=true
+
+        # Validate bracket syntax early:
+        # - If either bracket appears, require both
+        # - If `[` appears, require the reference to end with `]`
+        if [ "$__dbg__has_lbracket" = true ] || [ "$__dbg__has_rbracket" = true ]; then
+            if [ "$__dbg__has_lbracket" != true ] || [ "$__dbg__has_rbracket" != true ] || [ "${__dbg__arg%']'}" = "$__dbg__arg" ]; then
+                __dbg__error "Invalid reference '$__dbg__arg' (malformed brackets)"
+                continue
+            fi
+        fi
+
+        local __dbg__root_name="$__dbg__arg"
+        [ "$__dbg__has_lbracket" = true ] && __dbg__root_name="${__dbg__root_name%%'['*}"
+
+        local __dbg__declare_output
+        # Suppress `set -e` on "not found": `declare -p` returns non-zero for unset vars, but empty output is expected here
+        __dbg__declare_output="$(declare -p "$__dbg__root_name" 2>/dev/null || :)"
+
+        # Inspect declare flags only (not the value) to determine array type
+        local __dbg__is_assoc_array=false
+        local __dbg__is_indexed_array=false
+        local __dbg__declare_flags=''
+        if [ -n "$__dbg__declare_output" ]; then
+            __dbg__declare_flags="${__dbg__declare_output#declare }"
+            __dbg__declare_flags="${__dbg__declare_flags%% *}"
+        fi
+        [ "${__dbg__declare_flags#-*A*}" != "$__dbg__declare_flags" ] && __dbg__is_assoc_array=true
+        [ "${__dbg__declare_flags#-*a*}" != "$__dbg__declare_flags" ] && __dbg__is_indexed_array=true
+
+        local __dbg__is_array=false
+        if [ "$__dbg__is_assoc_array" = true ] || [ "$__dbg__is_indexed_array" = true ]; then
+            __dbg__is_array=true
+        fi
+
+        local __dbg__is_exported=false
+        [ "${__dbg__declare_flags#-*x*}" != "$__dbg__declare_flags" ] && __dbg__is_exported=true
+
+        # Whole variable (no brackets): print assignment-like line (or unset)
+        if [ "$__dbg__has_lbracket" != true ]; then
+            if [ -z "$__dbg__declare_output" ]; then
+                echo "unset $__dbg__arg" >&2
+                continue
+            fi
+            # Convert `declare -p` output to a plain assignment-like line; use `export` prefix if exported
+            if [ "$__dbg__is_exported" = true ]; then
+                printf '%s\n' "$__dbg__declare_output" | sed 's/^declare [^ ]* /export /' >&2
+            else
+                printf '%s\n' "$__dbg__declare_output" | sed 's/^declare [^ ]* //' >&2
+            fi
+            continue
+        fi
+
+        # Identify [@] vs [*]
+        local __dbg__is_all_at=false
+        local __dbg__is_all_star=false
+        # Ignore false positive: this is just string removal, not an array operation
+        # shellcheck disable=SC2198 # "Arrays don't work as operands in [ ]. Use a loop (or concatenate with * instead of @)."
+        [ "${__dbg__arg%'[@]'}" != "$__dbg__arg" ] && __dbg__is_all_at=true
+        [ "${__dbg__arg%'[*]'}" != "$__dbg__arg" ] && __dbg__is_all_star=true
+
+        # Reject subscripts on non-arrays
+        if [ "$__dbg__is_array" != true ]; then
+            __dbg__error "'$__dbg__root_name' is not an array; cannot reference '$__dbg__arg'"
+            continue
+        fi
+
+        # arr[@]: preserve element boundaries (one quoted token per element)
+        if [ "$__dbg__is_all_at" = true ]; then
+            local __dbg__out=''
+            local __dbg__element
+            eval 'for __dbg__element in "${'"$__dbg__root_name"'[@]}"; do
+                __dbg__out="$__dbg__out $(__dbg__q "$__dbg__element")"
+            done'
+            echo "$__dbg__arg=${__dbg__out# }" >&2
+            continue
+        fi
+
+        # arr[*]: reflect current IFS join semantics (single joined value)
+        if [ "$__dbg__is_all_star" = true ]; then
+            local __dbg__joined=''
+            eval '__dbg__joined=${'"$__dbg__root_name"'[*]}'
+            echo "$__dbg__arg=$(__dbg__q "$__dbg__joined")" >&2
+            continue
+        fi
+
+        # Specific element ref
+        if __dbg__exists "$__dbg__arg"; then
+            local __dbg__value=''
+            eval '__dbg__value=${'"$__dbg__arg"'}'
+            echo "$__dbg__arg=$(__dbg__q "$__dbg__value")" >&2
+        else
+            echo "unset $__dbg__arg" >&2
+        fi
+    done
+}
+
+__dbg__main "$@"
+__dbg__main_rc=$?
+unset -f __dbg__main
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __dbg__main_rc; return $__dbg__main_rc"
+fi
+eval "unset __dbg__main_rc; exit $__dbg__main_rc"
