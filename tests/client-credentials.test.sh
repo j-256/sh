@@ -94,19 +94,19 @@ test_missing_client_id() {
     run_script --client-secret "secret123"
     # Pre-request validation now rejects empty client_id with exit code 2
     assert_rc "missing client-id exits 2" 2
-    assert_err_contains "missing client-id error" "client_id is required"
+    assert_stderr_contains "missing client-id error" "client_id is required"
 }
 
 test_missing_client_secret() {
     run_script --client-id "client123"
     assert_rc "missing client-secret exits 2" 2
-    assert_err_contains "missing client-secret error" "client_secret is required"
+    assert_stderr_contains "missing client-secret error" "client_secret is required"
 }
 
 test_invalid_argument() {
     run_script --invalid-flag
     assert_rc "invalid arg exits 1" 1
-    assert_err_contains "invalid arg error" "Unknown argument '--invalid-flag'"
+    assert_stderr_contains "invalid arg error" "Unknown argument '--invalid-flag'"
 }
 
 test_am_endpoint_basic() {
@@ -140,19 +140,19 @@ test_slas_missing_shortcode() {
     run_script --endpoint slas --client-id "client123" --client-secret "secret456" --org-id "f_ecom_zzxy_001"
     # Pre-request validation now rejects missing shortcode with exit code 2
     assert_rc "slas missing shortcode exits 2" 2
-    assert_err_contains "missing shortcode error" "shortcode is required for slas"
+    assert_stderr_contains "missing shortcode error" "shortcode is required for slas"
 }
 
 test_slas_missing_org_id() {
     run_script --endpoint slas --client-id "client123" --client-secret "secret456" --shortcode "kv7kzm78"
     assert_rc "slas missing org_id exits 2" 2
-    assert_err_contains "missing org_id error" "org_id is required for slas"
+    assert_stderr_contains "missing org_id error" "org_id is required for slas"
 }
 
 test_invalid_endpoint() {
     run_script --endpoint invalid --client-id "client123" --client-secret "secret456"
     assert_rc "invalid endpoint exits 1" 1
-    assert_err_contains "invalid endpoint error" "Invalid endpoint type: 'invalid'"
+    assert_stderr_contains "invalid endpoint error" "Invalid endpoint type: 'invalid'"
 }
 
 test_default_endpoint_am() {
@@ -217,7 +217,7 @@ test_env_print_out_alias() {
 test_env_print_invalid() {
     run_script --env invalid
     assert_rc "env invalid exits 1" 1
-    assert_err_contains "env invalid error" "Invalid argument for -E|--env: 'invalid'"
+    assert_stderr_contains "env invalid error" "Invalid argument for -E|--env: 'invalid'"
 }
 
 test_env_print_no_arg() {

@@ -156,37 +156,37 @@ test_missing_hostname() {
     cd "$TEST_DIR" || exit 1
     run_script -t "mytoken123"
     assert_rc "missing hostname exits 2" 2
-    assert_err_contains "error mentions hostname" "hostname is required"
-    assert_err_contains "error points to help" "Run \`propfind-p12 -h\`"
+    assert_stderr_contains "error mentions hostname" "hostname is required"
+    assert_stderr_contains "error points to help" "Run \`propfind-p12 -h\`"
 }
 
 test_missing_code_version() {
     cd "$TEST_DIR" || exit 1
     run_script -t "mytoken123" "dev01-web-example.demandware.net"
     assert_rc "missing code_version exits 2" 2
-    assert_err_contains "error mentions code_version" "code_version is required"
+    assert_stderr_contains "error mentions code_version" "code_version is required"
 }
 
 test_missing_p12_password() {
     cd "$TEST_DIR" || exit 1
     run_script -t "mytoken123" "dev01-web-example.demandware.net" "version1"
     assert_rc "missing p12_password exits 2" 2
-    assert_err_contains "error mentions p12_password" "p12_password is required"
+    assert_stderr_contains "error mentions p12_password" "p12_password is required"
 }
 
 test_missing_token() {
     cd "$TEST_DIR" || exit 1
     run_script "dev01-web-example.demandware.net" "version1" "p12pass"
     assert_rc "missing token exits 2" 2
-    assert_err_contains "error mentions token" "token is required"
-    assert_err_contains "error mentions SFCC_TOKEN" "SFCC_TOKEN"
+    assert_stderr_contains "error mentions token" "token is required"
+    assert_stderr_contains "error mentions SFCC_TOKEN" "SFCC_TOKEN"
 }
 
 test_token_flag_without_value() {
     cd "$TEST_DIR" || exit 1
     run_script -t
     assert_rc "-t without value exits 2" 2
-    assert_err_contains "-t requires value error" "requires a value"
+    assert_stderr_contains "-t requires value error" "requires a value"
 }
 
 test_missing_p12_file() {
@@ -194,8 +194,8 @@ test_missing_p12_file() {
     rm -f "$TEST_DIR/testuser-dev01-web-example.demandware.net.p12"
     run_script -t "mytoken123" "dev01-web-example.demandware.net" "version1" "p12pass"
     assert_rc "missing p12 exits 4" 4
-    assert_err_contains "error mentions p12 file" "p12 file not found"
-    assert_err_contains "error points at generate-p12" "generate-p12"
+    assert_stderr_contains "error mentions p12 file" "p12 file not found"
+    assert_stderr_contains "error points at generate-p12" "generate-p12"
 }
 
 test_missing_ca_cert() {
@@ -203,7 +203,7 @@ test_missing_ca_cert() {
     rm -f "$TEST_DIR/dev01-web-example.demandware.net_01.crt"
     run_script -t "mytoken123" "dev01-web-example.demandware.net" "version1" "p12pass"
     assert_rc "missing CA cert exits 4" 4
-    assert_err_contains "error mentions CA cert" "CA certificate file not found"
+    assert_stderr_contains "error mentions CA cert" "CA certificate file not found"
 }
 
 # --- run ---

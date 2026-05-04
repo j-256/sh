@@ -123,7 +123,7 @@ test_missing_jq() {
         /bin/bash "$UNDER_TEST" "token123" "example.com" >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
     assert_rc "missing jq" 3
-    assert_err_contains "jq error message" "jq is required"
+    assert_stderr_contains "jq error message" "jq is required"
 }
 
 test_missing_curl() {
@@ -132,7 +132,7 @@ test_missing_curl() {
         /bin/bash "$UNDER_TEST" "token123" "example.com" >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
     assert_rc "missing curl" 3
-    assert_err_contains "curl error message" "curl is required"
+    assert_stderr_contains "curl error message" "curl is required"
 }
 
 test_missing_dig() {
@@ -141,19 +141,19 @@ test_missing_dig() {
         /bin/bash "$UNDER_TEST" "token123" "example.com" >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
     assert_rc "missing dig" 3
-    assert_err_contains "dig error message" "dig is required"
+    assert_stderr_contains "dig error message" "dig is required"
 }
 
 test_missing_api_token() {
     run_script
     assert_rc "missing token" 2
-    assert_err_contains "token error" "Must provide an API bearer token"
+    assert_stderr_contains "token error" "Must provide an API bearer token"
 }
 
 test_missing_domain() {
     run_script "token123"
     assert_rc "missing domain" 2
-    assert_err_contains "domain error" "Must provide a domain name"
+    assert_stderr_contains "domain error" "Must provide a domain name"
 }
 
 test_ip_detection_failure() {
@@ -172,7 +172,7 @@ SHIM
 
     run_script "token123" "example.com"
     assert_rc "ip detection failure" 1
-    assert_err_contains "ip error" "Failed to get device's IP"
+    assert_stderr_contains "ip error" "Failed to get device's IP"
 }
 
 test_dns_already_up_to_date() {
@@ -186,18 +186,18 @@ SHIM
 
     run_script "token123" "example.com"
     assert_rc "already up to date" 0
-    assert_err_contains "up to date message" "DNS IP address already up-to-date"
+    assert_stderr_contains "up to date message" "DNS IP address already up-to-date"
 }
 
 test_dns_update_needed() {
     # dig returns different IP than ipify
     run_script "token123" "example.com"
     assert_rc "dns update" 0
-    assert_err_contains "device ip" "Device's IP: 203.0.113.42"
-    assert_err_contains "domain ip" "Domain's IP: 192.0.2.10"
-    assert_err_contains "updating" "IP addresses do not match, updating DNS"
-    assert_err_contains "deleting" "Deleting A record for 192.0.2.10"
-    assert_err_contains "creating" "Creating A record for 203.0.113.42"
+    assert_stderr_contains "device ip" "Device's IP: 203.0.113.42"
+    assert_stderr_contains "domain ip" "Domain's IP: 192.0.2.10"
+    assert_stderr_contains "updating" "IP addresses do not match, updating DNS"
+    assert_stderr_contains "deleting" "Deleting A record for 192.0.2.10"
+    assert_stderr_contains "creating" "Creating A record for 203.0.113.42"
 }
 
 test_domain_no_ip() {
@@ -210,7 +210,7 @@ SHIM
 
     run_script "token123" "example.com"
     assert_rc "no current ip" 0
-    assert_err_contains "none message" "Domain's IP: NONE"
+    assert_stderr_contains "none message" "Domain's IP: NONE"
 }
 
 test_zone_not_found() {
@@ -234,7 +234,7 @@ SHIM
 
     run_script "token123" "notfound.com"
     assert_rc "zone not found" 1
-    assert_err_contains "zone error" "No zone found for domain \"notfound.com\""
+    assert_stderr_contains "zone error" "No zone found for domain \"notfound.com\""
 }
 
 test_zone_retrieval_jq_error() {
@@ -253,7 +253,7 @@ SHIM
 
     run_script "token123" "example.com"
     assert_rc "jq error on zones" 1
-    assert_err_contains "exception message" "Unexpected error while retrieving zone ID"
+    assert_stderr_contains "exception message" "Unexpected error while retrieving zone ID"
 }
 
 test_no_existing_a_records() {
@@ -306,9 +306,9 @@ SHIM
 
     run_script "token123" "example.com"
     assert_rc "no a records" 0
-    assert_err_contains "no records message" "No existing A records"
-    assert_err_contains "creating only" "Creating A record for 203.0.113.42"
-    assert_err_not_contains "no delete" "Deleting A record"
+    assert_stderr_contains "no records message" "No existing A records"
+    assert_stderr_contains "creating only" "Creating A record for 203.0.113.42"
+    assert_stderr_not_contains "no delete" "Deleting A record"
 }
 
 test_multiple_a_records() {
@@ -421,7 +421,7 @@ SHIM
 
     run_script "token123" "example.com"
     assert_rc "delete failure still creates" 0
-    assert_err_contains "delete failed" "Delete DNS Record request failed"
+    assert_stderr_contains "delete failed" "Delete DNS Record request failed"
 }
 
 test_create_record_api_failure() {
@@ -477,7 +477,7 @@ SHIM
 
     run_script "token123" "example.com"
     assert_rc "create failure" 0
-    assert_err_contains "create failed" "Create DNS Record request failed"
+    assert_stderr_contains "create failed" "Create DNS Record request failed"
 }
 
 test_api_calls_use_bearer_token() {
@@ -507,13 +507,13 @@ test_curl_api_base_url() {
 test_debug_mode() {
     DDNS_DEBUG=1 run_script "token123" "example.com"
     assert_rc "debug mode" 0
-    assert_err_contains "debug output" "[DBG]"
+    assert_stderr_contains "debug output" "[DBG]"
 }
 
 test_no_debug_mode() {
     run_script "token123" "example.com"
     assert_rc "no debug" 0
-    assert_err_not_contains "no debug output" "[DBG]"
+    assert_stderr_not_contains "no debug output" "[DBG]"
 }
 
 # --- run ---

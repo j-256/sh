@@ -78,13 +78,13 @@ assert_stdout_not_contains() {
     assert_not_contains "$label" "$(get_stdout)" "$needle"
 }
 
-assert_err_contains() {
+assert_stderr_contains() {
     local label="$1"
     local needle="$2"
     assert_contains "$label" "$(get_stderr)" "$needle"
 }
 
-assert_err_not_contains() {
+assert_stderr_not_contains() {
     local label="$1"
     local needle="$2"
     assert_not_contains "$label" "$(get_stderr)" "$needle"

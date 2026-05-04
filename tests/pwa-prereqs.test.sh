@@ -411,15 +411,15 @@ test_non_darwin_platform_rejected() {
     touch "$TEST_DIR/uname_linux"
     run_script
     assert_rc "non-Darwin exits 1" 1
-    assert_err_contains "macOS only message" "macOS only"
-    assert_err_contains "platform mentioned" "Linux"
+    assert_stderr_contains "macOS only message" "macOS only"
+    assert_stderr_contains "platform mentioned" "Linux"
 }
 
 test_non_darwin_platform_rejected_install() {
     touch "$TEST_DIR/uname_linux"
     run_script --install
     assert_rc "non-Darwin --install exits 1" 1
-    assert_err_contains "macOS only message" "macOS only"
+    assert_stderr_contains "macOS only message" "macOS only"
 }
 
 # --- arg validation ---
@@ -427,13 +427,13 @@ test_non_darwin_platform_rejected_install() {
 test_unknown_option() {
     run_script --bogus
     assert_rc "unknown option exits 2" 2
-    assert_err_contains "unknown error" "Unknown argument"
+    assert_stderr_contains "unknown error" "Unknown argument"
 }
 
 test_unexpected_positional() {
     run_script somearg
     assert_rc "positional exits 2" 2
-    assert_err_contains "unexpected error" "Unexpected argument"
+    assert_stderr_contains "unexpected error" "Unexpected argument"
 }
 
 # --- run ---

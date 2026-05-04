@@ -152,7 +152,7 @@ test_ip_not_found() {
 test_no_spf_record() {
     run_script nospf.example 1.2.3.4
     assert_rc "no spf exits 0" 0
-    assert_err_contains "reports no spf" "No SPF record found for nospf.example"
+    assert_stderr_contains "reports no spf" "No SPF record found for nospf.example"
 }
 
 test_include_has_no_spf() {
@@ -176,28 +176,28 @@ test_colorized_output() {
 test_stderr_shows_lookups() {
     run_script example.com 198.51.100.10
     assert_rc "lookups exit 0" 0
-    assert_err_contains "shows root lookup" "SPF record for example.com:"
-    assert_err_contains "shows include lookup" "SPF record for spf.example.com:"
+    assert_stderr_contains "shows root lookup" "SPF record for example.com:"
+    assert_stderr_contains "shows include lookup" "SPF record for spf.example.com:"
 }
 
 test_spf_record_echoed_to_stderr() {
     run_script example.com 203.0.113.1
     assert_rc "echo exits 0" 0
-    assert_err_contains "echoes spf content" "v=spf1 ip4:203.0.113.1 ip4:203.0.113.2/32"
+    assert_stderr_contains "echoes spf content" "v=spf1 ip4:203.0.113.1 ip4:203.0.113.2/32"
 }
 
 test_missing_domain_argument() {
     run_script
     assert_rc "missing domain exits 2" 2
-    assert_err_contains "domain required error" "domain is required"
-    assert_err_contains "error points to help" "Run \`spf-find-ip -h\`"
+    assert_stderr_contains "domain required error" "domain is required"
+    assert_stderr_contains "error points to help" "Run \`spf-find-ip -h\`"
 }
 
 test_missing_ip_argument() {
     run_script example.com
     assert_rc "missing ip exits 2" 2
-    assert_err_contains "ip required error" "ip is required"
-    assert_err_contains "error points to help" "Run \`spf-find-ip -h\`"
+    assert_stderr_contains "ip required error" "ip is required"
+    assert_stderr_contains "error points to help" "Run \`spf-find-ip -h\`"
 }
 
 test_dig_not_found() {
@@ -207,7 +207,7 @@ test_dig_not_found() {
         /bin/bash "$UNDER_TEST" example.com 1.2.3.4 >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
     assert_rc "dig missing exits 3" 3
-    assert_err_contains "dig error" "dig is required"
+    assert_stderr_contains "dig error" "dig is required"
 }
 
 # --- run ---

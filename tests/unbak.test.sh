@@ -63,7 +63,7 @@ test_no_args() {
 test_illegal_option() {
     run_script -x
     assert_rc "illegal option" 2
-    assert_err_contains "illegal option message" "Unknown argument"
+    assert_stderr_contains "illegal option message" "Unknown argument"
 }
 
 test_single_backup() {
@@ -76,7 +76,7 @@ test_single_backup() {
 test_file_not_found() {
     run_script "$TEST_DIR/nosuchfile.bak"
     assert_rc "file not found" 1
-    assert_err_contains "no such file error" "No such file"
+    assert_stderr_contains "no such file error" "No such file"
 }
 
 test_destination_exists() {
@@ -84,7 +84,7 @@ test_destination_exists() {
     touch "$TEST_DIR/file.txt"
     run_script "$TEST_DIR/file.txt.bak"
     assert_rc "destination exists" 1
-    assert_err_contains "already exists error" "File already exists, skipping"
+    assert_stderr_contains "already exists error" "File already exists, skipping"
 }
 
 test_chained_backup() {
@@ -99,7 +99,7 @@ test_chained_intermediate_collision() {
     touch "$TEST_DIR/file.txt.bak"
     run_script "$TEST_DIR/file.txt.bak.bak"
     assert_rc "intermediate collision" 1
-    assert_err_contains "intermediate exists error" "File already exists, skipping"
+    assert_stderr_contains "intermediate exists error" "File already exists, skipping"
 }
 
 test_final_destination_exists() {
@@ -107,7 +107,7 @@ test_final_destination_exists() {
     touch "$TEST_DIR/file.txt"
     run_script "$TEST_DIR/file.txt.bak"
     assert_rc "final destination exists" 1
-    assert_err_contains "final destination exists error" "File already exists, skipping"
+    assert_stderr_contains "final destination exists error" "File already exists, skipping"
 }
 
 test_verbose() {
@@ -181,7 +181,7 @@ test_multiple_files_one_fails() {
     local log
     log="$(get_mv_log)"
     assert_contains "moves file1" "$log" "mv $TEST_DIR/file1.txt.bak $TEST_DIR/file1.txt"
-    assert_err_contains "file2 error" "File already exists, skipping"
+    assert_stderr_contains "file2 error" "File already exists, skipping"
 }
 
 test_double_dash() {
@@ -240,7 +240,7 @@ test_no_bak_extension() {
     # File without .bak extension: base = file.txt, but file.txt already exists
     # so unbak correctly reports "File already exists"
     assert_rc "no bak extension rejected" 1
-    assert_err_contains "file exists error" "File already exists"
+    assert_stderr_contains "file exists error" "File already exists"
 }
 
 test_only_bak_extension() {
@@ -249,7 +249,7 @@ test_only_bak_extension() {
     # .bak with no basename would move to directory path, which already exists
     # so unbak correctly reports "File already exists"
     assert_rc "only bak extension rejected" 1
-    assert_err_contains "directory exists error" "File already exists"
+    assert_stderr_contains "directory exists error" "File already exists"
 }
 
 # --- run ---

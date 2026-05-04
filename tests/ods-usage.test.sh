@@ -142,8 +142,8 @@ test_invalid_json_argument() {
     make_invalid_json
     run_script "$(cat "$TEST_DIR/invalid.json")"
     assert_rc "exits 2" 2
-    assert_err_contains "error message" "[ERR][ods-usage] Input is not valid JSON"
-    assert_err_contains "shows preview" "not valid json at all"
+    assert_stderr_contains "error message" "[ERR][ods-usage] Input is not valid JSON"
+    assert_stderr_contains "shows preview" "not valid json at all"
 }
 
 test_long_json_argument_truncated() {
@@ -151,7 +151,7 @@ test_long_json_argument_truncated() {
     long_input="$(printf 'x%.0s' {1..200})"
     run_script "$long_input"
     assert_rc "exits 2" 2
-    assert_err_contains "error shown" "[ERR][ods-usage] Input is not valid JSON"
+    assert_stderr_contains "error shown" "[ERR][ods-usage] Input is not valid JSON"
     local preview
     preview="$(get_stderr | grep -v '\[ERR\]' | head -n 1)"
     local preview_len=${#preview}
@@ -174,13 +174,13 @@ test_clipboard_invalid_json() {
     cp "$TEST_DIR/invalid.json" "$TEST_DIR/clipboard.txt"
     run_script
     assert_rc "exits 2" 2
-    assert_err_contains "clipboard error" "[ERR][ods-usage] No arguments provided and clipboard does not contain valid JSON"
+    assert_stderr_contains "clipboard error" "[ERR][ods-usage] No arguments provided and clipboard does not contain valid JSON"
 }
 
 test_clipboard_default_when_no_args() {
     run_script
     assert_rc "exits 2" 2
-    assert_err_contains "clipboard error" "[ERR][ods-usage] No arguments provided and clipboard does not contain valid JSON"
+    assert_stderr_contains "clipboard error" "[ERR][ods-usage] No arguments provided and clipboard does not contain valid JSON"
     local calls
     calls="$(get_pbpaste_calls)"
     assert_eq "pbpaste called" "$calls" "1"
@@ -214,7 +214,7 @@ test_jq_missing() {
         >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
     assert_rc "missing jq exits 3" 3
-    assert_err_contains "missing jq error" "jq is required"
+    assert_stderr_contains "missing jq error" "jq is required"
 }
 
 test_pbpaste_missing_with_no_args() {
@@ -223,7 +223,7 @@ test_pbpaste_missing_with_no_args() {
         >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
     assert_rc "missing pbpaste with no args exits 3" 3
-    assert_err_contains "missing pbpaste error" "pbpaste is required"
+    assert_stderr_contains "missing pbpaste error" "pbpaste is required"
 }
 
 test_credits_calculation_medium_only() {

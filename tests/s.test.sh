@@ -386,7 +386,7 @@ SHIM
 
     run_script restart zzzz_001
     assert_rc "restart with stop failure propagates rc 1" 1
-    assert_err_contains "restart shows stop failure" "Stop failed"
+    assert_stderr_contains "restart shows stop failure" "Stop failed"
     assert_stdout_not_contains "start was not called" "Start was called (unexpected)"
 }
 
@@ -405,7 +405,7 @@ SHIM
 
     run_script start zzzz_001
     assert_rc "start failure passes through rc 5" 5
-    assert_err_contains "start shows failure" "Start failed"
+    assert_stderr_contains "start shows failure" "Start failed"
 }
 
 test_stop_failure_propagates() {
@@ -423,7 +423,7 @@ SHIM
 
     run_script stop zzzz_001
     assert_rc "stop failure passes through rc 7" 7
-    assert_err_contains "stop shows failure" "Stop failed"
+    assert_stderr_contains "stop shows failure" "Stop failed"
 }
 
 # --- run ---

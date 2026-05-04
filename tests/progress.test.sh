@@ -46,74 +46,74 @@ test_help_output() {
 test_missing_current() {
     run_script
     assert_rc "missing current" 2
-    assert_err_contains "missing param error" "Missing required positional parameter"
-    assert_err_contains "help hint" "Run \`progress -h\` for usage"
+    assert_stderr_contains "missing param error" "Missing required positional parameter"
+    assert_stderr_contains "help hint" "Run \`progress -h\` for usage"
 }
 
 test_missing_max() {
     run_script 50
     assert_rc "missing max" 2
-    assert_err_contains "missing param error" "Missing required positional parameter"
+    assert_stderr_contains "missing param error" "Missing required positional parameter"
 }
 
 test_current_not_integer() {
     run_script abc 100
     assert_rc "current not int" 2
-    assert_err_contains "current int error" "current must be an integer"
+    assert_stderr_contains "current int error" "current must be an integer"
 }
 
 test_max_not_integer() {
     run_script 50 abc
     assert_rc "max not int" 2
-    assert_err_contains "max int error" "max must be a positive integer"
+    assert_stderr_contains "max int error" "max must be a positive integer"
 }
 
 test_max_zero() {
     run_script 0 0
     assert_rc "max zero" 2
-    assert_err_contains "max zero error" "max must be > 0"
+    assert_stderr_contains "max zero error" "max must be > 0"
 }
 
 test_max_negative() {
     run_script 50 -10
     assert_rc "max negative" 2
-    assert_err_contains "max negative error" "max must be a positive integer"
+    assert_stderr_contains "max negative error" "max must be a positive integer"
 }
 
 test_width_missing_value() {
     run_script 50 100 --width
     assert_rc "width missing value" 2
-    assert_err_contains "width missing error" "Missing value for width option"
+    assert_stderr_contains "width missing error" "Missing value for width option"
 }
 
 test_width_zero() {
     run_script --width 0 50 100
     assert_rc "width zero" 2
-    assert_err_contains "width zero error" "width must be > 0"
+    assert_stderr_contains "width zero error" "width must be > 0"
 }
 
 test_width_not_integer() {
     run_script --width abc 50 100
     assert_rc "width not int" 2
-    assert_err_contains "width not int error" "width must be a positive integer"
+    assert_stderr_contains "width not int error" "width must be a positive integer"
 }
 
 test_progress_char_missing_value() {
     run_script 50 100 --progress-char
     assert_rc "progress-char missing" 2
-    assert_err_contains "progress-char error" "Missing value for progress character option"
+    assert_stderr_contains "progress-char error" "Missing value for progress character option"
 }
 
 test_remaining_char_missing_value() {
     run_script 50 100 --remaining-char
     assert_rc "remaining-char missing" 2
-    assert_err_contains "remaining-char error" "Missing value for remaining character option"
+    assert_stderr_contains "remaining-char error" "Missing value for remaining character option"
 }
 
 test_too_many_args() {
     run_script 50 100 150
     assert_rc "too many args" 2
-    assert_err_contains "too many error" "Too many positional arguments"
+    assert_stderr_contains "too many error" "Too many positional arguments"
 }
 
 test_basic_completion_non_tty() {

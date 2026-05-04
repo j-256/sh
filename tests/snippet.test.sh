@@ -102,49 +102,49 @@ test_missing_start_pattern() {
     write_test_file "test.txt"
     run_script "$TEST_DIR/test.txt"
     assert_rc "missing start" 2
-    assert_err_contains "error message" "[ERR][snippet] Start pattern is required"
+    assert_stderr_contains "error message" "[ERR][snippet] Start pattern is required"
 }
 
 test_missing_start_value() {
     write_test_file "test.txt"
     run_script -s
     assert_rc "missing -s value" 2
-    assert_err_contains "error message" "[ERR][snippet] Missing value for '-s'"
+    assert_stderr_contains "error message" "[ERR][snippet] Missing value for '-s'"
 }
 
 test_missing_end_value() {
     write_test_file "test.txt"
     run_script -s "START" -e
     assert_rc "missing -e value" 2
-    assert_err_contains "error message" "[ERR][snippet] Missing value for '-e'"
+    assert_stderr_contains "error message" "[ERR][snippet] Missing value for '-e'"
 }
 
 test_missing_trim_first_value() {
     write_test_file "test.txt"
     run_script -s "START" -f
     assert_rc "missing -f value" 2
-    assert_err_contains "error message" "[ERR][snippet] Missing value for '-f'"
+    assert_stderr_contains "error message" "[ERR][snippet] Missing value for '-f'"
 }
 
 test_missing_trim_last_value() {
     write_test_file "test.txt"
     run_script -s "START" -l
     assert_rc "missing -l value" 2
-    assert_err_contains "error message" "[ERR][snippet] Missing value for '-l'"
+    assert_stderr_contains "error message" "[ERR][snippet] Missing value for '-l'"
 }
 
 test_missing_trim_value() {
     write_test_file "test.txt"
     run_script -s "START" -t
     assert_rc "missing -t value" 2
-    assert_err_contains "error message" "[ERR][snippet] Missing value for '-t'"
+    assert_stderr_contains "error message" "[ERR][snippet] Missing value for '-t'"
 }
 
 test_unknown_option() {
     write_test_file "test.txt"
     run_script -s "START" --unknown-flag "$TEST_DIR/test.txt"
     assert_rc "unknown option" 2
-    assert_err_contains "error message" "[ERR][snippet] Unknown argument '--unknown-flag'"
+    assert_stderr_contains "error message" "[ERR][snippet] Unknown argument '--unknown-flag'"
 }
 
 test_basic_start_end() {

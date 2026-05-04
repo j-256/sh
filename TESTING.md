@@ -40,7 +40,7 @@ SHIM
 test_help_output() {
     run_script --help
     assert_rc "help exits 0" 0
-    assert_err_contains "help has NAME" "NAME"
+    assert_stderr_contains "help has NAME" "NAME"
 }
 
 test_missing_arg() {
@@ -135,8 +135,8 @@ Convenience wrappers for common patterns:
 
 - `assert_stdout_contains "label" "needle"` -- shorthand for `assert_contains "label" "$(get_stdout)" "needle"`
 - `assert_stdout_not_contains "label" "needle"` -- shorthand for `assert_not_contains "label" "$(get_stdout)" "needle"`
-- `assert_err_contains "label" "needle"` -- shorthand for `assert_contains "label" "$(get_stderr)" "needle"`
-- `assert_err_not_contains "label" "needle"` -- shorthand for `assert_not_contains "label" "$(get_stderr)" "needle"`
+- `assert_stderr_contains "label" "needle"` -- shorthand for `assert_contains "label" "$(get_stderr)" "needle"`
+- `assert_stderr_not_contains "label" "needle"` -- shorthand for `assert_not_contains "label" "$(get_stderr)" "needle"`
 
 ### Verbosity
 

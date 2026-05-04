@@ -59,32 +59,32 @@ test_help_output() {
 test_missing_length_value() {
     run_script --length
     assert_rc "missing length" 2
-    assert_err_contains "error message" "[ERR][pwgen] --length specified but no length provided"
+    assert_stderr_contains "error message" "[ERR][pwgen] --length specified but no length provided"
 }
 
 test_missing_charset_value() {
     run_script --charset
     assert_rc "missing charset" 2
-    assert_err_contains "error message" "[ERR][pwgen] --charset specified but no charset provided"
+    assert_stderr_contains "error message" "[ERR][pwgen] --charset specified but no charset provided"
 }
 
 test_missing_exclude_value() {
     run_script --exclude
     assert_rc "missing exclude" 2
-    assert_err_contains "error message" "[ERR][pwgen] --exclude specified but no charset provided"
+    assert_stderr_contains "error message" "[ERR][pwgen] --exclude specified but no charset provided"
 }
 
 test_unknown_option() {
     run_script --invalid
     assert_rc "unknown option" 2
-    assert_err_contains "error message" "[ERR][pwgen] Unknown argument '--invalid'"
+    assert_stderr_contains "error message" "[ERR][pwgen] Unknown argument '--invalid'"
 }
 
 test_empty_charset_after_exclusions() {
     # Exclude all alphanumeric and punctuation
     run_script --charset "abc" --exclude "abc"
     assert_rc "empty charset" 5
-    assert_err_contains "error message" "[ERR][pwgen] Charset is empty after exclusions"
+    assert_stderr_contains "error message" "[ERR][pwgen] Charset is empty after exclusions"
 }
 
 test_default_length() {
@@ -294,13 +294,13 @@ test_help_short() {
 test_non_numeric_positional() {
     run_script abc
     assert_rc "non-numeric positional" 2
-    assert_err_contains "error for non-numeric" "Unknown argument 'abc'"
+    assert_stderr_contains "error for non-numeric" "Unknown argument 'abc'"
 }
 
 test_empty_string_argument() {
     run_script ""
     assert_rc "empty string arg" 2
-    assert_err_contains "error for empty" "Unknown argument ''"
+    assert_stderr_contains "error for empty" "Unknown argument ''"
 }
 
 test_literal_range_charset() {
@@ -341,20 +341,20 @@ test_mixed_posix_and_literal() {
 test_invalid_posix_class_rejected() {
     run_script -l 12 -c "[:foobar:]"
     assert_rc "invalid posix class rejected" 6
-    assert_err_contains "error names invalid class" "[:foobar:]"
-    assert_err_contains "error suggests valid classes" "[:alnum:]"
+    assert_stderr_contains "error names invalid class" "[:foobar:]"
+    assert_stderr_contains "error suggests valid classes" "[:alnum:]"
 }
 
 test_unclosed_posix_class_rejected() {
     run_script -l 12 -c "[:lower:"
     assert_rc "unclosed posix class rejected" 6
-    assert_err_contains "error message present" "Invalid charset"
+    assert_stderr_contains "error message present" "Invalid charset"
 }
 
 test_bare_posix_opener_rejected() {
     run_script -l 12 -c "[:"
     assert_rc "bare posix opener rejected" 6
-    assert_err_contains "error message present" "Invalid charset"
+    assert_stderr_contains "error message present" "Invalid charset"
 }
 
 test_bracket_expression_literal_chars() {
@@ -414,7 +414,7 @@ test_bracket_nested_posix_class() {
 test_unclosed_bracket_rejected() {
     run_script -l 12 -c '[0-9'
     assert_rc "unclosed bracket rejected" 6
-    assert_err_contains "error mentions unclosed" "unclosed"
+    assert_stderr_contains "error mentions unclosed" "unclosed"
 }
 
 test_bracket_expr_excludes_chars_not_in_set() {

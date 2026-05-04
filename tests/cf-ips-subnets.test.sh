@@ -98,7 +98,7 @@ test_curl_missing() {
     env PATH="$SHIM_DIR" /bin/bash "$UNDER_TEST" >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
     assert_rc "curl missing exits 3" 3
-    assert_err_contains "curl error" "curl is required"
+    assert_stderr_contains "curl error" "curl is required"
 }
 
 test_ipcalc_missing() {
@@ -107,28 +107,28 @@ test_ipcalc_missing() {
     env PATH="$SHIM_DIR" /bin/bash "$UNDER_TEST" >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
     assert_rc "ipcalc missing exits 3" 3
-    assert_err_contains "ipcalc error" "ipcalc is required"
+    assert_stderr_contains "ipcalc error" "ipcalc is required"
 }
 
 test_curl_empty_response() {
     : > "$TEST_DIR/curl.response"
     run_script
     assert_rc "empty response exits 1" 1
-    assert_err_contains "fetch error" "[ERR][cf-ips-subnets] Failed to fetch Cloudflare IPs"
+    assert_stderr_contains "fetch error" "[ERR][cf-ips-subnets] Failed to fetch Cloudflare IPs"
 }
 
 test_curl_whitespace_only() {
     printf '\n\n\n' > "$TEST_DIR/curl.response"
     run_script
     assert_rc "whitespace exits 1" 1
-    assert_err_contains "whitespace error" "[ERR][cf-ips-subnets] Failed to fetch Cloudflare IPs"
+    assert_stderr_contains "whitespace error" "[ERR][cf-ips-subnets] Failed to fetch Cloudflare IPs"
 }
 
 test_cidr_greater_than_24() {
     printf '192.0.2.0/25\n' > "$TEST_DIR/curl.response"
     run_script
     assert_rc "cidr > 24 exits 1" 1
-    assert_err_contains "cidr error" "Cannot allowlist ranges greater than /24"
+    assert_stderr_contains "cidr error" "Cannot allowlist ranges greater than /24"
 }
 
 test_cidr_17_to_24_expands_to_24() {

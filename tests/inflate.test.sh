@@ -91,50 +91,50 @@ test_help_short_flag() {
 test_missing_amount() {
     run_script
     assert_rc "no args returns 2" 2
-    assert_err_contains "error message" "amount is required"
+    assert_stderr_contains "error message" "amount is required"
 }
 
 test_missing_year() {
     run_script 150
     assert_rc "missing year returns 2" 2
-    assert_err_contains "error message" "year is required"
+    assert_stderr_contains "error message" "year is required"
 }
 
 test_basic_conversion() {
     run_script 150 1970 9
     assert_rc "basic conversion exits 0" 0
     assert_stdout_contains "result on stdout" "1202.20"
-    assert_err_contains "summary on stderr" "\$150.00: Sep 1970 -> Jun 2024"
+    assert_stderr_contains "summary on stderr" "\$150.00: Sep 1970 -> Jun 2024"
 }
 
 test_default_month() {
     run_script 100 1980
     assert_rc "default month exits 0" 0
-    assert_err_contains "defaults to January" "Jan 1980"
+    assert_stderr_contains "defaults to January" "Jan 1980"
 }
 
 test_amount_formatting() {
     run_script 150.5 1970 9
     assert_rc "decimal amount exits 0" 0
-    assert_err_contains "formats amount" "\$150.50"
+    assert_stderr_contains "formats amount" "\$150.50"
 }
 
 test_single_digit_month() {
     run_script 100 1980 3
     assert_rc "single digit month exits 0" 0
-    assert_err_contains "formats month" "Mar 1980"
+    assert_stderr_contains "formats month" "Mar 1980"
 }
 
 test_double_digit_month() {
     run_script 100 1980 12
     assert_rc "double digit month exits 0" 0
-    assert_err_contains "formats month" "Dec 1980"
+    assert_stderr_contains "formats month" "Dec 1980"
 }
 
 test_month_with_leading_zero() {
     run_script 100 1980 03
     assert_rc "month with leading zero exits 0" 0
-    assert_err_contains "formats month" "Mar 1980"
+    assert_stderr_contains "formats month" "Mar 1980"
     assert_contains "curl gets zero-padded month" "$(get_curl_args)" "year1=198003"
 }
 
@@ -151,13 +151,13 @@ test_curl_called_twice() {
 test_failed_conversion() {
     run_script FAIL 1970 9
     assert_rc "failed conversion returns 1" 1
-    assert_err_contains "error message" "Failed to convert"
+    assert_stderr_contains "error message" "Failed to convert"
 }
 
 test_invalid_historical_year() {
     run_script 100 1899 1
     assert_rc "invalid year returns 1" 1
-    assert_err_contains "error about conversion" "Failed to convert"
+    assert_stderr_contains "error about conversion" "Failed to convert"
 }
 
 test_curl_silent_flags() {

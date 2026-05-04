@@ -85,7 +85,7 @@ assert_help_clean() {
     local s="$1" label="$2"
     local combined
     assert_rc "$s: $label exits 0" 0
-    assert_err_not_contains "$s: $label: no 'return: can only' error" "return: can only"
+    assert_stderr_not_contains "$s: $label: no 'return: can only' error" "return: can only"
     combined="$(get_stdout)$(get_stderr)"
     assert_contains "$s: $label: help mentions '$s'" "$combined" "$s"
     assert_not_contains "$s: $label: help does not say 'bash'" "$combined" "  bash "

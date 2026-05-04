@@ -111,7 +111,7 @@ test_help_output() {
 test_missing_directory() {
     run_script
     assert_rc "missing dir" 2
-    assert_err_contains "error message" "[ERR][git-backup] No directory provided"
+    assert_stderr_contains "error message" "[ERR][git-backup] No directory provided"
 }
 
 test_basic_backup_flow() {
@@ -143,55 +143,55 @@ test_default_remote_origin() {
 test_cd_failure() {
     run_script "$TEST_DIR/fail-cd"
     assert_rc "cd fails" 1
-    assert_err_contains "cd error" "[ERR][git-backup] Failed to change to directory"
+    assert_stderr_contains "cd error" "[ERR][git-backup] Failed to change to directory"
 }
 
 test_stash_save_failure() {
     run_script "$TEST_DIR/fail-stash"
     assert_rc "stash save fails" 1
-    assert_err_contains "stash error" '[ERR][git-backup] `git stash save --include-untracked "backup-2025-01-15-1430.45"` failed'
+    assert_stderr_contains "stash error" '[ERR][git-backup] `git stash save --include-untracked "backup-2025-01-15-1430.45"` failed'
 }
 
 test_checkout_b_failure() {
     run_script "$TEST_DIR/fail-checkout"
     assert_rc "checkout -b fails" 1
-    assert_err_contains "checkout error" '[ERR][git-backup] `git checkout -b "backup-2025-01-15-1430.45"` failed'
+    assert_stderr_contains "checkout error" '[ERR][git-backup] `git checkout -b "backup-2025-01-15-1430.45"` failed'
 }
 
 test_stash_apply_failure() {
     run_script "$TEST_DIR/fail-apply"
     assert_rc "stash apply fails" 1
-    assert_err_contains "apply error" '[ERR][git-backup] `git stash apply` failed'
+    assert_stderr_contains "apply error" '[ERR][git-backup] `git stash apply` failed'
 }
 
 test_add_failure() {
     run_script "$TEST_DIR/fail-add"
     assert_rc "git add fails" 1
-    assert_err_contains "add error" '[ERR][git-backup] `git add .` failed'
+    assert_stderr_contains "add error" '[ERR][git-backup] `git add .` failed'
 }
 
 test_commit_failure() {
     run_script "$TEST_DIR/fail-commit"
     assert_rc "git commit fails" 1
-    assert_err_contains "commit error" '[ERR][git-backup] `git commit -m "Backup 2025-01-15-1430.45"` failed'
+    assert_stderr_contains "commit error" '[ERR][git-backup] `git commit -m "Backup 2025-01-15-1430.45"` failed'
 }
 
 test_push_failure() {
     run_script "$TEST_DIR/fail-push"
     assert_rc "git push fails" 1
-    assert_err_contains "push error" '[ERR][git-backup] `git push "origin" "backup-2025-01-15-1430.45"` failed'
+    assert_stderr_contains "push error" '[ERR][git-backup] `git push "origin" "backup-2025-01-15-1430.45"` failed'
 }
 
 test_checkout_dash_failure() {
     run_script "$TEST_DIR/fail-checkout-dash"
     assert_rc "checkout - fails" 1
-    assert_err_contains "checkout - error" '[ERR][git-backup] `git checkout -` failed'
+    assert_stderr_contains "checkout - error" '[ERR][git-backup] `git checkout -` failed'
 }
 
 test_branch_delete_failure() {
     run_script "$TEST_DIR/fail-branch"
     assert_rc "branch -D fails" 1
-    assert_err_contains "branch error" '[ERR][git-backup] `git branch -D "backup-2025-01-15-1430.45"` failed'
+    assert_stderr_contains "branch error" '[ERR][git-backup] `git branch -D "backup-2025-01-15-1430.45"` failed'
 }
 
 test_stash_apply_conflict_path() {
@@ -203,7 +203,7 @@ test_stash_apply_conflict_path() {
     # The shim makes stash apply fail, which should cause the script to fail
     # since the conflict resolution pipeline is complex to test
     assert_rc "conflict causes failure" 1
-    assert_err_contains "apply failed" '[ERR][git-backup] `git stash apply` failed'
+    assert_stderr_contains "apply failed" '[ERR][git-backup] `git stash apply` failed'
 }
 
 test_utc_timestamp() {
@@ -296,7 +296,7 @@ SHIM
 
     run_script "$TEST_DIR/test-repo"
     assert_rc "missing remote exits 2" 2
-    assert_err_contains "missing remote error" "[ERR][git-backup] Remote 'origin' not configured"
+    assert_stderr_contains "missing remote error" "[ERR][git-backup] Remote 'origin' not configured"
     # Ensure no destructive commands ran after the pre-flight failure
     local git_log
     git_log="$(get_git_log)"

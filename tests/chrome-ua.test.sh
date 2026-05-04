@@ -87,25 +87,25 @@ test_help_short_flag() {
 test_unknown_flag() {
     run_script --bogus
     assert_rc "unknown flag exits 2" 2
-    assert_err_contains "error names flag" "Unknown argument '--bogus'"
+    assert_stderr_contains "error names flag" "Unknown argument '--bogus'"
 }
 
 test_app_requires_value() {
     run_script --app
     assert_rc "missing --app value exits 2" 2
-    assert_err_contains "error mentions --app" "--app requires a path"
+    assert_stderr_contains "error mentions --app" "--app requires a path"
 }
 
 test_platform_requires_value() {
     run_script --platform
     assert_rc "missing --platform value exits 2" 2
-    assert_err_contains "error mentions --platform" "--platform requires"
+    assert_stderr_contains "error mentions --platform" "--platform requires"
 }
 
 test_platform_rejects_invalid_value() {
     run_script --platform bsd
     assert_rc "bad platform exits 2" 2
-    assert_err_contains "error lists valid values" "mac|win|linux"
+    assert_stderr_contains "error lists valid values" "mac|win|linux"
 }
 
 # --- test cases: default mode (local read) ---
@@ -118,7 +118,7 @@ test_basic_ua_from_plist() {
     assert_contains "UA Chrome major" "$stdout" "Chrome/133.0.0.0"
     assert_contains "UA suffix" "$stdout" "Safari/537.36"
     # No warnings on happy path
-    assert_err_not_contains "no fallback warning" "fallback"
+    assert_stderr_not_contains "no fallback warning" "fallback"
     # No network call on happy path
     assert_eq "curl not called" "$(cat "$TEST_DIR/curl.log" 2>/dev/null || echo "")" ""
 }
@@ -148,7 +148,7 @@ SHIM
     run_script --app "$TEST_DIR/Chrome.app"
     assert_rc "custom version exits 0" 0
     assert_stdout_contains "major padded to X.0.0.0" "Chrome/99.0.0.0"
-    assert_err_not_contains "no fallback warning" "fallback"
+    assert_stderr_not_contains "no fallback warning" "fallback"
 }
 
 # --- test cases: automatic network fallback (local failure -> network) ---
@@ -160,7 +160,7 @@ test_local_fails_auto_fetches_latest() {
     local curl_log; curl_log="$(cat "$TEST_DIR/curl.log" 2>/dev/null)"
     assert_contains "curl called" "$curl_log" "versionhistory.googleapis.com"
     assert_contains "mac platform requested" "$curl_log" "platforms/mac"
-    assert_err_contains "warns about network fallback" "Local read failed"
+    assert_stderr_contains "warns about network fallback" "Local read failed"
     assert_stdout_contains "latest major from API" "Chrome/148.0.0.0"
 }
 
@@ -186,7 +186,7 @@ test_local_fails_network_fails_falls_back_to_pinned() {
     touch "$TEST_DIR/curl_fails"
     run_script --app "$TEST_DIR/NoSuchChrome.app"
     assert_rc "double failure still exits 0" 0
-    assert_err_contains "warns pinned fallback" "pinned"
+    assert_stderr_contains "warns pinned fallback" "pinned"
     assert_stdout_contains "UA prefix" "Mozilla/5.0 (Macintosh"
     assert_stdout_contains "UA suffix" "Safari/537.36"
 }
@@ -220,8 +220,8 @@ test_latest_with_curl_failure_falls_back_to_pinned() {
     touch "$TEST_DIR/curl_fails"
     run_script --latest
     assert_rc "--latest curl fail exits 0" 0
-    assert_err_contains "warns curl fail" "fetch"
-    assert_err_contains "warns pinned fallback" "pinned"
+    assert_stderr_contains "warns curl fail" "fetch"
+    assert_stderr_contains "warns pinned fallback" "pinned"
     assert_stdout_contains "UA emitted" "Safari/537.36"
 }
 

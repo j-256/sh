@@ -200,8 +200,8 @@ test_read_with_newline() {
 test_invalid_option() {
     run_script --invalid-option
     assert_rc "invalid option exits 2" 2
-    assert_err_contains "invalid option error mentions flag" "--invalid-option"
-    assert_err_contains "invalid option points to -h" "-h"
+    assert_stderr_contains "invalid option error mentions flag" "--invalid-option"
+    assert_stderr_contains "invalid option points to -h" "-h"
     # No output should be produced
     local output
     output="$(get_stdout)"

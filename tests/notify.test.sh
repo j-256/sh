@@ -217,32 +217,32 @@ test_missing_message() {
     # Run with stdin redirected from /dev/null to simulate TTY case
     run_script </dev/null
     assert_rc "missing message" 2
-    assert_err_contains "error message" "MESSAGE is required"
-    assert_err_contains "help shown" "SYNOPSIS"
+    assert_stderr_contains "error message" "MESSAGE is required"
+    assert_stderr_contains "help shown" "SYNOPSIS"
 }
 
 test_missing_title_value() {
     run_script --title
     assert_rc "missing title value" 2
-    assert_err_contains "error message" "-t|--title requires a value"
+    assert_stderr_contains "error message" "-t|--title requires a value"
 }
 
 test_missing_subtitle_value() {
     run_script -s
     assert_rc "missing subtitle value" 2
-    assert_err_contains "error message" "-s|--subtitle requires a value"
+    assert_stderr_contains "error message" "-s|--subtitle requires a value"
 }
 
 test_missing_sound_value() {
     run_script --sound
     assert_rc "missing sound value" 2
-    assert_err_contains "error message" "--sound requires a value"
+    assert_stderr_contains "error message" "--sound requires a value"
 }
 
 test_unknown_option() {
     run_script --unknown "Test"
     assert_rc "unknown option" 2
-    assert_err_contains "error message" "Unknown argument '--unknown'"
+    assert_stderr_contains "error message" "Unknown argument '--unknown'"
 }
 
 test_osascript_not_found() {
@@ -253,7 +253,7 @@ test_osascript_not_found() {
         /bin/bash "$UNDER_TEST" "Test" >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
     assert_rc "osascript missing" 3
-    assert_err_contains "error message" "osascript not found (macOS only)"
+    assert_stderr_contains "error message" "osascript not found (macOS only)"
 }
 
 test_message_with_newlines() {
@@ -277,7 +277,7 @@ test_message_with_special_chars() {
 test_empty_string_message() {
     run_script ""
     assert_rc "empty string" 2
-    assert_err_contains "error message" "MESSAGE is required"
+    assert_stderr_contains "error message" "MESSAGE is required"
 }
 
 test_whitespace_only_message() {

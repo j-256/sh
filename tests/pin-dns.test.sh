@@ -90,8 +90,8 @@ SHIM
 test_help_output() {
     run_script --help
     assert_rc "help exits 0" 0
-    assert_err_contains "help has NAME" "NAME"
-    assert_err_contains "help has ARGUMENT HANDLING" "ARGUMENT HANDLING"
+    assert_stderr_contains "help has NAME" "NAME"
+    assert_stderr_contains "help has ARGUMENT HANDLING" "ARGUMENT HANDLING"
 }
 
 test_drop_in_url_hostname_target() {
@@ -108,27 +108,27 @@ test_drop_in_url_hostname_target() {
 test_useless_s_warning() {
     run_script -s "https://example.com" --target "edge.somesite.com"
     assert_rc "useless-s" 0
-    assert_err_contains "warn about -s" "pin-dns already adds curl -sS"
+    assert_stderr_contains "warn about -s" "pin-dns already adds curl -sS"
 }
 
 test_no_silent() {
     run_script --no-silent -s "https://example.com" --target "edge.somesite.com"
     assert_rc "no-silent" 0
-    assert_err_not_contains "no -s warning" "already adds curl -sS"
+    assert_stderr_not_contains "no -s warning" "already adds curl -sS"
     assert_not_contains "no injected -sS" "$(get_curl_args)" "-sS"
 }
 
 test_quiet() {
     run_script --quiet -s "https://example.com" --target "edge.somesite.com"
     assert_rc "quiet" 0
-    assert_err_not_contains "quiet hides warn" "[WRN]"
-    assert_err_not_contains "quiet hides info" "[INF]"
+    assert_stderr_not_contains "quiet hides warn" "[WRN]"
+    assert_stderr_not_contains "quiet hides info" "[INF]"
 }
 
 test_curl_operand_warning() {
     run_script "https://example.com" -H --target "edge.somesite.com"
     assert_rc "operand-warn" 0
-    assert_err_contains "operand warning" "looks like a pin-dns option but is being used as the operand to curl option '-H'"
+    assert_stderr_contains "operand warning" "looks like a pin-dns option but is being used as the operand to curl option '-H'"
     assert_contains "still pins" "$(get_curl_args)" "--resolve"
 }
 
@@ -171,13 +171,13 @@ SHIM
     chmod +x "$SHIM_DIR/dig"
     run_script "https://example.com" --target "edge.somesite.com"
     assert_rc "dig-missing" 3
-    assert_err_contains "dig missing error" "dig failed"
+    assert_stderr_contains "dig missing error" "dig failed"
 }
 
 test_dig_no_results() {
     run_script "https://example.com" --target "noresult.example"
     assert_rc "dig-nores" 4
-    assert_err_contains "dig no results" "dig returned no results"
+    assert_stderr_contains "dig no results" "dig returned no results"
 }
 
 test_user_supplies_a_flag() {
@@ -197,21 +197,21 @@ test_ua_fallback_chrome_missing() {
     export PIN_DNS_CHROME_APP="$TEST_DIR/NoSuchChrome.app"
     run_script "https://example.com" --target "edge.somesite.com"
     assert_rc "ua-fallback" 0
-    assert_err_contains "warn about fallback" "falling back to 'sfcc-test'"
+    assert_stderr_contains "warn about fallback" "falling back to 'sfcc-test'"
     assert_contains "UA is sfcc-test" "$(get_curl_args)" "sfcc-test"
 }
 
 test_url_host_mismatch() {
     run_script --host "override.example" "https://example.com/x" --target "edge.somesite.com"
     assert_rc "host-mismatch" 0
-    assert_err_contains "warn mismatch" "URL host 'example.com' does not match --host 'override.example'"
+    assert_stderr_contains "warn mismatch" "URL host 'example.com' does not match --host 'override.example'"
     assert_contains "resolve uses override" "$(get_curl_args)" "override.example:443:192.0.2.11"
 }
 
 test_path_url_strip_mismatch() {
     run_script "ecom-dev.somesite.com" "edge.somesite.com" "https://third.example/some/path?q=1"
     assert_rc "path-url" 0
-    assert_err_contains "PATH_OR_URL host mismatch" "PATH_OR_URL host 'third.example'"
+    assert_stderr_contains "PATH_OR_URL host mismatch" "PATH_OR_URL host 'third.example'"
     assert_contains "constructed url" "$(get_curl_args)" "https://ecom-dev.somesite.com/some/path?q=1"
 }
 
@@ -255,7 +255,7 @@ SHIM
     chmod +x "$SHIM_DIR/curl"
     run_script "https://example.com" --target "edge.somesite.com"
     assert_rc "curl-missing" 3
-    assert_err_contains "curl missing" "curl failed to execute"
+    assert_stderr_contains "curl missing" "curl failed to execute"
 }
 
 test_url_target_inference() {

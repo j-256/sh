@@ -100,20 +100,20 @@ test_date_called() {
 test_missing_all_args() {
     run_script
     assert_rc "missing all args exits 2" 2
-    assert_err_contains "error mentions client_id" "client_id"
-    assert_err_contains "error points to help" "-h"
+    assert_stderr_contains "error mentions client_id" "client_id"
+    assert_stderr_contains "error points to help" "-h"
 }
 
 test_missing_key_path() {
     run_script "some-client-id"
     assert_rc "missing key path exits 2" 2
-    assert_err_contains "error mentions private_key_file" "private_key_file"
+    assert_stderr_contains "error mentions private_key_file" "private_key_file"
 }
 
 test_nonexistent_key_file() {
     run_script "test-client-id" "$TEST_DIR/keys/nosuch.key"
     assert_rc "nonexistent key exits 4" 4
-    assert_err_contains "error mentions unreadable" "not found or unreadable"
+    assert_stderr_contains "error mentions unreadable" "not found or unreadable"
     local out; out="$(get_stdout)"
     assert_eq "no JWT printed on failure" "$out" ""
 }
@@ -121,7 +121,7 @@ test_nonexistent_key_file() {
 test_malformed_key_file() {
     run_script "test-client-id" "$TEST_DIR/keys/bad.key"
     assert_rc "malformed key fails" 1
-    assert_err_contains "error mentions signing failure" "Signing failed"
+    assert_stderr_contains "error mentions signing failure" "Signing failed"
     local out; out="$(get_stdout)"
     assert_eq "no JWT printed on failure" "$out" ""
 }
@@ -129,7 +129,7 @@ test_malformed_key_file() {
 test_empty_client_id() {
     run_script "" "$TEST_DIR/keys/test.key"
     assert_rc "empty client_id exits 2" 2
-    assert_err_contains "error mentions client_id" "client_id"
+    assert_stderr_contains "error mentions client_id" "client_id"
 }
 
 # --- run ---

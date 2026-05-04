@@ -35,37 +35,37 @@ test_missing_bc() {
         /bin/bash "$UNDER_TEST" -t si 500G >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
     assert_rc "missing bc exits 3" 3
-    assert_err_contains "missing bc error" "bc is required"
+    assert_stderr_contains "missing bc error" "bc is required"
 }
 
 test_missing_target() {
     run_script 500G
     assert_rc "missing -t exits 2" 2
-    assert_err_contains "missing -t shows usage" "[ERR][convert-size] Must provide a target system and size"
+    assert_stderr_contains "missing -t shows usage" "[ERR][convert-size] Must provide a target system and size"
 }
 
 test_missing_size() {
     run_script -t binary
     assert_rc "missing size exits 2" 2
-    assert_err_contains "missing size shows usage" "[ERR][convert-size] Must provide a target system and size"
+    assert_stderr_contains "missing size shows usage" "[ERR][convert-size] Must provide a target system and size"
 }
 
 test_duplicate_to_option() {
     run_script -t binary -t si 500G
     assert_rc "duplicate -t exits 2" 2
-    assert_err_contains "duplicate -t error" "-t|--to option is specified more than once"
+    assert_stderr_contains "duplicate -t error" "-t|--to option is specified more than once"
 }
 
 test_duplicate_unit_option() {
     run_script -t binary -u G -u M 500
     assert_rc "duplicate -u exits 2" 2
-    assert_err_contains "duplicate -u error" "-u|--unit option is specified more than once"
+    assert_stderr_contains "duplicate -u error" "-u|--unit option is specified more than once"
 }
 
 test_multiple_sizes() {
     run_script -t binary 500G 600M
     assert_rc "multiple sizes exits 2" 2
-    assert_err_contains "multiple sizes error" "Multiple size inputs"
+    assert_stderr_contains "multiple sizes error" "Multiple size inputs"
 }
 
 test_space_separated_unit() {
@@ -89,19 +89,19 @@ test_space_separated_unit_lowercase() {
 test_space_separated_rejects_when_first_has_suffix() {
     run_script -t binary 500G G
     assert_rc "500G G exits 2" 2
-    assert_err_contains "still errors when first has suffix" "Multiple size inputs"
+    assert_stderr_contains "still errors when first has suffix" "Multiple size inputs"
 }
 
 test_invalid_size_non_numeric() {
     run_script -t binary abc
     assert_rc "invalid size exits 2" 2
-    assert_err_contains "invalid size error" "Invalid size: A. Must be a positive integer"
+    assert_stderr_contains "invalid size error" "Invalid size: A. Must be a positive integer"
 }
 
 test_invalid_size_negative() {
     run_script -t binary -500G
     assert_rc "negative size exits 2" 2
-    assert_err_contains "negative size error" "Invalid size: -500"
+    assert_stderr_contains "negative size error" "Invalid size: -500"
 }
 
 test_bundled_short_with_glued_value() {
@@ -120,19 +120,19 @@ test_equals_long_option() {
 test_invalid_unit() {
     run_script -t binary 500X
     assert_rc "invalid unit exits 2" 2
-    assert_err_contains "invalid unit error" "Invalid size: 500X. Must be a positive integer"
+    assert_stderr_contains "invalid unit error" "Invalid size: 500X. Must be a positive integer"
 }
 
 test_invalid_unit_override() {
     run_script -t binary -u Z 500
     assert_rc "invalid unit override exits 2" 2
-    assert_err_contains "invalid unit override error" "Invalid unit: Z"
+    assert_stderr_contains "invalid unit override error" "Invalid unit: Z"
 }
 
 test_invalid_target_system() {
     run_script -t foo 500G
     assert_rc "invalid target exits 2" 2
-    assert_err_contains "invalid target error" "Invalid -t|--to 'foo'"
+    assert_stderr_contains "invalid target error" "Invalid -t|--to 'foo'"
 }
 
 test_si_to_binary_gigabytes() {

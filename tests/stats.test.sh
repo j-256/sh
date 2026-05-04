@@ -144,25 +144,25 @@ test_n_flag_shows_dataset() {
 test_decimal_rejected() {
     printf '%s\n' 1.5 2.5 | run_script
     assert_rc "decimal rejected with rc 2" 2
-    assert_err_contains "decimal error message" "Integers only"
+    assert_stderr_contains "decimal error message" "Integers only"
 }
 
 test_negative_sign_rejected() {
     printf '%s\n' -5 10 | run_script
     assert_rc "negative rejected with rc 2" 2
-    assert_err_contains "negative error message" "Integers only"
+    assert_stderr_contains "negative error message" "Integers only"
 }
 
 test_letters_rejected() {
     printf '%s\n' abc 123 | run_script
     assert_rc "letters rejected with rc 2" 2
-    assert_err_contains "letters error message" "Integers only"
+    assert_stderr_contains "letters error message" "Integers only"
 }
 
 test_mixed_valid_invalid() {
     printf '%s\n' 1 2 three 4 | run_script
     assert_rc "mixed rejected with rc 2" 2
-    assert_err_contains "mixed error message" "Integers only"
+    assert_stderr_contains "mixed error message" "Integers only"
 }
 
 test_empty_input() {

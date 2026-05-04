@@ -27,13 +27,13 @@ test_short_help_flag() {
 test_unknown_flag_errors() {
     run_script --banana
     assert_rc "unknown flag exits 2" 2
-    assert_err_contains "stderr mentions the flag" "--banana"
+    assert_stderr_contains "stderr mentions the flag" "--banana"
 }
 
 test_all_with_names_errors() {
     run_script --all tsd
     assert_rc "--all mixed with names exits 2" 2
-    assert_err_contains "stderr mentions conflict" "--all"
+    assert_stderr_contains "stderr mentions conflict" "--all"
 }
 
 test_names_with_all_errors() {
@@ -47,7 +47,7 @@ test_curl_missing_exits_three() {
         /bin/bash "$UNDER_TEST" tsd >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
     assert_rc "missing curl exits 3" 3
-    assert_err_contains "stderr mentions curl" "curl"
+    assert_stderr_contains "stderr mentions curl" "curl"
 }
 
 # --- shims ---
@@ -153,7 +153,7 @@ test_index_fetch_failure_exits_one() {
         /bin/bash "$UNDER_TEST" alpha >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
     assert_rc "INDEX fetch failure exits 1" 1
-    assert_err_contains "stderr mentions INDEX" "INDEX"
+    assert_stderr_contains "stderr mentions INDEX" "INDEX"
 }
 
 test_listing_has_category_headings() {
@@ -191,7 +191,7 @@ test_listing_shows_descriptions() {
 test_unknown_script_errors_before_fetch() {
     run_script zulu
     assert_rc "unknown name exits 2" 2
-    assert_err_contains "stderr names the bad name" "zulu"
+    assert_stderr_contains "stderr names the bad name" "zulu"
     # curl.args should contain INDEX.md but NOT /zulu
     if grep -q '/INDEX.md' "$TEST_DIR/curl.args" 2>/dev/null; then
         _ok "INDEX was fetched"
@@ -208,7 +208,7 @@ test_unknown_script_errors_before_fetch() {
 test_mixed_known_unknown_errors() {
     run_script alpha zulu
     assert_rc "mixed known/unknown exits 2" 2
-    assert_err_contains "stderr mentions zulu" "zulu"
+    assert_stderr_contains "stderr mentions zulu" "zulu"
     # Alpha should NOT have been fetched since validation is upfront
     if grep -q '/alpha' "$TEST_DIR/curl.args" 2>/dev/null; then
         _fail "should NOT have fetched /alpha (validation is upfront)"
@@ -242,7 +242,7 @@ test_missing_install_dir_created_with_notice() {
     else
         _fail "install dir not created: $target"
     fi
-    assert_err_contains "notice printed" "Created"
+    assert_stderr_contains "notice printed" "Created"
 }
 
 test_existing_install_dir_no_notice() {
@@ -251,7 +251,7 @@ test_existing_install_dir_no_notice() {
     env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR:$PATH" INSTALL_DIR="$target" \
         /bin/bash "$UNDER_TEST" alpha >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
-    assert_err_not_contains "no 'Created' notice for existing dir" "Created"
+    assert_stderr_not_contains "no 'Created' notice for existing dir" "Created"
 }
 
 test_install_single_script() {
@@ -474,8 +474,8 @@ test_path_warning_when_install_dir_not_on_path() {
         PATH="$SHIM_DIR:/usr/bin:/bin" \
         /bin/bash "$UNDER_TEST" alpha >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
-    assert_err_contains "warning that dir is not on PATH" "not on your \$PATH"
-    assert_err_contains "warning shows export line" "export PATH=\"$target:\$PATH\""
+    assert_stderr_contains "warning that dir is not on PATH" "not on your \$PATH"
+    assert_stderr_contains "warning shows export line" "export PATH=\"$target:\$PATH\""
 }
 
 test_no_path_warning_when_install_dir_on_path() {
@@ -485,7 +485,7 @@ test_no_path_warning_when_install_dir_on_path() {
         PATH="$target:$SHIM_DIR:/usr/bin:/bin" \
         /bin/bash "$UNDER_TEST" alpha >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
-    assert_err_not_contains "no PATH warning when on PATH" "not on your \$PATH"
+    assert_stderr_not_contains "no PATH warning when on PATH" "not on your \$PATH"
 }
 
 test_path_warning_trailing_slash_does_not_fire() {
@@ -496,7 +496,7 @@ test_path_warning_trailing_slash_does_not_fire() {
         PATH="$target/:$SHIM_DIR:/usr/bin:/bin" \
         /bin/bash "$UNDER_TEST" alpha >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
-    assert_err_not_contains "no PATH warning with trailing slash in PATH entry" "not on your \$PATH"
+    assert_stderr_not_contains "no PATH warning with trailing slash in PATH entry" "not on your \$PATH"
 }
 
 # --- run ---

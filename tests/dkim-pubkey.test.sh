@@ -68,20 +68,20 @@ test_help_short_flag() {
 test_no_args() {
     run_script
     assert_rc "no args exits 2" 2
-    assert_err_contains "no args error" "selector is required"
+    assert_stderr_contains "no args error" "selector is required"
 }
 
 test_missing_domain() {
     run_script "dkim-selector"
     assert_rc "missing domain exits 2" 2
-    assert_err_contains "missing domain error" "domain is required"
+    assert_stderr_contains "missing domain error" "domain is required"
 }
 
 test_basic_query() {
     run_script "dkim-prd" "gmail.com"
     assert_rc "basic query exits 0" 0
-    assert_err_contains "shows dig command" "\$ dig +short TXT \"dkim-prd._domainkey.gmail.com\""
-    assert_err_contains "shows DNS response" "v=DKIM1"
+    assert_stderr_contains "shows dig command" "\$ dig +short TXT \"dkim-prd._domainkey.gmail.com\""
+    assert_stderr_contains "shows DNS response" "v=DKIM1"
     assert_stdout_contains "outputs p= value" "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1234567890abcdefghijklmnopqrstuvwxyz"
 }
 
@@ -98,13 +98,13 @@ test_dig_invocation() {
 test_empty_dns_response() {
     run_script "empty" "example.com"
     assert_rc "empty response exits 1" 1
-    assert_err_contains "empty response error" "[ERR][dkim-pubkey] DNS response empty"
+    assert_stderr_contains "empty response error" "[ERR][dkim-pubkey] DNS response empty"
 }
 
 test_empty_p_value() {
     run_script "empty-p" "example.com"
     assert_rc "empty p= exits 4 (domain-specific)" 4
-    assert_err_contains "empty p error" "Record found but key is empty"
+    assert_stderr_contains "empty p error" "Record found but key is empty"
 }
 
 test_dig_missing() {
@@ -113,13 +113,13 @@ test_dig_missing() {
         /bin/bash "$UNDER_TEST" "selector" "example.com" >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
     assert_rc "dig missing exits 3" 3
-    assert_err_contains "dig error" "dig is required"
+    assert_stderr_contains "dig error" "dig is required"
 }
 
 test_multiline_response() {
     run_script "multiline" "example.com"
     assert_rc "multiline exits 0" 0
-    assert_err_contains "shows multiline response" "v=DKIM1"
+    assert_stderr_contains "shows multiline response" "v=DKIM1"
     assert_stdout_contains "extracts p= from multiline" "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC3QEKyU1fSma0axspqYK5iAj+54lsAg"
 }
 
@@ -139,7 +139,7 @@ test_stderr_blank_line() {
 test_dns_hostname_construction() {
     run_script "s1" "domain.example"
     assert_rc "hostname construction exits 0" 0
-    assert_err_contains "constructs _domainkey hostname" "s1._domainkey.domain.example"
+    assert_stderr_contains "constructs _domainkey hostname" "s1._domainkey.domain.example"
 }
 
 test_p_value_extraction() {

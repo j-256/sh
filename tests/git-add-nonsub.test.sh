@@ -69,33 +69,33 @@ test_help_output() {
 test_no_directory_specified() {
     run_script
     assert_rc "no dir exits 2" 2
-    assert_err_contains "error message" "No directory specified"
+    assert_stderr_contains "error message" "No directory specified"
 }
 
 test_unknown_option() {
     run_script --unknown
     assert_rc "unknown option exits 2" 2
-    assert_err_contains "error message" "Unknown option: --unknown"
+    assert_stderr_contains "error message" "Unknown option: --unknown"
 }
 
 test_multiple_directories() {
     mkdir -p "$TEST_DIR/dir1" "$TEST_DIR/dir2"
     run_script "$TEST_DIR/dir1" "$TEST_DIR/dir2"
     assert_rc "multiple dirs exits 2" 2
-    assert_err_contains "error message" "Unexpected argument"
+    assert_stderr_contains "error message" "Unexpected argument"
 }
 
 test_directory_does_not_exist() {
     run_script "$TEST_DIR/nonexistent"
     assert_rc "nonexistent dir exits 2" 2
-    assert_err_contains "error message" "Directory '$TEST_DIR/nonexistent' does not exist"
+    assert_stderr_contains "error message" "Directory '$TEST_DIR/nonexistent' does not exist"
 }
 
 test_no_git_directory() {
     mkdir -p "$TEST_DIR/no-git"
     run_script "$TEST_DIR/no-git"
     assert_rc "no .git exits 2" 2
-    assert_err_contains "error message" "No .git directory found in '$TEST_DIR/no-git'"
+    assert_stderr_contains "error message" "No .git directory found in '$TEST_DIR/no-git'"
 }
 
 test_not_in_outer_repo() {
@@ -115,17 +115,17 @@ SHIM
     mkdir -p "$TEST_DIR/myrepo/.git"
     run_script "$TEST_DIR/myrepo"
     assert_rc "not in outer repo exits 2" 2
-    assert_err_contains "error message" "Not inside a git repository"
+    assert_stderr_contains "error message" "Not inside a git repository"
 }
 
 test_successful_backup_add_restore() {
     mkdir -p "$TEST_DIR/myrepo/.git"
     run_script "$TEST_DIR/myrepo"
     assert_rc "success exits 0" 0
-    assert_err_contains "backup created" "Backup created at"
+    assert_stderr_contains "backup created" "Backup created at"
     assert_contains "git add ran" "$(get_git_log)" "git -C $TEST_DIR/myrepo add ."
-    assert_err_contains "restore message" "Restored .git directory"
-    assert_err_contains "git add success" "git add completed successfully"
+    assert_stderr_contains "restore message" "Restored .git directory"
+    assert_stderr_contains "git add success" "git add completed successfully"
 }
 
 test_backup_failure() {
@@ -134,8 +134,8 @@ test_backup_failure() {
     : > "$TEST_DIR/fail_mv"
     run_script "$TEST_DIR/myrepo"
     assert_rc "backup fail exits 1" 1
-    assert_err_contains "backup error" "Failed to move .git to"
-    assert_err_contains "exit message" "Failed to back up .git"
+    assert_stderr_contains "backup error" "Failed to move .git to"
+    assert_stderr_contains "exit message" "Failed to back up .git"
 }
 
 test_git_add_failure_with_restore() {
@@ -157,8 +157,8 @@ SHIM
 
     run_script "$TEST_DIR/myrepo"
     assert_rc "git add fail exits 1" 1
-    assert_err_contains "git add failed" "git add failed"
-    assert_err_contains "restore triggered" "Restoring .git..."
+    assert_stderr_contains "git add failed" "git add failed"
+    assert_stderr_contains "restore triggered" "Restoring .git..."
     assert_contains "restore called" "$(get_mv_log)" "mv"
 }
 
@@ -185,7 +185,7 @@ SHIM
 
     run_script "$TEST_DIR/myrepo"
     assert_rc "restore fail exits 1" 1
-    assert_err_contains "restore error" "Failed to restore"
+    assert_stderr_contains "restore error" "Failed to restore"
 }
 
 test_mktemp_called_for_backup() {
@@ -199,10 +199,10 @@ test_info_messages_on_success() {
     mkdir -p "$TEST_DIR/myrepo/.git"
     run_script "$TEST_DIR/myrepo"
     assert_rc "info check exits 0" 0
-    assert_err_contains "backup info" "[INF][git-add-nonsub] Backup created at"
-    assert_err_contains "git add info" "[INF][git-add-nonsub] Running git add on"
-    assert_err_contains "completion info" "[INF][git-add-nonsub] git add completed successfully"
-    assert_err_contains "restore info" "[INF][git-add-nonsub] Restored .git directory"
+    assert_stderr_contains "backup info" "[INF][git-add-nonsub] Backup created at"
+    assert_stderr_contains "git add info" "[INF][git-add-nonsub] Running git add on"
+    assert_stderr_contains "completion info" "[INF][git-add-nonsub] git add completed successfully"
+    assert_stderr_contains "restore info" "[INF][git-add-nonsub] Restored .git directory"
 }
 
 test_git_directory_restored_to_correct_location() {
@@ -220,14 +220,14 @@ test_relative_path_directory() {
     env PATH="$SHIM_DIR:$PATH" /bin/bash "$UNDER_TEST" "myrepo" >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
     assert_rc "relative path exits 0" 0
-    assert_err_contains "backup created" "Backup created at"
+    assert_stderr_contains "backup created" "Backup created at"
 }
 
 test_absolute_path_directory() {
     mkdir -p "$TEST_DIR/myrepo/.git"
     run_script "$TEST_DIR/myrepo"
     assert_rc "absolute path exits 0" 0
-    assert_err_contains "backup created" "Backup created at"
+    assert_stderr_contains "backup created" "Backup created at"
 }
 
 # --- run ---

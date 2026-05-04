@@ -87,14 +87,14 @@ test_help_short_flag() {
 test_missing_args() {
     run_script
     assert_rc "no args exits 1" 1
-    assert_err_contains "error message" "[ERR][verify-p12] Expected 2 arguments, received 0"
-    assert_err_contains "points at help" "Run \`verify-p12 -h\`"
+    assert_stderr_contains "error message" "[ERR][verify-p12] Expected 2 arguments, received 0"
+    assert_stderr_contains "points at help" "Run \`verify-p12 -h\`"
 }
 
 test_one_arg() {
     run_script "example.com"
     assert_rc "one arg exits 1" 1
-    assert_err_contains "error message" "[ERR][verify-p12] Expected 2 arguments, received 1"
+    assert_stderr_contains "error message" "[ERR][verify-p12] Expected 2 arguments, received 1"
 }
 
 # --- test cases: Bearer auth (default) ---
@@ -112,7 +112,7 @@ test_bearer_auth_basic() {
     assert_curl_not_contains "no basic auth" "Authorization: Basic"
     assert_curl_not_contains "no -k flag" "-k"
     assert_curl_not_contains "no cert-type" "--cert-type"
-    assert_err_contains "prints GET url" "GET https://dev01-realm-customer.demandware.net/on/demandware.servlet/webdav/Sites/Cartridges"
+    assert_stderr_contains "prints GET url" "GET https://dev01-realm-customer.demandware.net/on/demandware.servlet/webdav/Sites/Cartridges"
 }
 
 test_bearer_with_p12_default_file() {
@@ -146,7 +146,7 @@ test_bearer_empty_p12_password_skips_mtls() {
 test_basic_auth_no_p12() {
     run_script --basic "example.com" "testuser:testpass"
     assert_rc "basic auth exits 0" 0
-    assert_err_contains "shows request URL" "GET https://example.com/on/demandware.servlet/webdav/Sites/Cartridges"
+    assert_stderr_contains "shows request URL" "GET https://example.com/on/demandware.servlet/webdav/Sites/Cartridges"
     assert_stdout_contains "shows HTTP status" "HTTP/1.1 200 OK"
     assert_curl_contains "curl has -si" "-si"
     assert_curl_contains "curl has GET" "-X"
@@ -186,7 +186,7 @@ test_basic_auth_special_chars_in_password() {
 test_basic_auth_missing_creds() {
     run_script --basic "example.com"
     assert_rc "basic without creds exits 1" 1
-    assert_err_contains "error message" "Expected 2 arguments, received 1"
+    assert_stderr_contains "error message" "Expected 2 arguments, received 1"
 }
 
 test_basic_auth_empty_p12_password_skips_mtls() {
@@ -220,13 +220,13 @@ SHIM
     chmod +x "$SHIM_DIR/curl"
     run_script "badhost.example" "token"
     assert_rc "curl failure exits 0" 0
-    assert_err_contains "curl error to stderr" "curl: (6) Could not resolve host"
+    assert_stderr_contains "curl error to stderr" "curl: (6) Could not resolve host"
 }
 
 test_hostname_with_subdomain() {
     run_script "sub.example.com" "token-xyz"
     assert_rc "subdomain exits 0" 0
-    assert_err_contains "subdomain in URL" "GET https://sub.example.com/on/demandware.servlet/webdav/Sites/Cartridges"
+    assert_stderr_contains "subdomain in URL" "GET https://sub.example.com/on/demandware.servlet/webdav/Sites/Cartridges"
 }
 
 # --- run ---

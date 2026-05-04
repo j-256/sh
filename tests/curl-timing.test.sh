@@ -69,13 +69,13 @@ test_help_short() {
 test_missing_url_exits_2() {
     run_script
     assert_rc "no args exits 2" 2
-    assert_err_contains "error mentions URL" "URL"
+    assert_stderr_contains "error mentions URL" "URL"
 }
 
 test_unknown_flag_exits_2() {
     run_script --nope https://example.com
     assert_rc "unknown flag exits 2" 2
-    assert_err_contains "error mentions unknown" "Unknown"
+    assert_stderr_contains "error mentions unknown" "Unknown"
 }
 
 test_basic_url_argument() {

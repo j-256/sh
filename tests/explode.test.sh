@@ -104,20 +104,20 @@ test_help_output() {
 test_no_args() {
     run_script
     assert_rc "no args fails" 1
-    assert_err_contains "error: no directory" "No directory specified"
+    assert_stderr_contains "error: no directory" "No directory specified"
 }
 
 test_nonexistent_dir() {
     run_script "$TEST_DIR/nosuchdir"
     assert_rc "nonexistent fails" 1
-    assert_err_contains "error: does not exist" "does not exist"
+    assert_stderr_contains "error: does not exist" "does not exist"
 }
 
 test_not_a_directory() {
     echo "file" > "$TEST_DIR/notdir.txt"
     run_script "$TEST_DIR/notdir.txt"
     assert_rc "not a dir fails" 1
-    assert_err_contains "error: not a directory" "is not a directory"
+    assert_stderr_contains "error: not a directory" "is not a directory"
 }
 
 test_basic_explode() {
@@ -136,8 +136,8 @@ test_collision_no_force() {
     echo "existing" > "$TEST_DIR/file1.txt"
     run_script "$TEST_DIR/collision"
     assert_rc "collision fails without force" 1
-    assert_err_contains "collision error" "the following items already exist"
-    assert_err_contains "collision lists file" "file1.txt"
+    assert_stderr_contains "collision error" "the following items already exist"
+    assert_stderr_contains "collision lists file" "file1.txt"
     assert_eq "collision: original dir still exists" "$(dir_exists "$TEST_DIR/collision" && echo "yes" || echo "no")" "yes"
     assert_eq "collision: existing file unchanged" "$(cat "$TEST_DIR/file1.txt")" "existing"
 }
@@ -170,8 +170,8 @@ test_dry_run_with_collision() {
     echo "existing" > "$TEST_DIR/file1.txt"
     run_script --dry-run "$TEST_DIR/dryrun"
     assert_rc "dry-run collision fails" 1
-    assert_err_contains "dry-run: collision error" "the following items already exist"
-    assert_err_contains "dry-run: aborts message" "Aborting"
+    assert_stderr_contains "dry-run: collision error" "the following items already exist"
+    assert_stderr_contains "dry-run: aborts message" "Aborting"
     assert_eq "dry-run: dir still exists" "$(dir_exists "$TEST_DIR/dryrun" && echo "yes" || echo "no")" "yes"
 }
 
@@ -198,7 +198,7 @@ test_verbose() {
 test_unknown_option() {
     run_script --unknown
     assert_rc "unknown option fails" 1
-    assert_err_contains "unknown option error" "Unknown argument '--unknown'"
+    assert_stderr_contains "unknown option error" "Unknown argument '--unknown'"
 }
 
 test_multiple_dirs() {
@@ -206,7 +206,7 @@ test_multiple_dirs() {
     create_test_dir "dir2"
     run_script "$TEST_DIR/dir1" "$TEST_DIR/dir2"
     assert_rc "multiple dirs fails" 1
-    assert_err_contains "multiple dirs error" "Multiple directories specified"
+    assert_stderr_contains "multiple dirs error" "Multiple directories specified"
 }
 
 test_double_dash() {
@@ -315,7 +315,7 @@ SHIM
     chmod +x "$SHIM_DIR/rmdir"
     run_script "$TEST_DIR/rmfail"
     assert_rc "rmdir fail exits 2" 2
-    assert_err_contains "rmdir fail error" "Failed to remove"
+    assert_stderr_contains "rmdir fail error" "Failed to remove"
 }
 
 test_option_after_dir() {

@@ -66,7 +66,7 @@ test_socat_missing() {
         /bin/bash "$UNDER_TEST" >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
     assert_rc "socat missing exits 3" 3
-    assert_err_contains "socat missing error" "socat is required"
+    assert_stderr_contains "socat missing error" "socat is required"
 }
 
 test_socat_fork_and_reuseaddr() {
