@@ -59,13 +59,15 @@ _get() {
         echo "  curl"
     }
 
-    _error() { echo "[$SCRIPT_NAME] ERROR: $*" >&2; }
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+    _warn()  { echo "[WRN][$SCRIPT_NAME] $*" >&2; }
+    _info()  { echo "[INF][$SCRIPT_NAME] $*" >&2; }
 
     _fetch_catalog() {
         local url="${_GET_TEST_INDEX_URL:-https://toolio.sh/INDEX.md}"
         local body
         if ! body="$(curl -fsS "$url" 2>&1)"; then
-            _error "failed to fetch INDEX.md: $body"
+            _error "Failed to fetch INDEX.md: $body"
             return 1
         fi
         printf '%s\n' "$body" | awk '
@@ -181,12 +183,12 @@ _get() {
 
     # Clean up inner functions when returning
     __unset() {
-        unset -f __unset _show_help _error _fetch_catalog _format_listing _install_one
+        unset -f __unset _show_help _error _warn _info _fetch_catalog _format_listing _install_one
     }
     trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
     if ! command -v curl >/dev/null 2>&1; then
-        _error "curl is required. Install it and try again."
+        _error "curl is required"
         return 3
     fi
 
@@ -202,7 +204,7 @@ _get() {
                 all_mode=1
                 ;;
             -*)
-                _error "unknown option: $1. Run \`$SCRIPT_NAME -h\` for usage."
+                _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"
                 return 2
                 ;;
             *)
@@ -213,7 +215,7 @@ _get() {
     done
 
     if [ "$all_mode" -eq 1 ] && [ "${#requested[@]}" -gt 0 ]; then
-        _error "--all cannot be combined with script names. Run \`$SCRIPT_NAME -h\` for usage."
+        _error "--all cannot be combined with script names. Run \`$SCRIPT_NAME -h\` for usage"
         return 2
     fi
 
@@ -223,7 +225,7 @@ _get() {
         return 1
     fi
     if [ -z "$catalog" ]; then
-        _error "catalog is empty"
+        _error "Catalog is empty"
         return 1
     fi
 
@@ -256,7 +258,7 @@ _get() {
             fi
         done
         if [ "${#unknown[@]}" -gt 0 ]; then
-            _error "unknown script(s): ${unknown[*]}. Run \`$SCRIPT_NAME\` with no args to see the catalog."
+            _error "Unknown script(s): ${unknown[*]}. Run \`$SCRIPT_NAME\` with no args to see the catalog"
             return 2
         fi
     fi
@@ -265,10 +267,10 @@ _get() {
         local install_dir="${INSTALL_DIR:-$HOME/.local/bin}"
         if [ ! -d "$install_dir" ]; then
             if ! mkdir -p "$install_dir"; then
-                _error "failed to create install dir: $install_dir"
+                _error "Failed to create install dir: $install_dir"
                 return 1
             fi
-            echo "[$SCRIPT_NAME] Created $install_dir" >&2
+            _info "Created $install_dir"
         fi
         # Resolve to absolute path so the PATH warning's export line isn't CWD-dependent
         install_dir="$(cd "$install_dir" && pwd)"
@@ -301,8 +303,8 @@ _get() {
         case "$norm_path" in
             *":$norm_install:"*) : ;;
             *)
-                echo "[$SCRIPT_NAME] WARNING: $install_dir is not on your \$PATH. To fix, add this to your shell rc:" >&2
-                echo "    export PATH=\"$install_dir:\$PATH\"" >&2
+                _warn "$install_dir is not on your \$PATH. To fix, add this to your shell rc:"
+                echo "export PATH=\"$install_dir:\$PATH\"" >&2
                 ;;
         esac
 
