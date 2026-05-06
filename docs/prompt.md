@@ -4,7 +4,7 @@
 
 Interactive prompt with default value and placeholder -- for shell scripts that need to ask the user a question and get back a clean answer in a variable.
 
-Unlike plain `read`, this gives you a gray placeholder hint that disappears when the user starts typing, backspace that works the way you'd expect, and sane Ctrl-C behavior that doesn't leave your terminal broken. The result (or default, if they just press Enter) lands directly in a variable you specify.
+Unlike plain `read`, this gives you a gray placeholder hint that disappears when the user starts typing, and backspace that works the way you'd expect. The result (or default, if they just press Enter) lands directly in a variable you specify.
 
 **Must be sourced, not executed.** The whole point is to set a variable in *your* shell, which only works via sourcing (`. prompt ...`).
 
@@ -113,11 +113,11 @@ When stdin is a terminal (interactive use), `prompt` switches to raw mode for ch
 
 The placeholder is purely cosmetic -- it's not part of the input buffer. When the user starts typing, it vanishes and is replaced by their actual input.
 
-## Ctrl-C / signal safety
+## Ctrl-C is a no-op
 
-During the prompt, SIGINT and SIGTERM are ignored. This prevents a common failure mode: if you press Ctrl-C while the terminal is in raw mode and the signal reaches the outer shell, readline's cleanup path can restore the wrong terminal state, leaving your shell unable to echo typed characters.
+During the prompt, `prompt` ignores SIGINT and SIGTERM entirely. **Ctrl-C does nothing** -- to dismiss the prompt, press Enter (which accepts the default, if one was provided). Once `prompt` finishes, normal signal handling resumes.
 
-Trade-off: **Ctrl-C during a prompt does nothing.** To dismiss the prompt, press Enter (which accepts the default, if one was provided). Once the prompt finishes, normal signal handling resumes.
+This is a deliberate trade-off, not a feature. If Ctrl-C reaches the outer shell, readline's signal-cleanup path can race with our terminal-state restore and leave the shell unable to echo typed characters. Ignoring the signal is the simplest reliable workaround.
 
 ## Non-TTY fallback
 

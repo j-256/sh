@@ -10,7 +10,7 @@ A mixed collection of small shell utilities I've written over the years to make 
 
 A few that might be worth a look before you scroll the catalog. These are mostly the ones where the script does something non-obvious or solves a recurring annoyance. The rest of the catalog is a mix — some broadly useful, plenty that are niche.
 
-- [`prompt`](docs/prompt.md?html) ([script](prompt)) — sourced interactive prompt with default value, placeholder, and Ctrl-C safety
+- [`prompt`](docs/prompt.md?html) ([script](prompt)) — sourced interactive prompt with default value and placeholder
 - [`tsd`](docs/tsd.md?html) ([script](tsd)) — paste any number, get back a timestamp or a duration
 - [`inflate`](docs/inflate.md?html) ([script](inflate)) — historical USD amounts adjusted for inflation
 - [`curl-timing`](docs/curl-timing.md?html) ([script](curl-timing)) — time HTTP requests and compare URLs head-to-head
