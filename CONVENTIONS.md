@@ -37,6 +37,45 @@ _script_name() {
 - **Wrapper function**: filename with hyphens replaced by underscores, prefixed with `_` (e.g. `_find_zone_by_name`)
 - **Inner functions**: prefixed with `_` (e.g. `_show_help`, `_error`)
 
+### Source-only scripts
+
+A script is *source-only* when it manipulates the caller's shell directly -- reading caller-shell variables (like `dbg`) or setting them (like `prompt`). These scripts must be sourced rather than executed; an executed copy runs in a subprocess and can't touch the caller's variables.
+
+Source-only scripts have a stricter naming rule than executable scripts: every inner function (including the wrapper) and every top-level variable is prefixed with `__<script>__` rather than a single leading `_`. The reason is namespace collision -- when a script is sourced, its function and variable definitions live in the caller's shell during the call. Common helper names like `_show_help`, `_error`, or `__unset` could clobber the caller's pre-existing identifiers; worse, the cleanup trap's `unset -f` would then delete them outright on return. The `__<script>__` prefix makes accidental collisions essentially impossible.
+
+```bash
+__prompt__main() {
+    local __prompt__name; __prompt__name="$(basename "${BASH_SOURCE[0]}")"
+
+    __prompt__show_help() { ... }
+    __prompt__error() { ... }
+
+    __prompt__unset() {
+        unset -f __prompt__unset __prompt__show_help __prompt__error
+    }
+    ...
+}
+
+__prompt__main "$@"
+__prompt__rc=$?
+unset -f __prompt__main
+```
+
+The rule covers:
+
+- **The wrapper function**: `__prompt__main` rather than the executable-script default `_prompt`.
+- **Inner functions**: `__prompt__show_help`, `__prompt__error`, `__prompt__unset`.
+- **Top-level variables** outside the wrapper (the executed-vs-sourced rejection block at the top of the file): `__prompt__basename`, `__prompt__name`. These live in the caller's shell during the script's execution, so they need the prefix as much as the functions do.
+- **The `__<script>__rc` variable** in the source/execute exit handler.
+
+#### Locals inside functions
+
+Locals are scoped to their function and are normally safe with any name -- they can't leak into the caller's shell. The exception: when a function reads a caller-shell variable by *name* (via `eval`, `declare -p`, `printf -v`, or `read`), an unprefixed local can shadow the very variable the caller asked the function to inspect or set. The classic case is `dbg foo`: if `__dbg__main` had a `local foo`, the caller's `$foo` would be invisible. Same hazard applies to `prompt _input`: a `local _input` inside `__prompt__main` would consume the assignment instead of writing to the caller's `_input`.
+
+The rule is per-function, not per-script: any function whose contract includes "operate on a caller-supplied variable name" must prefix all of its locals with `__<script>__`. Other helpers in the same script (a `__prompt__show_help` whose locals never see a caller-supplied name) can use plain local names without the prefix.
+
+A simple test: does the function take a variable name as an argument and resolve it via `eval` / `declare -p` / `printf -v` / `read`? If yes, prefix all its locals. If no, plain local names are fine.
+
 ### Shebang
 
 `#!/bin/bash` -- not `#!/usr/bin/env bash`. Target bash 3.2 compatibility (macOS system bash) unless a feature requires newer.
@@ -463,4 +502,4 @@ Non-universal tools that **do** warrant listing: `jq`, `curl`, `openssl`, `dig`,
 - **Subject format:** `Update <script> - <short description>` (leading verb "Update", no final period). For truly new additions, `Add <script> - <short description>`.
 - **Body:** bulleted, one bullet per concrete change. Focus on the "what" -- the rationale can go in the spec or commit message body paragraph if needed, but subject + bullets is usually enough.
 - **Scope:** one commit per script. The commit covers the script itself plus `docs/<name>.md` and `tests/<name>.test.sh` if those change. Cross-cutting edits (`CONVENTIONS.md`, `test-helpers.sh`, `test-runner.sh`) get their own commits.
-- **Exceptions:** small typo/formatting sweeps across many files may land as one commit when splitting would add no clarity.
+- **Exceptions:** when a single change applies identically to multiple scripts -- typo sweeps, formatting passes, or one mechanical fix repeated across several files -- bundle them into one commit. The guiding principle is "splitting would add no clarity"; several near-identical commits add review cost without payoff. Subject format for bundled commits: `Update <script-a> + <script-b> - <description>` for two, `Update <N> scripts - <description>` for more.
