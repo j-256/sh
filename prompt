@@ -16,35 +16,35 @@
 # `prompt --help` (natural) should see help, not a rejection
 # $0 is /path/to/bash or -bash when sourced by bash; ZSH_EVAL_CONTEXT contains
 # "file" when sourced by zsh; either indicates a sourced context
-_basename="${0##*'/'}"
-if { [ "$BASH_VERSION" ] && [ "${_basename#'-'}" != "bash" ]; } || { [ "$ZSH_VERSION" ] && [ "${ZSH_EVAL_CONTEXT#*"file"}" = "$ZSH_EVAL_CONTEXT" ]; }; then
+__prompt__basename="${0##*'/'}"
+if { [ "$BASH_VERSION" ] && [ "${__prompt__basename#'-'}" != "bash" ]; } || { [ "$ZSH_VERSION" ] && [ "${ZSH_EVAL_CONTEXT#*"file"}" = "$ZSH_EVAL_CONTEXT" ]; }; then
     case "$1" in
-        -h|--help) : ;;  # fall through to _prompt
+        -h|--help) : ;;  # fall through to __prompt__main
         *)
-            _SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
-            case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) _SCRIPT_NAME="" ;; esac
-            case "$_SCRIPT_NAME" in ""|bash|sh|zsh|dash) _SCRIPT_NAME="prompt" ;; esac
-            echo "[ERR][$_SCRIPT_NAME] Must be sourced, not executed. Run \`$_SCRIPT_NAME -h\` for usage" >&2
-            unset _basename _SCRIPT_NAME
+            __prompt__name="$(basename "${BASH_SOURCE[0]}")"
+            case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) __prompt__name="" ;; esac
+            case "$__prompt__name" in ""|bash|sh|zsh|dash) __prompt__name="prompt" ;; esac
+            echo "[ERR][$__prompt__name] Must be sourced, not executed. Run \`$__prompt__name -h\` for usage" >&2
+            unset __prompt__basename __prompt__name
             exit 2
             ;;
     esac
 fi
-unset _basename
+unset __prompt__basename
 
-_prompt() {
-    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
-    case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
-    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="prompt" ;; esac
+__prompt__main() {
+    local __prompt__name; __prompt__name="$(basename "${BASH_SOURCE[0]}")"
+    case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) __prompt__name="" ;; esac
+    case "$__prompt__name" in ""|bash|sh|zsh|dash) __prompt__name="prompt" ;; esac
 
-    _show_help() {
+    __prompt__show_help() {
         local s; [ -t 1 ] && s=$'\033[4m' || s=""
         local r; [ -t 1 ] && r=$'\033[24m' || r=""
         echo "NAME"
-        echo "  $SCRIPT_NAME - interactive prompt with default value and placeholder"
+        echo "  $__prompt__name - interactive prompt with default value and placeholder"
         echo "SYNOPSIS"
-        echo "  . $SCRIPT_NAME ${s}variable${r} [${s}prompt${r}] [${s}default${r}] [${s}placeholder${r}]"
-        echo "  . $SCRIPT_NAME -h"
+        echo "  . $__prompt__name ${s}variable${r} [${s}prompt${r}] [${s}default${r}] [${s}placeholder${r}]"
+        echo "  . $__prompt__name -h"
         echo "DESCRIPTION"
         echo "  Prompts the user for input with an optional gray placeholder that"
         echo "  disappears on the first keypress. Stores the result (or default)"
@@ -68,49 +68,50 @@ _prompt() {
         echo "  stty"
     }
 
-    # _saved_stty is captured later, after we confirm we're on a TTY. The restore
-    # runs from the RETURN trap so every exit path -- normal, signal, or error --
-    # gets the terminal back, with no subprocess races in the signal handler.
-    local _saved_stty=""
-    _prompt_restore() {
-        [ "$_saved_stty" ] && stty "$_saved_stty" 2>/dev/null
+    # __prompt__saved_stty is captured later, after we confirm we're on a TTY.
+    # The restore runs from the RETURN trap so every exit path -- normal,
+    # signal, or error -- gets the terminal back, with no subprocess races in
+    # the signal handler.
+    local __prompt__saved_stty=""
+    __prompt__restore() {
+        [ "$__prompt__saved_stty" ] && stty "$__prompt__saved_stty" 2>/dev/null
     }
 
-    __unset() {
-        unset -f __unset _show_help _prompt_restore
+    __prompt__unset() {
+        unset -f __prompt__unset __prompt__show_help __prompt__restore
     }
-    trap '_prompt_restore; __unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
+    trap '__prompt__restore; __prompt__unset || echo "'"$__prompt__name"' trap failed!" >&2; trap - RETURN' RETURN
 
     case "$1" in
-        -h|--help) _show_help; return 0 ;;
+        -h|--help) __prompt__show_help; return 0 ;;
     esac
 
     # Called with no args -- show help (useful reminder; no args can't mean anything)
     if [ $# -eq 0 ]; then
-        _show_help
+        __prompt__show_help
         return 0
     fi
 
-    local VARNAME="$1"
-    local PROMPT="$2"
-    local DEFAULT="$3"
-    local PLACEHOLDER
-    # If the 4th arg is given, use it (substituting %DEFAULT%); otherwise fall back to default value.
+    local __prompt__varname="$1"
+    local __prompt__prompt_text="$2"
+    local __prompt__default="$3"
+    local __prompt__placeholder
+    # If the 4th arg is given, use it (substituting %DEFAULT%); otherwise fall back to default value
     if [ "$4" ]; then
-        PLACEHOLDER="${4//"%DEFAULT%"/"$DEFAULT"}"
+        __prompt__placeholder="${4//"%DEFAULT%"/"$__prompt__default"}"
     else
-        PLACEHOLDER="$DEFAULT"
+        __prompt__placeholder="$__prompt__default"
     fi
 
     # Non-TTY fallback: stdin isn't a terminal, so raw-mode rendering is meaningless.
     # Print the prompt (no placeholder) and do a plain line read. Defaults still apply.
     if [ ! -t 0 ]; then
-        printf "%s" "$PROMPT"
-        local _input
-        IFS= read -r _input
+        printf "%s" "$__prompt__prompt_text"
+        local __prompt__input
+        IFS= read -r __prompt__input
         # shellcheck disable=SC2034 # used via eval below
-        _input="${_input:-"$DEFAULT"}"
-        eval "$VARNAME"'="$_input"'
+        __prompt__input="${__prompt__input:-"$__prompt__default"}"
+        eval "$__prompt__varname"'="$__prompt__input"'
         return 0
     fi
 
@@ -122,70 +123,70 @@ _prompt() {
     # here keeps the shell out of the picture. The RETURN trap still handles the
     # normal path restore on every exit. Trade-off: Ctrl-C during prompt is a
     # no-op; user must press Enter (accepting default) to dismiss.
-    _saved_stty="$(stty -g 2>/dev/null)"
+    __prompt__saved_stty="$(stty -g 2>/dev/null)"
     trap '' INT
     trap '' TERM
 
     stty -echo -icanon min 1 time 0 2>/dev/null
 
-    # Render prompt + gray placeholder, then move cursor back to the end of the prompt text.
-    printf "%s\033[90m%s\033[0m" "$PROMPT" "$PLACEHOLDER"
-    [ ${#PLACEHOLDER} -ne 0 ] && printf '\033[%dD' "${#PLACEHOLDER}"
+    # Render prompt + gray placeholder, then move cursor back to the end of the prompt text
+    printf "%s\033[90m%s\033[0m" "$__prompt__prompt_text" "$__prompt__placeholder"
+    [ ${#__prompt__placeholder} -ne 0 ] && printf '\033[%dD' "${#__prompt__placeholder}"
 
-    local _input=""
-    local _ch
-    local _placeholder_cleared=0
-    while IFS= read -r -n 1 _ch; do
-        # Enter: read -n 1 returns empty on newline delimiter.
-        if [ -z "$_ch" ]; then
+    local __prompt__input=""
+    local __prompt__ch
+    local __prompt__placeholder_cleared=0
+    while IFS= read -r -n 1 __prompt__ch; do
+        # Enter: read -n 1 returns empty on newline delimiter
+        if [ -z "$__prompt__ch" ]; then
             break
         fi
 
-        case "$_ch" in
+        case "$__prompt__ch" in
             $'\b'|$'\177')
-                # Backspace / DEL: only delete if we actually have input buffered.
-                if [ -n "$_input" ]; then
-                    _input="${_input%?}"
-                    # Erase one cell: back up, overwrite with space, back up again.
+                # Backspace / DEL: only delete if we actually have input buffered
+                if [ -n "$__prompt__input" ]; then
+                    __prompt__input="${__prompt__input%?}"
+                    # Erase one cell: back up, overwrite with space, back up again
                     printf '\b \b'
                 fi
                 ;;
             $'\033')
                 # ESC sequence (arrow keys, etc.): read and discard the next 2 bytes.
                 # Covers CSI sequences like ESC [ A. Lone ESC will block waiting for 2 bytes,
-                # but plain Escape isn't a natural gesture in a text prompt.
-                local _drop
-                IFS= read -r -n 1 _drop 2>/dev/null
-                IFS= read -r -n 1 _drop 2>/dev/null
+                # but plain Escape isn't a natural gesture in a text prompt
+                local __prompt__drop
+                IFS= read -r -n 1 __prompt__drop 2>/dev/null
+                IFS= read -r -n 1 __prompt__drop 2>/dev/null
                 ;;
             *)
-                # First printable keypress: clear the gray placeholder.
-                if [ "$_placeholder_cleared" -eq 0 ] && [ ${#PLACEHOLDER} -ne 0 ]; then
+                # First printable keypress: clear the gray placeholder
+                if [ "$__prompt__placeholder_cleared" -eq 0 ] && [ ${#__prompt__placeholder} -ne 0 ]; then
                     printf '\033[K'
-                    _placeholder_cleared=1
+                    __prompt__placeholder_cleared=1
                 fi
-                _input+="$_ch"
-                printf "%s" "$_ch"
+                __prompt__input+="$__prompt__ch"
+                printf "%s" "$__prompt__ch"
                 ;;
         esac
     done
 
-    # Terminate the input line visually (read consumed the newline, but the cursor is still on the prompt row).
+    # Terminate the input line visually (read consumed the newline, but the cursor is still on the prompt row)
     printf '\n'
 
-    _prompt_restore
+    __prompt__restore
     trap - INT
     trap - TERM
 
     # shellcheck disable=SC2034 # used via eval below
-    _input="${_input:-"$DEFAULT"}"
-    eval "$VARNAME"'="$_input"'
+    __prompt__input="${__prompt__input:-"$__prompt__default"}"
+    eval "$__prompt__varname"'="$__prompt__input"'
 }
 
-_prompt "$@"
-__prompt_rc=$?
-unset -f _prompt
+__prompt__main "$@"
+__prompt__rc=$?
+unset -f __prompt__main
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
-    eval "unset __prompt_rc; return $__prompt_rc"
+    eval "unset __prompt__rc; return $__prompt__rc"
 fi
-eval "unset __prompt_rc; exit $__prompt_rc"
+eval "unset __prompt__rc; exit $__prompt__rc"

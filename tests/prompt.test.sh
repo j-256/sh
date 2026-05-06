@@ -125,6 +125,24 @@ test_input_overrides_default() {
     assert_captured "input wins over default" PICK "user-picked"
 }
 
+test_no_local_shadowing_input() {
+    # `_input` was a local inside __prompt__main pre-rename. A caller passing
+    # `_input` as the destination varname would have had their value silently
+    # eaten. After the prefix rename, all locals are __prompt__-prefixed, so
+    # `_input` is just a regular caller name and gets set normally.
+    printf 'value-via-_input\n' | run_script_sourced_capture "_input" _input "q: " "default"
+    assert_rc "_input as varname exits 0" 0
+    assert_captured "_input gets the user input, not shadowed" _input "value-via-_input"
+}
+
+test_no_local_shadowing_ch() {
+    # `_ch` was the inner read loop's per-char local. Same shadowing class
+    # as `_input` -- caller-supplied `_ch` must reach the caller's shell.
+    printf 'value-via-_ch\n' | run_script_sourced_capture "_ch" _ch "q: " "default"
+    assert_rc "_ch as varname exits 0" 0
+    assert_captured "_ch gets the user input, not shadowed" _ch "value-via-_ch"
+}
+
 # --- run ---
 
 run_tests "$@"
