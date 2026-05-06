@@ -98,6 +98,14 @@ _progress() {
         done
     }
 
+    # Install cleanup trap before any return path (including --help) so all
+    # exits run __unset. Helpers below haven't been defined yet, but unset -f
+    # is silent on missing names, so listing them all up-front is fine
+    __unset() {
+        unset -f __unset _error _show_help _select_out_fd _is_tty_fd _get_term_cols _print_on_fd _expand_short_opts
+    }
+    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
+
     _expand_short_opts "wpr" "$@"
     set -- "${_EXPANDED[@]}"; unset _EXPANDED
 
@@ -247,11 +255,6 @@ _progress() {
             printf "$@"
         fi
     }
-
-    __unset() {
-        unset -f __unset _error _show_help _select_out_fd _is_tty_fd _get_term_cols _print_on_fd _expand_short_opts
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
     local out_fd; out_fd="$(_select_out_fd)"
 
