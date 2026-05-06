@@ -179,9 +179,13 @@ shell_func() {
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="shell_func" ;; esac
     # Positional arguments. `[ -t 0 ]` is true when stdin is a terminal; negate
     # it to detect piped/redirected input -- each line becomes another arg.
+    # The `|| [ -n "$line" ]` clause appends the final line when stdin lacks a
+    # trailing newline, which would otherwise cause read to return non-zero and
+    # exit the loop with the last line still unread.
     # (For whole-stdin-as-content, use `local stdin; [ -t 0 ] || stdin="$(cat)"` instead.)
     local args=()
-    [ -t 0 ] || while IFS= read -r; do args+=("$REPLY"); done
+    local line
+    [ -t 0 ] || while IFS= read -r line || [ -n "$line" ]; do args+=("$line"); done
     # Allow n positional args, 0 for infinite
     local max_args=0
     # If true, print extra information

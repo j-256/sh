@@ -63,7 +63,7 @@ _cf_ips_subnets() {
 
     local -a cf
     local line
-    while IFS= read -r line; do
+    while IFS= read -r line || [ -n "$line" ]; do
         [ "$line" ] && cf+=("$line")
     done < <(curl -s https://www.cloudflare.com/ips-v4)
 
