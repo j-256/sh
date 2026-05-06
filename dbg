@@ -37,20 +37,20 @@ fi
 unset __dbg__basename
 
 __dbg__main() {
-    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
-    case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
-    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="dbg" ;; esac
+    local __dbg__name; __dbg__name="$(basename "${BASH_SOURCE[0]}")"
+    case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) __dbg__name="" ;; esac
+    case "$__dbg__name" in ""|bash|sh|zsh|dash) __dbg__name="dbg" ;; esac
 
     __dbg__show_help() {
         local s; [ -t 1 ] && s=$'\033[4m' || s=""
         local r; [ -t 1 ] && r=$'\033[24m' || r=""
         echo "NAME"
-        echo "  $SCRIPT_NAME - print variables as key-value pairs for debugging"
+        echo "  $__dbg__name - print variables as key-value pairs for debugging"
         echo "SYNOPSIS"
-        echo "  . $SCRIPT_NAME ${s}ref${r} [${s}ref${r}...]"
-        echo "  . $SCRIPT_NAME -h"
+        echo "  . $__dbg__name ${s}ref${r} [${s}ref${r}...]"
+        echo "  . $__dbg__name -h"
         echo "DESCRIPTION"
-        echo "  Must be sourced (not executed) because $SCRIPT_NAME reads variables"
+        echo "  Must be sourced (not executed) because $__dbg__name reads variables"
         echo "  from the caller's shell; an executed script runs in a subprocess and"
         echo "  the caller's variables are not visible there."
         echo "  Each ${s}ref${r} is resolved and printed as a shell-assignment-like line to"
@@ -74,7 +74,7 @@ __dbg__main() {
         echo "  2  Usage error (script was executed rather than sourced)"
     }
 
-    __dbg__error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+    __dbg__error() { echo "[ERR][$__dbg__name] $*" >&2; }
 
     # Determine whether a variable/element reference is set (even if empty)
     # Uses eval with ${ref+set} to test "set even if empty"; supports refs
@@ -102,7 +102,7 @@ __dbg__main() {
     __dbg__unset() {
         unset -f __dbg__unset __dbg__show_help __dbg__error __dbg__exists __dbg__q
     }
-    trap '__dbg__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
+    trap '__dbg__unset || echo "'"$__dbg__name"' trap failed!" >&2; trap - RETURN' RETURN
 
     # Toggle: enable extra safety checks on references (guards eval usage) via $__DBG_STRICT
     local __dbg__strict="${__DBG_STRICT:-false}"

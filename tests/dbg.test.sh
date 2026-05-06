@@ -205,6 +205,25 @@ test_no_args_sourced() {
     assert_rc "no args exits 0" 0
 }
 
+test_no_local_shadowing_script_name() {
+    # `SCRIPT_NAME` was a local inside __dbg__main pre-rename. A caller with
+    # their own `SCRIPT_NAME` asking dbg to inspect it would have seen dbg's
+    # local "dbg" instead of their value. After the rename to __dbg__name,
+    # the caller's SCRIPT_NAME is reachable.
+    run_dbg 'SCRIPT_NAME="caller-value"' SCRIPT_NAME
+    assert_rc "SCRIPT_NAME ref exits 0" 0
+    assert_stderr_contains "caller's SCRIPT_NAME read, not shadowed" 'SCRIPT_NAME="caller-value"'
+}
+
+test_no_local_shadowing_old_trap() {
+    # `__old_trap` was the trap-saving local pre-rename. Same class as
+    # SCRIPT_NAME -- a caller using `__old_trap` for their own purposes
+    # must be able to ask dbg to inspect it.
+    run_dbg '__old_trap="caller-trap"' __old_trap
+    assert_rc "__old_trap ref exits 0" 0
+    assert_stderr_contains "caller's __old_trap read, not shadowed" '__old_trap="caller-trap"'
+}
+
 # --- run ---
 
 run_tests "$@"
