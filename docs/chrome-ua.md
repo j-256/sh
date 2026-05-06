@@ -53,7 +53,7 @@ chrome-ua --app "/Applications/Google Chrome Canary.app"
 **Pipe from the web** (since this is published at toolio.sh):
 
 ```bash
-curl -A "$(curl -s toolio.sh/chrome-ua | bash)" https://example.com
+curl -A "$(curl -s https://toolio.sh/chrome-ua | bash)" https://example.com
 ```
 
 ## Local vs latest: which should you use?

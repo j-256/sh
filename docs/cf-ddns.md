@@ -47,7 +47,7 @@ $ DDNS_DEBUG=1 cf-ddns YOUR_API_TOKEN home.example.com
 **Pipe from the web** (since this is published at toolio.sh):
 
 ```bash
-curl -s toolio.sh/cf-ddns | bash -s -- YOUR_API_TOKEN home.example.com
+curl -s https://toolio.sh/cf-ddns | bash -s -- YOUR_API_TOKEN home.example.com
 ```
 
 ## How it works

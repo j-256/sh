@@ -8,7 +8,7 @@ Pipeable installer for scripts from this repo. Instead of cloning or `curl`-ing 
 
 Install a few scripts:
 
-    $ curl -fsS toolio.sh/get | bash -s -- tsd pin-dns inflate
+    $ curl -fsS https://toolio.sh/get | bash -s -- tsd pin-dns inflate
     installed: tsd
     installed: pin-dns
     installed: inflate
@@ -16,7 +16,7 @@ Install a few scripts:
 
 Run with no args to see the full catalog grouped by category:
 
-    $ curl -fsS toolio.sh/get | bash
+    $ curl -fsS https://toolio.sh/get | bash
     Shell scripting
       prompt     Sourced interactive prompt with default value, placeholder, and Ctrl-C safety
       progress   Single-line progress bar with percentage completion
@@ -28,15 +28,15 @@ Re-running is the upgrade path. Unchanged files stay put; changed files are repl
 
 **Install everything:**
 
-    curl -fsS toolio.sh/get | bash -s -- --all
+    curl -fsS https://toolio.sh/get | bash -s -- --all
 
 **Custom install directory:**
 
-    curl -fsS toolio.sh/get | INSTALL_DIR=~/bin bash -s -- tsd
+    curl -fsS https://toolio.sh/get | INSTALL_DIR=~/bin bash -s -- tsd
 
 **Install `get` itself so you don't have to pipe it next time:**
 
-    curl -fsS toolio.sh/get | bash -s -- get
+    curl -fsS https://toolio.sh/get | bash -s -- get
     # then later:
     get pin-dns
 

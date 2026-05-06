@@ -21,22 +21,22 @@ A few that might be worth a look before you scroll the catalog. These are mostly
 
 Every script is a one-liner away — no install step. Pipe it straight into bash:
 
-    curl -fsS toolio.sh/tsd | bash -s -- 1800
-    curl -fsS toolio.sh/inflate | bash -s -- 150 1970
+    curl -fsS https://toolio.sh/tsd | bash -s -- 1800
+    curl -fsS https://toolio.sh/inflate | bash -s -- 150 1970
 
 The only exception is [`prompt`](docs/prompt.md?html), which must be sourced so it can set a variable in your shell. For a one-shot run without installing:
 
-    . <(curl -fsS toolio.sh/prompt) name "Name: "
+    . <(curl -fsS https://toolio.sh/prompt) name "Name: "
 
 ## Installation
 
 To put scripts on your `$PATH` for repeated use, pipe [`get`](docs/get.md?html) to bash with the names you want:
 
-    curl -fsS toolio.sh/get | bash -s -- tsd pin-dns inflate
+    curl -fsS https://toolio.sh/get | bash -s -- tsd pin-dns inflate
 
 Run with no args to see what's available:
 
-    curl -fsS toolio.sh/get | bash
+    curl -fsS https://toolio.sh/get | bash
 
 Scripts install to `~/.local/bin` by default; override with e.g. `INSTALL_DIR=~/bin`. See [`get`](docs/get.md) for the full reference.
 
@@ -44,7 +44,7 @@ Scripts install to `~/.local/bin` by default; override with e.g. `INSTALL_DIR=~/
 
 If you'd rather not pipe to bash:
 
-    curl -fsS toolio.sh/tsd -o ~/.local/bin/tsd
+    curl -fsS https://toolio.sh/tsd -o ~/.local/bin/tsd
     chmod +x ~/.local/bin/tsd
 
 ## Notes
