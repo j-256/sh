@@ -108,6 +108,31 @@ _show_help() {
 
 Sections (use what's relevant): NAME, SYNOPSIS, DESCRIPTION, OPTIONS, ENVIRONMENT, DEPENDENCIES, EXAMPLES, EXIT STATUS, SEE ALSO, CAVEATS.
 
+### Periods in help text
+
+Help-text *fragments* -- short single-line entries in OPTIONS, EXIT STATUS, ENVIRONMENT, DEPENDENCIES, SEE ALSO -- drop trailing periods, matching the no-trailing-period rule for error messages and code comments. These read as labels, not sentences.
+
+```
+OPTIONS
+  -v, --verbose      Enable verbose output
+  -h, --help         Show this help message
+EXIT STATUS
+  0  Success
+  1  Runtime failure (network, filesystem, external command failed)
+```
+
+Help-text *prose* -- multi-line paragraphs in DESCRIPTION, CAVEATS, and similar narrative sections -- keeps internal and trailing periods. These read as English sentences and the punctuation is load-bearing for parseability.
+
+```
+DESCRIPTION
+  Updates Cloudflare DNS to use the current machine's outbound IP address.
+  Deletes all existing A records for the domain and creates a new one before
+  the change is applied. Run periodically from the host to achieve basic
+  Dynamic DNS capabilities.
+```
+
+A single-sentence DESCRIPTION is still prose -- keep the trailing period. The fragment-vs-prose distinction is "is this a label or a sentence", not "is this one line or many".
+
 ### Use `$SCRIPT_NAME`, not the literal filename
 
 Every user-visible mention of the script's own name -- help text (NAME, SYNOPSIS, EXAMPLES), error-message prefixes, "run `foo -h` for usage" hints -- must use `$SCRIPT_NAME` rather than the hardcoded filename. `$SCRIPT_NAME` is derived via `basename "${BASH_SOURCE[0]}"`, so it tracks the actual invocation path: if someone renames or symlinks the script, the help and errors stay truthful.
@@ -186,7 +211,9 @@ This ensures:
 ## Style
 
 - Single space before inline comments: `cmd # comment`
-- No trailing terminator (`.`, `!`, `:`) on comments, even on multi-sentence ones. Same rule as error messages, minus the colon carveout -- every comment sits above code, so "introduces follow-on output" is trivially true and the colon adds no signal.
+- No trailing `.` or `!` on comments, even on multi-sentence ones. Same rule as error messages.
+- No trailing `:` on comments that sit directly above code -- the colon adds no signal there, since "introduces follow-on output" is trivially true.
+- Trailing `:` IS load-bearing on comments that introduce more *comments*: header sections (`# Usage:`, `# Options:`, `# Dependencies:`, `# Environment:`, `# Examples:`, `# References:`), in-block list intros (`# Validate bracket syntax early:`, `# Accepts:`, `# Outputs:`, `# update BOTH:`), and any line whose subsequent comment lines are an indented list/sample/URL block. Keep the colon -- without it the reader can't see where the introducing sentence ends and the list begins.
 - `$(...)` for command substitution, not backticks
 - `command -v` to check for executables, not `which`
 - Prefer POSIX-compatible patterns where reasonable (scripts may be run by zsh)
