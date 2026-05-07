@@ -12,7 +12,7 @@ UNDER_TEST="$SCRIPT_DIR/../install-bash"
 
 write_shims() {
     # Default brew prefix for tests (simulates Intel Homebrew). Tests can
-    # override BREW_PREFIX before calling run_script to simulate Apple Silicon.
+    # override BREW_PREFIX before calling run_script to simulate Apple Silicon
     : "${BREW_PREFIX:=$TEST_DIR/brew-prefix}"
     export BREW_PREFIX
     mkdir -p "$BREW_PREFIX/bin"
@@ -38,10 +38,10 @@ exit 0
 SHIM
     chmod +x "$SHIM_DIR/uname"
 
-    # brew shim source: handles `install`, `--prefix`, and `shellenv`.
+    # brew shim source: handles `install`, `--prefix`, and `shellenv`
     # Kept outside SHIM_DIR so that `command -v brew` only finds it when we
     # explicitly symlink it into SHIM_DIR or $BREW_PREFIX/bin (reachable via
-    # the `brew shellenv` expansion after install).
+    # the `brew shellenv` expansion after install)
     mkdir -p "$TEST_DIR/brew-shim"
     cat > "$TEST_DIR/brew-shim/brew" <<'SHIM'
 #!/bin/bash
@@ -54,7 +54,7 @@ if [ "$1" = "install" ] && [ "$2" = "bash" ]; then
         exit 1
     fi
     # After a successful install, wire up brew at the resolved prefix so
-    # `"$brew_prefix/bin/brew" shellenv` works later in the script.
+    # `"$brew_prefix/bin/brew" shellenv` works later in the script
     ln -sf "$TEST_DIR/brew-shim/brew" "$BREW_PREFIX/bin/brew"
     exit 0
 fi
@@ -75,13 +75,13 @@ SHIM
     chmod +x "$TEST_DIR/brew-shim/brew"
 
     # Note: whether brew is considered "already installed" is decided in
-    # run_script, based on the `brew_installed` flag that tests set via touch.
+    # run_script, based on the `brew_installed` flag that tests set via touch
 
-    # curl shim: simulates the Homebrew install script download.
+    # curl shim: simulates the Homebrew install script download
     # On success, installs the brew shim at the resolved prefix AND on PATH
     # (via SHIM_DIR) so the script's subsequent `command -v brew` finds it,
     # matching real-world post-install state where Homebrew puts brew at
-    # /usr/local/bin (Intel) or /opt/homebrew/bin (Apple Silicon).
+    # /usr/local/bin (Intel) or /opt/homebrew/bin (Apple Silicon)
     cat > "$SHIM_DIR/curl" <<'SHIM'
 #!/bin/bash
 log="$TEST_DIR/curl.log"
@@ -118,7 +118,7 @@ SHIM
     chmod +x "$SHIM_DIR/grep"
 
     # sudo shim: log the invocation and execute the underlying tee against the
-    # fake /etc/shells, so the script's writes land in the test file.
+    # fake /etc/shells, so the script's writes land in the test file
     cat > "$SHIM_DIR/sudo" <<'SHIM'
 #!/bin/bash
 log="$TEST_DIR/sudo.log"
@@ -181,13 +181,13 @@ expected_bash_path() { printf '%s/bin/bash' "$BREW_PREFIX"; }
 # --- override run_script ---
 
 # The script reads /etc/shells directly. Since shims for grep/sudo handle
-# the /etc/shells rewrite, no sed patching is needed.
+# the /etc/shells rewrite, no sed patching is needed
 # PATH is restricted to SHIM_DIR + standard system utility dirs so that a real
 # Homebrew install on the test host (e.g. /usr/local/bin/brew or
-# /opt/homebrew/bin/brew) isn't picked up by `command -v brew`.
+# /opt/homebrew/bin/brew) isn't picked up by `command -v brew`
 # If the test has set the `brew_installed` flag (via `touch`), wire brew onto
 # PATH and into $BREW_PREFIX/bin just before running -- simulating a host
-# that already has Homebrew.
+# that already has Homebrew
 run_script() {
     if [ -f "$TEST_DIR/brew_installed" ]; then
         ln -sf "$TEST_DIR/brew-shim/brew" "$SHIM_DIR/brew"

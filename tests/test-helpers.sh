@@ -1,8 +1,8 @@
 #!/bin/bash
 # test-helpers.sh - Shared test infrastructure
 #
-# Source this at the top of every .test.sh file.
-# See TESTING.md for full documentation.
+# Source this at the top of every .test.sh file
+# See TESTING.md for full documentation
 # shellcheck disable=SC2016 # single-quoted inline bash scripts are intentional
 
 _VERBOSE=0
@@ -111,7 +111,7 @@ run_script() {
 # Source the script under test (instead of executing it). Use for scripts that
 # must be sourced to mutate caller-shell state. Sets $0 to "bash" inside the
 # subshell so the script's sourced-vs-executed check (typically $0 != bash)
-# passes. stdout/stderr/rc captured the same way as run_script.
+# passes. stdout/stderr/rc captured the same way as run_script
 run_script_sourced() {
     env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR:$PATH" \
         /bin/bash -c 'script="$1"; shift; . "$script" "$@"' bash "$UNDER_TEST" "$@" \
@@ -121,7 +121,7 @@ run_script_sourced() {
 
 # Source the script and capture one or more variable values that the script set
 # in the caller's shell. Captured values land in $TEST_DIR/captured as NAME=VALUE
-# lines (one per variable, in the order given).
+# lines (one per variable, in the order given)
 # Usage: run_script_sourced_capture "VAR1 VAR2 ..." [args...]
 run_script_sourced_capture() {
     local vars="$1"; shift

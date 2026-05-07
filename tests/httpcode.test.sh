@@ -13,7 +13,7 @@ UNDER_TEST="$SCRIPT_DIR/../httpcode"
 write_shims() {
     # jq shim: log args, return fake status info. httpcode invokes jq as
     # `jq -r --arg code NNN --arg src URL '...program...'`, so we key the
-    # case on the `--arg code NNN` pair.
+    # case on the `--arg code NNN` pair
     cat > "$SHIM_DIR/jq" <<'SHIM'
 #!/bin/bash
 printf '%s\n' "$@" > "$TEST_DIR/jq.args"
@@ -152,9 +152,9 @@ test_jq_receives_status_code() {
 
 test_vendor_code_uses_vendor_url() {
     # Real jq must be available for this test; the shim can't exercise the
-    # per-code source selection logic. Skip if the system doesn't have jq.
+    # per-code source selection logic. Skip if the system doesn't have jq
     command -v jq >/dev/null 2>&1 || { echo "# skip: system jq not present"; return 0; }
-    # Clear the shim from PATH for this run so the real script/jq executes.
+    # Clear the shim from PATH for this run so the real script/jq executes
     env PATH="/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin" \
         /bin/bash "$UNDER_TEST" 522 >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"

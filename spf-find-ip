@@ -11,7 +11,7 @@
 #   -h, --help   Show help message
 #
 # Recursively searches SPF include: directives for the given IP. Does not
-# currently support IP ranges -- the IP must appear as-is or with /32.
+# currently support IP ranges -- the IP must appear as-is or with /32
 
 # TODO: Support IP ranges?
 _spf_find_ip() {

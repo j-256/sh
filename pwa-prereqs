@@ -75,7 +75,7 @@ _pwa_prereqs() {
         esac
     done
 
-    # Platform check: macOS only.
+    # Platform check: macOS only
     local platform; platform="$(uname -s)"
     if [ "$platform" != "Darwin" ]; then
         _error "macOS only (detected: $platform)"
@@ -107,7 +107,7 @@ _pwa_prereqs() {
         if command -v nvm >/dev/null 2>&1; then
             nvm_present=0
         elif [ -s "$HOME/.nvm/nvm.sh" ]; then
-            # NVM_DIR must be exported -- nvm.sh reads it from the environment.
+            # NVM_DIR must be exported -- nvm.sh reads it from the environment
             export NVM_DIR="$HOME/.nvm"
             # shellcheck disable=SC1091
             . "$NVM_DIR/nvm.sh" >/dev/null 2>&1
@@ -120,7 +120,7 @@ _pwa_prereqs() {
             all_ok=1
         fi
 
-        # Node LTS: if nvm is present, ask it; otherwise fall back to `node` in PATH.
+        # Node LTS: if nvm is present, ask it; otherwise fall back to `node` in PATH
         local node_present=1
         if [ "$nvm_present" -eq 0 ] && nvm ls --no-colors 2>/dev/null | grep -q 'lts'; then
             node_present=0
@@ -145,7 +145,7 @@ _pwa_prereqs() {
     else
         echo "Installing Xcode Command Line Tools..."
         # Triggers Apple's GUI installer dialog. The command returns quickly;
-        # the actual install happens asynchronously and requires user click-through.
+        # the actual install happens asynchronously and requires user click-through
         xcode-select --install >/dev/null 2>&1 || :
         echo "A GUI installer was launched. Complete it, then re-run \`$SCRIPT_NAME --install\`."
         echo "--- FINISH xcode ---"
@@ -160,7 +160,7 @@ _pwa_prereqs() {
         if /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; then
             echo "Homebrew installed successfully."
         else
-            echo "Homebrew installation failed!"
+            echo "Homebrew installation failed"
             return 1
         fi
     fi
@@ -172,7 +172,7 @@ _pwa_prereqs() {
     elif [ -d "$HOME/.nvm" ]; then
         echo "nvm directory exists, but nvm command is not found. Attempting to source nvm..."
         # NVM_DIR must be exported -- nvm.sh and its child processes read it from
-        # the environment (CONVENTIONS allows export for genuinely env-needed vars).
+        # the environment (CONVENTIONS allows export for genuinely env-needed vars)
         export NVM_DIR="$HOME/.nvm"
         if [ -s "$NVM_DIR/nvm.sh" ]; then
             # shellcheck disable=SC1091
@@ -183,7 +183,7 @@ _pwa_prereqs() {
             if curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash; then
                 echo "nvm reinstalled successfully."
             else
-                echo "nvm reinstallation failed!"
+                echo "nvm reinstallation failed"
                 return 1
             fi
         fi
@@ -199,7 +199,7 @@ _pwa_prereqs() {
                 return 1
             fi
         else
-            echo "nvm installation failed!"
+            echo "nvm installation failed"
             return 1
         fi
     fi
@@ -210,7 +210,7 @@ _pwa_prereqs() {
     if nvm install --lts; then # automatically runs `nvm use --lts`
         echo "Node.js installed successfully."
     else
-        echo "Node.js installation failed!"
+        echo "Node.js installation failed"
         return 1
     fi
     echo "--- FINISH node/npm ---"

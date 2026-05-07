@@ -7,13 +7,13 @@
 #   snippet [-h]
 #
 # Options:
-#   -s, --start pattern       Pattern indicating the beginning of the desired snippet.
-#   -e, --end pattern         Pattern indicating the end of the desired snippet.
-#                             If not provided, reads to end of input.
-#   -f, --trim-first num      Exclude the first num lines of the snippet.
-#   -l, --trim-last num       Exclude the last num lines of the snippet.
-#   -t, --trim num            Exclude the first and last num lines of the snippet.
-#   -h, --help                Show this help message.
+#   -s, --start pattern       Pattern indicating the beginning of the desired snippet
+#   -e, --end pattern         Pattern indicating the end of the desired snippet
+#                             If not provided, reads to end of input
+#   -f, --trim-first num      Exclude the first num lines of the snippet
+#   -l, --trim-last num       Exclude the last num lines of the snippet
+#   -t, --trim num            Exclude the first and last num lines of the snippet
+#   -h, --help                Show this help message
 
 _snippet() {
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
@@ -37,13 +37,13 @@ _snippet() {
         echo "  $SCRIPT_NAME -s ${s}pattern${r} [-e ${s}pattern${r}] [-t ${s}num${r}] [${s}file${r} ${s}...${r}]"
         echo "  $SCRIPT_NAME [-h]"
         echo "Options:"
-        echo "  -s, --start ${s}pattern${r}   Specify the pattern indicating the beginning of the desired snippet."
-        echo "  -e, --end ${s}pattern${r}     Specify the pattern indicating the end of the desired snippet."
-        echo "                        If not provided, reads to end of input."
-        echo "  -f, --trim-first ${s}num${r}  Exclude the first ${s}num${r} lines of the snippet."
-        echo "  -l, --trim-last ${s}num${r}   Exclude the last ${s}num${r} lines of the snippet."
-        echo "  -t, --trim ${s}num${r}        Exclude the first and last ${s}num${r} lines of the snippet."
-        echo "  -h, --help            Show this help message."
+        echo "  -s, --start ${s}pattern${r}   Specify the pattern indicating the beginning of the desired snippet"
+        echo "  -e, --end ${s}pattern${r}     Specify the pattern indicating the end of the desired snippet"
+        echo "                        If not provided, reads to end of input"
+        echo "  -f, --trim-first ${s}num${r}  Exclude the first ${s}num${r} lines of the snippet"
+        echo "  -l, --trim-last ${s}num${r}   Exclude the last ${s}num${r} lines of the snippet"
+        echo "  -t, --trim ${s}num${r}        Exclude the first and last ${s}num${r} lines of the snippet"
+        echo "  -h, --help            Show this help message"
         echo "Exit status:"
         echo "  0  Success"
         echo "  2  Usage error (missing flag value, missing start pattern, unknown option)"

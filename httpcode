@@ -11,7 +11,7 @@
 #   -h, --help   Show help message
 #
 # Data snapshot: see httpcode.md "Updating the data" for the refresh process
-# (MDN scrape script + authoritative sources for non-MDN vendor codes).
+# (MDN scrape script + authoritative sources for non-MDN vendor codes)
 
 _httpcode() {
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
@@ -83,7 +83,7 @@ EOF
 
     # When a code is not in the JSON, jq prints literal "null". Keep the
     # older second-token guard as a belt-and-braces check against entries
-    # whose .name is unexpectedly empty.
+    # whose .name is unexpectedly empty
     local first_line; first_line="$(printf '%s\n' "$parsed" | head -n 1)"
     local second_token; second_token="$(printf '%s' "$first_line" | awk '{print $2}')"
     if [ "$first_line" = "null" ] || [ "$second_token" = "null" ] || [ -z "$second_token" ]; then

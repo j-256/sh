@@ -5,7 +5,7 @@
 # dbg must be sourced (not executed) to do its job -- reading the caller's
 # shell variables. Tests use run_script_sourced to source it in a subshell
 # and capture its stderr output (dbg writes all of its output to stderr
-# since the script itself is the debug tool).
+# since the script itself is the debug tool)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=test-helpers.sh
@@ -15,7 +15,7 @@ UNDER_TEST="$SCRIPT_DIR/../dbg"
 
 # Run dbg via a sourced wrapper that first sets up caller-shell state,
 # then sources dbg. $1 is a bash snippet defining caller-shell state;
-# remaining args are passed to dbg. stderr is captured in $TEST_DIR/stderr.
+# remaining args are passed to dbg. stderr is captured in $TEST_DIR/stderr
 run_dbg() {
     local setup="$1"; shift
     env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR:$PATH" SETUP="$setup" \
@@ -88,7 +88,7 @@ test_unset_variable() {
 
 test_value_with_dollar_and_backtick() {
     # Values containing $ and ` must be escaped so the output line could be
-    # safely re-sourced without invoking expansion.
+    # safely re-sourced without invoking expansion
     run_dbg 'v1="hello \$USER"; v2="cmd \`date\`"' v1 v2
     assert_rc "special chars exit 0" 0
     assert_stderr_contains "dollar escaped" 'v1="hello \$USER"'
@@ -123,14 +123,14 @@ test_indexed_array_whole() {
 }
 
 test_indexed_array_at() {
-    # arr[@]: one quoted token per element, boundaries preserved.
+    # arr[@]: one quoted token per element, boundaries preserved
     run_dbg 'arr=(a b "c d")' 'arr[@]'
     assert_rc "arr[@] exits 0" 0
     assert_stderr_contains "arr[@] tokens" 'arr[@]="a" "b" "c d"'
 }
 
 test_indexed_array_star() {
-    # arr[*]: single joined value reflecting IFS.
+    # arr[*]: single joined value reflecting IFS
     run_dbg 'arr=(a b c)' 'arr[*]'
     assert_rc "arr[*] exits 0" 0
     assert_stderr_contains "arr[*] single joined token" 'arr[*]="a b c"'
@@ -150,10 +150,10 @@ test_indexed_array_missing_element() {
 
 # Note: associative-array handling (declare -A, map[key] element refs) is
 # implemented in dbg but not tested here because the test harness invokes
-# /bin/bash (typically 3.2 on macOS) which doesn't support `declare -A`.
+# /bin/bash (typically 3.2 on macOS) which doesn't support `declare -A`
 # The assoc-array code paths are structurally identical to the indexed-array
 # paths tested above; they diverge only on the `-A` vs `-a` declare flag
-# check that sets `__dbg__is_assoc_array`, which is purely classificatory.
+# check that sets `__dbg__is_assoc_array`, which is purely classificatory
 
 test_subscript_on_non_array() {
     run_dbg 'scalar=x' 'scalar[0]'
@@ -200,7 +200,7 @@ test_multiple_refs_one_call() {
 }
 
 test_no_args_sourced() {
-    # Sourcing with no args is a no-op (empty loop); exit 0.
+    # Sourcing with no args is a no-op (empty loop); exit 0
     run_script_sourced
     assert_rc "no args exits 0" 0
 }
@@ -209,7 +209,7 @@ test_no_local_shadowing_script_name() {
     # `SCRIPT_NAME` was a local inside __dbg__main pre-rename. A caller with
     # their own `SCRIPT_NAME` asking dbg to inspect it would have seen dbg's
     # local "dbg" instead of their value. After the rename to __dbg__name,
-    # the caller's SCRIPT_NAME is reachable.
+    # the caller's SCRIPT_NAME is reachable
     run_dbg 'SCRIPT_NAME="caller-value"' SCRIPT_NAME
     assert_rc "SCRIPT_NAME ref exits 0" 0
     assert_stderr_contains "caller's SCRIPT_NAME read, not shadowed" 'SCRIPT_NAME="caller-value"'
@@ -218,7 +218,7 @@ test_no_local_shadowing_script_name() {
 test_no_local_shadowing_old_trap() {
     # `__old_trap` was the trap-saving local pre-rename. Same class as
     # SCRIPT_NAME -- a caller using `__old_trap` for their own purposes
-    # must be able to ask dbg to inspect it.
+    # must be able to ask dbg to inspect it
     run_dbg '__old_trap="caller-trap"' __old_trap
     assert_rc "__old_trap ref exits 0" 0
     assert_stderr_contains "caller's __old_trap read, not shadowed" '__old_trap="caller-trap"'

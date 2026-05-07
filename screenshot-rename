@@ -111,7 +111,7 @@ _screenshot_rename() {
     fi
 
     # Determine watch directory: --path wins. Otherwise, try the macOS-configured
-    # screenshot location; fall back to ~/Desktop if that fails or isn't a dir.
+    # screenshot location; fall back to ~/Desktop if that fails or isn't a dir
     if [ -z "$watch_dir" ]; then
         watch_dir="$(defaults read com.apple.screencapture location 2>/dev/null)"
         # Expand ~/ if present (defaults may return "~/Desktop" literally)

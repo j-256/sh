@@ -12,7 +12,7 @@ UNDER_TEST="$SCRIPT_DIR/../pwa-prereqs"
 
 write_shims() {
     # uname shim: default to Darwin (macOS). Tests can override by touching
-    # "$TEST_DIR/uname_linux" to simulate a non-Darwin platform.
+    # "$TEST_DIR/uname_linux" to simulate a non-Darwin platform
     cat > "$SHIM_DIR/uname" <<'SHIM'
 #!/bin/bash
 [ -f "$TEST_DIR/uname_linux" ] && { echo "Linux"; exit 0; }
@@ -22,7 +22,7 @@ SHIM
 
     # xcode-select shim: default "present". Tests opt into "missing" by
     # touching "$TEST_DIR/xcode_missing"; "$TEST_DIR/xcode_install_called"
-    # records when --install is invoked.
+    # records when --install is invoked
     cat > "$SHIM_DIR/xcode-select" <<'SHIM'
 #!/bin/bash
 case "$1" in
@@ -37,7 +37,7 @@ case "$1" in
     --install)
         printf 'xcode-select --install\n' >> "$TEST_DIR/xcode_install_called"
         # The real thing pops a GUI dialog. Simulate either success or the
-        # already-installed case depending on a flag.
+        # already-installed case depending on a flag
         [ -f "$TEST_DIR/xcode_install_fails" ] && { echo "xcode-select: error: command line tools are already installed" >&2; exit 1; }
         exit 0
         ;;
@@ -46,7 +46,7 @@ exit 0
 SHIM
     chmod +x "$SHIM_DIR/xcode-select"
 
-    # curl shim: log args, simulate download output (used in --install mode).
+    # curl shim: log args, simulate download output (used in --install mode)
     cat > "$SHIM_DIR/curl" <<'SHIM'
 #!/bin/bash
 printf 'curl' >> "$TEST_DIR/curl.log"
@@ -125,7 +125,7 @@ case "\$1" in
         fi
         ;;
     ls)
-        # Report an LTS node is installed so Node-LTS check reports [ok].
+        # Report an LTS node is installed so Node-LTS check reports [ok]
         echo "v18.20.0 (lts/hydrogen)"
         ;;
 esac
@@ -222,7 +222,7 @@ test_check_only_partial() {
 }
 
 test_check_does_not_install() {
-    # No shims: check mode must not touch curl or attempt installs.
+    # No shims: check mode must not touch curl or attempt installs
     run_script
     assert_rc "check-only missing exits 1" 1
     local curl_log

@@ -7,7 +7,7 @@
 #
 # Queries the TXT record at <selector>._domainkey.<domain>, prints the raw
 # DNS response to stderr, and extracts the base64 public key (the p= value)
-# to stdout.
+# to stdout
 
 _dkim_pubkey() {
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"

@@ -84,7 +84,7 @@ _swap() {
         temp_file="/tmp/temp-swap-$basename-$$-$RANDOM"
     done
 
-    # Perform the swap using `mv`. Return distinct codes for each failure point.
+    # Perform the swap using `mv`. Return distinct codes for each failure point
     if ! mv "$file1" "$temp_file"; then # file1 -> temp
         _error "Failed to move '$file1' to temporary file '$temp_file'"
         return 6

@@ -105,7 +105,7 @@ _pwgen() {
         # Walks the input left-to-right, expanding any A-B style character ranges
         # (A and B must be alphanumeric) in place. Non-range characters are passed
         # through verbatim. Concatenation-based instead of sed-based so octal
-        # escapes emitted by _expand_range aren't reinterpreted as backreferences.
+        # escapes emitted by _expand_range aren't reinterpreted as backreferences
         local input="$1"
         local out=''
         local i=0
@@ -131,11 +131,11 @@ _pwgen() {
         printf %s "$out"
     }
 
-    # Expands bracket expressions `[...]` into their literal character contents.
+    # Expands bracket expressions `[...]` into their literal character contents
     # Contents may include: literal characters, A-B ranges, and POSIX classes
     # like `[:lower:]`. Unclosed brackets produce an error. Anything outside
     # brackets is passed through verbatim (top-level ranges/classes are handled
-    # by _expand_all_ranges / _expand_posix on the result).
+    # by _expand_all_ranges / _expand_posix on the result)
     _expand_brackets() {
         local input="$1"
         local out=''
@@ -155,21 +155,21 @@ _pwgen() {
             # `[:` is a POSIX class opener, not a bracket expression opener --
             # leave it to _expand_posix at the top level. This also keeps the
             # trailing-`]` check below from mis-closing at the `:` that ends a
-            # class (e.g. `[:digit:]` has a `]` of its own).
+            # class (e.g. `[:digit:]` has a `]` of its own)
             if [ "${input:$((i+1)):1}" = ':' ]; then
                 out="$out$ch"
                 i=$((i + 1))
                 continue
             fi
             # Find the matching `]`. Inside the bracket we skip over `[:...:]`
-            # subclasses so their `]` doesn't close us early.
+            # subclasses so their `]` doesn't close us early
             inner=''
             close=-1
             local j=$((i + 1))
             while [ "$j" -lt "$n" ]; do
                 local jch="${input:$j:1}"
                 if [ "$jch" = '[' ] && [ "${input:$((j+1)):1}" = ':' ]; then
-                    # Skip past the POSIX subclass `[:class:]` as a unit.
+                    # Skip past the POSIX subclass `[:class:]` as a unit
                     local k=$((j + 2))
                     while [ "$k" -lt "$n" ]; do
                         if [ "${input:$k:1}" = ':' ] && [ "${input:$((k+1)):1}" = ']' ]; then
@@ -196,7 +196,7 @@ _pwgen() {
                 _error "Invalid charset '$input': unclosed bracket expression starting at position $i"
                 return 6
             fi
-            # Expand POSIX classes, then ranges, inside the bracket contents.
+            # Expand POSIX classes, then ranges, inside the bracket contents
             inner_expanded="$(_expand_posix "$inner")"
             inner_expanded="$(_expand_all_ranges "$inner_expanded")"
             out="$out$inner_expanded"
@@ -209,11 +209,11 @@ _pwgen() {
     # `[:digit:]`, `[:upper:]`, `[:lower:]`, `[:alpha:]`, `[:alnum:]`, or
     # `[:punct:]`. A bare `[` not followed by `:` is treated as a bracket
     # expression opener and must close with `]`. Returns 0 if valid,
-    # non-zero (with an error message) otherwise.
+    # non-zero (with an error message) otherwise
     _validate_charset() {
         local input="$1"
         # Strip recognized POSIX classes; any remaining `[:` indicates an
-        # unclosed or unrecognized class opener.
+        # unclosed or unrecognized class opener
         local stripped; stripped="$(printf %s "$input" | sed '
             s/\[:digit:\]//g;
             s/\[:upper:\]//g;
@@ -337,7 +337,7 @@ _pwgen() {
     # Expansion pipeline: bracket expressions first (they internally handle
     # POSIX classes and ranges inside their `[...]`), then top-level POSIX
     # classes and ranges on whatever's outside the brackets. Finally, strip
-    # any excluded characters.
+    # any excluded characters
     local expanded_charset; expanded_charset="$(_expand_brackets "$charset")" || return $?
     local expanded_exclude; expanded_exclude="$(_expand_brackets "$exclude")" || return $?
     charset="$(_expand_posix "$(_expand_all_ranges "$expanded_charset")" | tr -d "$(_expand_posix "$(_expand_all_ranges "$expanded_exclude")")")"
@@ -348,8 +348,8 @@ _pwgen() {
     # Generate the password in a loop to ensure the length is exactly right
     local password=""
     while [ "${#password}" -lt "$length" ]; do
-        # Generate a batch of characters and append them to $password.
-        # Setting locale via LC_ALL=C instructs tr to process input as single bytes instead of potentially-multi-byte UTF-8.
+        # Generate a batch of characters and append them to $password
+        # Setting locale via LC_ALL=C instructs tr to process input as single bytes instead of potentially-multi-byte UTF-8
         password="$password$(LC_ALL=C tr -dc "$charset" </dev/random | head -c "$((length - ${#password}))")"
     done
 

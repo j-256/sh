@@ -93,7 +93,7 @@ _convert_size() {
     }
     trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
-    # -h handled before the dep guard so help works without bc installed.
+    # -h handled before the dep guard so help works without bc installed
     case "$1" in
         -h|--help) _show_help; return 0 ;;
     esac
@@ -138,9 +138,9 @@ _convert_size() {
                 if [ "$size" ]; then
                     # A second positional arg was supplied. Accept it only when the
                     # first positional was purely numeric and the second is a valid
-                    # unit letter -- treat `convert-size 500 GB` as `500G`.
+                    # unit letter -- treat `convert-size 500 GB` as `500G`
                     local second_upper; second_upper="$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')"
-                    local second_letter="${second_upper%B}" # allow GB -> G, KB -> K, etc.
+                    local second_letter="${second_upper%B}" # allow GB -> G, KB -> K, etc
                     [ -z "$second_letter" ] && second_letter="$second_upper"
                     case "$size" in
                         ''|*[!0-9]*)

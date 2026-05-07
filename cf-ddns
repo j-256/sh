@@ -5,9 +5,9 @@
 #   cf-ddns <api_token> <domain>
 #   cf-ddns -h
 #
-# Updates Cloudflare DNS to use the current machine's outbound IP address.
-# Deletes all existing A records for the domain and creates a new one.
-# Run periodically from host to achieve basic Dynamic DNS capabilities.
+# Updates Cloudflare DNS to use the current machine's outbound IP address;
+# deletes all existing A records for the domain and creates a new one
+# Run periodically from host to achieve basic Dynamic DNS capabilities
 # Required API token permissions: Zone.Zone, Zone.DNS
 
 _cf_ddns() {

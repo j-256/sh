@@ -77,7 +77,7 @@ _git_add_nonsub() {
 
     # Emergency restore for INT/TERM/HUP: only acts if we moved .git and haven't
     # restored it. Silent on failure (signal handler context; stderr may be
-    # truncated).
+    # truncated)
     _emergency_restore() {
         if [ -n "$git_backup" ] && [ -d "$git_backup" ] && [ -n "$dir" ] && [ ! -d "$dir/.git" ]; then
             mv "$git_backup" "$dir/.git" 2>/dev/null
@@ -132,7 +132,7 @@ _git_add_nonsub() {
 
     # Precondition: the current working directory must be inside an outer git
     # repo, otherwise `git add` (run from inside "$dir" after the .git move)
-    # has no repo to stage into and would fail cryptically.
+    # has no repo to stage into and would fail cryptically
     if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
         _error "Not inside a git repository. Run from an outer repo's working tree"
         return 2
@@ -142,7 +142,7 @@ _git_add_nonsub() {
     if _backup_git "$dir"; then
         # Trap signals so an interrupt between backup and restore attempts to
         # put .git back before the script dies. The restore is best-effort; see
-        # CAVEATS in --help.
+        # CAVEATS in --help
         trap '_emergency_restore; exit 130' INT TERM HUP
 
         _info "Running git add on '$dir'..."

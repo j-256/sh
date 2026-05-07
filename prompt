@@ -10,7 +10,7 @@
 # variable in the caller's shell. If placeholder is provided, it is shown in
 # gray and disappears on the first keypress; any "%DEFAULT%" inside the
 # placeholder is replaced with the default value. If no placeholder is given,
-# the default value is shown as the placeholder.
+# the default value is shown as the placeholder
 
 # Reject executed invocations EXCEPT for --help -- a stranger running
 # `prompt --help` (natural) should see help, not a rejection
@@ -68,10 +68,10 @@ __prompt__main() {
         echo "  stty"
     }
 
-    # __prompt__saved_stty is captured later, after we confirm we're on a TTY.
+    # __prompt__saved_stty is captured later, after we confirm we're on a TTY
     # The restore runs from the RETURN trap so every exit path -- normal,
     # signal, or error -- gets the terminal back, with no subprocess races in
-    # the signal handler.
+    # the signal handler
     local __prompt__saved_stty=""
     __prompt__restore() {
         [ "$__prompt__saved_stty" ] && stty "$__prompt__saved_stty" 2>/dev/null
@@ -103,8 +103,8 @@ __prompt__main() {
         __prompt__placeholder="$__prompt__default"
     fi
 
-    # Non-TTY fallback: stdin isn't a terminal, so raw-mode rendering is meaningless.
-    # Print the prompt (no placeholder) and do a plain line read. Defaults still apply.
+    # Non-TTY fallback: stdin isn't a terminal, so raw-mode rendering is meaningless
+    # Print the prompt (no placeholder) and do a plain line read. Defaults still apply
     if [ ! -t 0 ]; then
         printf "%s" "$__prompt__prompt_text"
         local __prompt__input
@@ -115,14 +115,14 @@ __prompt__main() {
         return 0
     fi
 
-    # TTY path: raw-mode loop with inline-ghost placeholder.
+    # TTY path: raw-mode loop with inline-ghost placeholder
     # Save stty, then IGNORE SIGINT/SIGTERM entirely (trap ''). Reasoning: if we
     # let bash's outer interactive shell see the signal, readline's signal-cleanup
     # path runs *after* our RETURN trap's stty restore and clobbers it with its
     # own cached tty state, leaving the terminal in raw mode. Ignoring the signal
     # here keeps the shell out of the picture. The RETURN trap still handles the
     # normal path restore on every exit. Trade-off: Ctrl-C during prompt is a
-    # no-op; user must press Enter (accepting default) to dismiss.
+    # no-op; user must press Enter (accepting default) to dismiss
     __prompt__saved_stty="$(stty -g 2>/dev/null)"
     trap '' INT
     trap '' TERM
@@ -152,7 +152,7 @@ __prompt__main() {
                 fi
                 ;;
             $'\033')
-                # ESC sequence (arrow keys, etc.): read and discard the next 2 bytes.
+                # ESC sequence (arrow keys, etc.): read and discard the next 2 bytes
                 # Covers CSI sequences like ESC [ A. Lone ESC will block waiting for 2 bytes,
                 # but plain Escape isn't a natural gesture in a text prompt
                 local __prompt__drop

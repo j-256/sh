@@ -219,8 +219,8 @@ test_mixed_known_unknown_errors() {
 
 test_all_populates_requested_from_catalog() {
     run_script --all
-    # We expect per-script fetches for every fixture name.
-    # Task 9 implements per-script fetch; until then, this test will fail.
+    # We expect per-script fetches for every fixture name
+    # Task 9 implements per-script fetch; until then, this test will fail
     # Exit code is whatever the current install dispatch returns (0 today)
     for n in alpha bravo charlie delta echo-tool; do
         if grep -q "/$n" "$TEST_DIR/curl.args" 2>/dev/null; then

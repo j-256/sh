@@ -11,8 +11,8 @@ UNDER_TEST="$SCRIPT_DIR/../chrome-ua"
 # --- shims ---
 
 write_shims() {
-    # defaults shim: returns a fake Chrome version; logs its args.
-    # Returns empty (exit 0) when the plist path contains "badplist".
+    # defaults shim: returns a fake Chrome version; logs its args
+    # Returns empty (exit 0) when the plist path contains "badplist"
     cat > "$SHIM_DIR/defaults" <<'SHIM'
 #!/bin/bash
 log="$TEST_DIR/defaults.log"
@@ -25,9 +25,9 @@ exit 0
 SHIM
     chmod +x "$SHIM_DIR/defaults"
 
-    # curl shim: logs args, returns a minimal Google Version History JSON.
-    # Supports per-platform response (mac/win/linux) via the path it's called with.
-    # Returns empty on exit 1 when $TEST_DIR/curl_fails exists.
+    # curl shim: logs args, returns a minimal Google Version History JSON
+    # Supports per-platform response (mac/win/linux) via the path it's called with
+    # Returns empty on exit 1 when $TEST_DIR/curl_fails exists
     cat > "$SHIM_DIR/curl" <<'SHIM'
 #!/bin/bash
 log="$TEST_DIR/curl.log"
@@ -174,8 +174,8 @@ test_local_fails_env_blocks_network() {
     assert_rc "env-blocked fallback exits 0" 0
     local stdout2; stdout2="$(cat "$TEST_DIR/stdout2")"
     local stderr2; stderr2="$(cat "$TEST_DIR/stderr2")"
-    # curl.log was populated by the first run; the second run should have been skipped.
-    # To verify, use the stderr message shape.
+    # curl.log was populated by the first run; the second run should have been skipped
+    # To verify, use the stderr message shape
     assert_contains "stderr warns pinned fallback" "$stderr2" "pinned"
     assert_contains "stdout still valid UA" "$stdout2" "Safari/537.36"
     # Exit status captured separately

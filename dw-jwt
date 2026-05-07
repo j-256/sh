@@ -97,10 +97,10 @@ _dw_jwt() {
 
     # Sign with the private key. openssl-dgst runs in its own step (not inline in
     # a pipeline) so we can check its exit status directly -- a broken key must
-    # fail loudly rather than produce garbage that looks like a valid signature.
+    # fail loudly rather than produce garbage that looks like a valid signature
     local sig_bin
     sig_bin="$(mktemp -t dw-jwt.XXXXXX)" || { _error "mktemp failed"; return 1; }
-    # Copy trap restoration is handled on RETURN; mktemp file cleanup below.
+    # Copy trap restoration is handled on RETURN; mktemp file cleanup below
     printf %s "$header_b64.$payload_b64" | openssl dgst -sha256 -sign "$private_key" >"$sig_bin" 2>/dev/null
     local rc_dgst=$?
     if [ "$rc_dgst" -ne 0 ] || [ ! -s "$sig_bin" ]; then

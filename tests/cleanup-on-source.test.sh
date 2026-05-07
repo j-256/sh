@@ -7,13 +7,13 @@
 # sourcing must not pollute the caller's shell with inner functions or
 # top-level variables. This test sources each bash script with --help
 # (the only universally safe arg) and asserts that the set of defined
-# functions and variables before and after sourcing is identical.
+# functions and variables before and after sourcing is identical
 #
 # Pre-flight: each script is grepped for a --help case branch before being
 # sourced. Scripts without --help are reported as failures rather than
 # silently skipped -- the convention requires --help, and falling through
 # to a script's real logic during a test run could spawn subprocesses,
-# write files, or hit the network.
+# write files, or hit the network
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=test-helpers.sh
@@ -21,7 +21,7 @@ source "$SCRIPT_DIR/test-helpers.sh"
 
 REPO_DIR="$SCRIPT_DIR/.."
 
-# Test bash scripts only: shebang must be /bin/bash or /usr/bin/env bash.
+# Test bash scripts only: shebang must be /bin/bash or /usr/bin/env bash
 # Skips render-md (node), the .md/.sh/.json/.bak files at the repo root,
 # and any subdirectories
 _is_bash_script() {
@@ -66,7 +66,7 @@ EOF
 test_no_leaks_on_source() {
     # Single sweeping test: walk every bash script in the repo, source it
     # with --help, and assert nothing leaks. One assertion per script keeps
-    # failure messages specific.
+    # failure messages specific
     local script
     for script in "$REPO_DIR"/*; do
         _is_bash_script "$script" || continue

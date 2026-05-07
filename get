@@ -8,12 +8,12 @@
 #
 # Downloads scripts from https://toolio.sh and installs them to $INSTALL_DIR
 # (default: ~/.local/bin), making them executable. With no arguments, lists
-# the available scripts grouped by category.
+# the available scripts grouped by category
 
 _get() {
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     # When piped via `curl ... | bash`, BASH_SOURCE[0] is empty or "bash",
-    # so basename returns "bash". Fall back to the canonical name.
+    # so basename returns "bash". Fall back to the canonical name
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="get" ;; esac
 

@@ -367,7 +367,7 @@ SHIM
 test_restart_stop_failure_propagates() {
     # Override sfcc-ci to fail on stop. The script pipes sfcc-ci through cat
     # (for terminal color reset); PIPESTATUS[0] recovers sfcc-ci's rc so the
-    # failure propagates and the subsequent start is skipped.
+    # failure propagates and the subsequent start is skipped
     cat > "$SHIM_DIR/sfcc-ci" <<'SHIM'
 #!/bin/bash
 case "$*" in

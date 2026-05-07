@@ -1,10 +1,10 @@
 #!/bin/bash
 # inflate - adjust a historical USD amount for inflation using BLS CPI data
 #
-# Finds the equivalent buying power today* of a historical amount of USD.
+# Finds the equivalent buying power today* of a historical amount of USD
 # e.g. "$1234.56 in Feb 1980 is equivalent to $4915.94 in Jun 2024"
 # Data source: https://data.bls.gov/cgi-bin/cpicalc.pl
-# * Most recent month available is used, typically a 1-month delay.
+# * Most recent month available is used, typically a 1-month delay
 #
 # Usage:
 #   inflate <amount> <year> [month]

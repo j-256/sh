@@ -1,9 +1,9 @@
 #!/bin/bash
-# snippets.sh - reference patterns to copy-paste from when writing new scripts.
+# snippets.sh - reference patterns to copy-paste from when writing new scripts
 #
 # Not meant to be executed as-is; many regions assume variables that don't exist
-# here, some print demo output, and the find example would traverse your home.
-# Open it, find the pattern you need, copy it.
+# here, some print demo output, and the find example would traverse your home
+# Open it, find the pattern you need, copy it
 
 #region string.contains(substr)
 # Returns 0 if $1 contains $2, otherwise returns 1
@@ -19,14 +19,14 @@ contains() {
 # Bash integers are signed 64-bit, so 63 bits are safely available for packed
 # values -- writing to the top bit wraps the whole number negative, which
 # breaks extraction (bash right-shift is arithmetic, not logical). With `n`
-# bits per slot, you get floor(63/n) slots of values in [0, 2^n - 1]:
+# bits per slot, you get floor(63/n) slots of values in [0, 2^n - 1]
 #   n= 1 -> 63 slots, [0,1]              (pure boolean flags)
 #   n= 2 -> 31 slots, [0,3]
 #   n= 4 -> 15 slots, [0,15]
 #   n= 8 ->  7 slots, [0,255]
 #   n=16 ->  3 slots, [0,65535]
 #   n=32 ->  1 slot,  [0,4294967295]
-# Or any mix of widths, as long as the total never exceeds 63 bits.
+# Or any mix of widths, as long as the total never exceeds 63 bits
 
 # Configure bits per value (max values = floor(63/n))
 n=8
@@ -69,7 +69,7 @@ bitmap=0
 
 # Define values to encode. n=8 gives 7 slots; v1/v2/v3 take three, leaving
 # room for up to four more before the 64th bit flips the number negative and
-# extraction breaks.
+# extraction breaks
 values=(
     "$v1"
     "$v2"
@@ -171,17 +171,17 @@ shell_func() {
     # ${BASH_SOURCE[0]} resolves to the *definition file*, which is what you want
     # for a standalone script. For a function pasted into ~/.bash_profile or
     # similar, replace this with `local SCRIPT_NAME="shell_func"` -- otherwise it
-    # will identify itself as ".bash_profile" in help/error output.
+    # will identify itself as ".bash_profile" in help/error output
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     # Pipe invocation (curl ... | bash) has no filename: inside a function
-    # ${BASH_SOURCE[0]} is the interpreter ("bash"); at top level it's empty.
-    # Fall back to the canonical name so help/errors aren't "bash: ...".
+    # ${BASH_SOURCE[0]} is the interpreter ("bash"); at top level it's empty
+    # Fall back to the canonical name so help/errors aren't "bash: ..."
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="shell_func" ;; esac
     # Positional arguments. `[ -t 0 ]` is true when stdin is a terminal; negate
-    # it to detect piped/redirected input -- each line becomes another arg.
+    # it to detect piped/redirected input -- each line becomes another arg
     # The `|| [ -n "$line" ]` clause appends the final line when stdin lacks a
     # trailing newline, which would otherwise cause read to return non-zero and
-    # exit the loop with the last line still unread.
+    # exit the loop with the last line still unread
     # (For whole-stdin-as-content, use `local stdin; [ -t 0 ] || stdin="$(cat)"` instead.)
     local args=()
     local line
@@ -315,9 +315,9 @@ shell_func() {
 
 
 #region jq - extract multiple fields into bash variables (single jq call)
-# @tsv outputs tab-separated values; IFS=$'\t' prevents splitting on spaces in values.
+# @tsv outputs tab-separated values; IFS=$'\t' prevents splitting on spaces in values
 # name/version/count and $json are placeholders -- in real use the caller supplies
-# $json and consumes name/version/count afterwards.
+# $json and consumes name/version/count afterwards
 # shellcheck disable=SC2034,SC2154
 IFS=$'\t' read -r name version count \
     < <(jq -r '[
@@ -332,7 +332,7 @@ IFS=$'\t' read -r name version count \
 #region find with -prune
 # Traverses the tree under the target directory, skipping listed paths entirely,
 # then runs -exec on the files that remain. Swap the target and -iname/-exec to
-# taste.
+# taste
 find -L /path/to/dir \
     \( \
         -ipath '*/node_modules/*' \

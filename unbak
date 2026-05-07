@@ -11,7 +11,7 @@
 #   -h, --help     Show help message
 #
 # Restores backed-up files by moving (renaming) them from "file.ext.bak" ->
-# "file.ext", avoiding overwriting files by default.
+# "file.ext", avoiding overwriting files by default
 
 _unbak() {
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
@@ -19,13 +19,13 @@ _unbak() {
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="unbak" ;; esac
     local args=()  # Positional arguments
     # Read piped/redirected input as an array of lines. The `|| [ -n "$line" ]`
-    # clause appends the final line when stdin lacks a trailing newline.
+    # clause appends the final line when stdin lacks a trailing newline
     local line
     [ -t 0 ] || while IFS= read -r line || [ -n "$line" ]; do args+=("$line"); done
     local verbose=false
     local dry_run=false
 
-    # Print usage (help) info.
+    # Print usage (help) info
     _show_help() {
         # Underline only if output is a terminal (not a pipe or file)
         local s; [ -t 1 ] && s=$'\033[4m'
@@ -59,27 +59,27 @@ _unbak() {
 
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
 
-    # Return true if verbose flag is set.
+    # Return true if verbose flag is set
     _verbose() { [ "$verbose" = true ]; }
 
-    # Return true if dry-run flag is set.
+    # Return true if dry-run flag is set
     _dry_run() { [ "$dry_run" = true ]; }
 
-    # Recursive restore function which ultimately calls mv.
+    # Recursive restore function which ultimately calls mv
     _restore() {
         local file="$1"
-        # Remove one trailing ".bak" to compute the destination.
+        # Remove one trailing ".bak" to compute the destination
         local base="${file%".bak"}"
         if [ ! -e "$file" ]; then
             _error "$file: No such file"
             return 1
         fi
 
-        # Only check if the destination exists when restoring the final file.
-        # If base ends in ".bak", then it's an intermediate backup file in the chain.
+        # Only check if the destination exists when restoring the final file
+        # If base ends in ".bak", then it's an intermediate backup file in the chain
         case "$base" in
             *.bak)
-                # Intermediate backup: no need to check existence.
+                # Intermediate backup: no need to check existence
                 ;;
             *)
                 if [ -e "$base" ]; then
@@ -89,7 +89,7 @@ _unbak() {
                 ;;
         esac
 
-        # Helper function to move files with dry-run and verbose support.
+        # Helper function to move files with dry-run and verbose support
         _move_file() {
             local src="$1"
             local dest="$2"
@@ -112,7 +112,7 @@ _unbak() {
         }
 
         # If there is an older backup (one more ".bak" appended),
-        # restore it first so that the oldest backup in the chain gets restored.
+        # restore it first so that the oldest backup in the chain gets restored
         if [ -e "$file.bak" ]; then
             _restore "$file.bak" || return 1
         fi
@@ -150,7 +150,7 @@ _unbak() {
         done
     }
 
-    # Clean up inner functions when returning.
+    # Clean up inner functions when returning
     __unset() {
         unset -f __unset _show_help _error _verbose _dry_run _restore _move_file _expand_short_opts
     }
@@ -159,7 +159,7 @@ _unbak() {
     _expand_short_opts "" "$@"
     set -- "${_EXPANDED[@]}"; unset _EXPANDED
 
-    # Parse parameters.
+    # Parse parameters
     while [ $# -gt 0 ]; do
         case "$1" in
             -v|--verbose)
@@ -174,7 +174,7 @@ _unbak() {
                 _show_help
                 return 0
                 ;;
-            # End of options, parse remainder as positional arguments.
+            # End of options, parse remainder as positional arguments
             --)
                 shift  # discard --
                 while [ $# -gt 0 ]; do
@@ -193,13 +193,13 @@ _unbak() {
         esac
     done
 
-    # Show help if no filenames provided.
+    # Show help if no filenames provided
     if [ ${#args[@]} -eq 0 ]; then
         _show_help
         return 0
     fi
 
-    # Process each argument.
+    # Process each argument
     for f in "${args[@]}"; do
         _restore "$f"
     done

@@ -11,7 +11,7 @@
 #
 # Backs up files by moving (renaming) them from "file.ext"->"file.ext.bak",
 # "file.ext.bak"->"file.ext.bak.bak", etc. which ensures the file with a single
-# ".bak" is always the most recent version.
+# ".bak" is always the most recent version
 
 _bak() {
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"

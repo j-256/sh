@@ -29,7 +29,7 @@ setup_test_pwgen() {
     done
 
     # Copy pwgen to a subdir under its real basename so that the script's
-    # $SCRIPT_NAME (derived via basename) matches the production value.
+    # $SCRIPT_NAME (derived via basename) matches the production value
     local fake_random_path="$TEST_DIR/fake_random"
     mkdir -p "$TEST_DIR/bin"
     sed "s|</dev/random|<\"$fake_random_path\"|g" "$UNDER_TEST" > "$TEST_DIR/bin/pwgen"

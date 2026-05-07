@@ -6,8 +6,8 @@
 #   ods-usage -h
 #
 # Options:
-#   api_response   JSON response from getRealmUsage (ODS API). If omitted,
-#                  the script pulls JSON from the clipboard via pbpaste.
+#   api_response   JSON response from getRealmUsage (ODS API); if omitted,
+#                  the script pulls JSON from the clipboard via pbpaste
 #   -h, --help     Show help message
 #
 # Example Output:
@@ -36,11 +36,11 @@ _ods_usage() {
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
 
     _terminal_cols() {
-        # Returns terminal column count (integer), falling back to 80.
-        # Prefers stty against /dev/tty (real ioctl-sourced width), then $COLUMNS.
-        # Avoids tput to drop the runtime dependency.
+        # Returns terminal column count (integer), falling back to 80
+        # Prefers stty against /dev/tty (real ioctl-sourced width), then $COLUMNS
+        # Avoids tput to drop the runtime dependency
         # The { ...; } 2>/dev/null wrapping silences the shell's own redirect
-        # error ("/dev/tty: Device not configured") when /dev/tty is unavailable.
+        # error ("/dev/tty: Device not configured") when /dev/tty is unavailable
         local cols=""
         local out=""
         if out="$({ stty size </dev/tty; } 2>/dev/null)"; then
@@ -137,8 +137,8 @@ _ods_usage() {
         fi
     fi
 
-    # Validate required fields exist before processing. Missing fields would
-    # otherwise print "null" and leak jq errors to stderr while exiting 0.
+    # Validate required fields exist before processing -- missing fields would
+    # otherwise print "null" and leak jq errors to stderr while exiting 0
     local check; check="$(_jq '.data | has("createdSandboxes") and has("activeSandboxes") and has("deletedSandboxes") and has("minutesUp") and has("minutesDown")')"
     if [ "$check" != "true" ]; then
         _error "Input JSON is missing required fields (expected .data.createdSandboxes, .data.activeSandboxes, .data.deletedSandboxes, .data.minutesUp, .data.minutesDown). Run \`$SCRIPT_NAME -h\` for usage"

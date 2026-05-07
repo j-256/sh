@@ -8,7 +8,7 @@
 #
 # Run from the directory the cert bundle was unzipped to or provide that path
 # as an argument. Requires a CA cert bundle downloaded from Salesforce Business
-# Manager (Global Preferences -> Keys & Certificates -> MFA Certificates).
+# Manager (Global Preferences -> Keys & Certificates -> MFA Certificates)
 
 _generate_p12() {
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
@@ -182,9 +182,9 @@ _generate_p12() {
         return 1
     fi
 
-    # Announce the auto-selected suffix so the user sees which bundle was chosen.
+    # Announce the auto-selected suffix so the user sees which bundle was chosen
     # Use printf directly rather than _echo/_color -- _color reads stdin when
-    # stdin isn't a TTY, and we can't have it consuming the pending years prompt.
+    # stdin isn't a TTY, and we can't have it consuming the pending years prompt
     printf "${default_color}%s${reset}\n" "Using cert bundle suffix _${ca_suffix} (from ${hostname}_${ca_suffix}.crt, ${hostname}_${ca_suffix}.key, ${hostname}_${ca_suffix}.txt)"
 
     # Assemble cert bundle filenames

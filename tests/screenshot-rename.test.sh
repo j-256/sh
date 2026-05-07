@@ -17,8 +17,8 @@ exit 0
 SHIM
     chmod +x "$SHIM_DIR/fswatch"
 
-    # defaults shim: by default, the screencapture location is not configured.
-    # Tests can touch files in $TEST_DIR to change this behavior.
+    # defaults shim: by default, the screencapture location is not configured
+    # Tests can touch files in $TEST_DIR to change this behavior
     cat > "$SHIM_DIR/defaults" <<'SHIM'
 #!/bin/bash
 if [ "$1" = "read" ] && [ "$2" = "com.apple.screencapture" ] && [ "$3" = "location" ]; then
@@ -167,7 +167,7 @@ test_path_missing_value() {
 
 test_format_flag_accepted() {
     # We can't observe the format without triggering a rename, but we can at
-    # least confirm the flag parses cleanly and the watcher starts.
+    # least confirm the flag parses cleanly and the watcher starts
     run_script --format "%Y%m%d-%H%M%S"
     assert_rc "format flag exits 0" 0
     assert_stdout_contains "watcher starts" "Watching for new screenshots"

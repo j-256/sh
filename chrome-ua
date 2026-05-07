@@ -72,12 +72,12 @@ _chrome_ua() {
     trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
     # Pinned fallback major version -- used when both local read and network
-    # fetch fail (or when network is disabled via CHROME_UA_OFFLINE).
-    # Update periodically (last set: 2026-04, Chrome stable 148).
+    # fetch fail (or when network is disabled via CHROME_UA_OFFLINE)
+    # Update periodically (last set: 2026-04, Chrome stable 148)
     local fallback_major="148"
 
     # UA shape per platform -- frozen by Chrome's reduced-UA policy, regardless
-    # of actual OS version or Chrome version.
+    # of actual OS version or Chrome version
     # https://developer.chrome.com/docs/privacy-security/user-agent-client-hints#user-agent-reduction
     _ua_for() {
         local plat="$1"
@@ -89,9 +89,9 @@ _chrome_ua() {
         esac
     }
 
-    # Fetch latest stable Chrome major version from Google's Version History API.
+    # Fetch latest stable Chrome major version from Google's Version History API
     # Args: platform (mac|win|linux)
-    # Prints major version to stdout on success; returns non-zero on failure.
+    # Prints major version to stdout on success; returns non-zero on failure
     _fetch_latest_major() {
         local plat="$1"
         command -v curl >/dev/null 2>&1 || return 1
@@ -161,7 +161,7 @@ _chrome_ua() {
     local major=""
 
     if [ "$mode" = "latest" ]; then
-        # Explicit --latest: fetch from API. Env var does NOT block this.
+        # Explicit --latest: fetch from API; env var does NOT block this
         if major="$(_fetch_latest_major "$platform")" && [ -n "$major" ]; then
             _ua_for "$platform" "$major"
             return 0
@@ -171,7 +171,7 @@ _chrome_ua() {
         return 0
     fi
 
-    # Default mode: read local Chrome, fall back to network, then to pinned.
+    # Default mode: read local Chrome, fall back to network, then to pinned
     if [ ! -d "$app" ]; then
         _warn "Chrome app not found at '$app'"
     else
@@ -185,7 +185,7 @@ _chrome_ua() {
         _warn "Unable to read Chrome version from '$plist'"
     fi
 
-    # Local read failed. Try network fallback unless env var blocks it.
+    # Local read failed -- try network fallback unless env var blocks it
     if [ -z "${CHROME_UA_OFFLINE:-}" ]; then
         if major="$(_fetch_latest_major "$platform")" && [ -n "$major" ]; then
             _warn "Local read failed; fetched latest Chrome major=$major from Google's API"
@@ -194,7 +194,7 @@ _chrome_ua() {
         fi
     fi
 
-    # Network also failed or blocked: pinned fallback.
+    # Network also failed or blocked: pinned fallback
     _warn "Using pinned fallback major=$fallback_major (update periodically)"
     _ua_for "$platform" "$fallback_major"
     return 0

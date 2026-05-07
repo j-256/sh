@@ -18,7 +18,7 @@
 #   NOTIFY_TITLE  Default title (overridden by --title)
 #   NOTIFY_SOUND  Default sound (overridden by --sound / --no-sound)
 #
-# macOS only. osascript is the backing mechanism for notifications.
+# macOS only. osascript is the backing mechanism for notifications
 
 _notify() {
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"

@@ -31,7 +31,7 @@ if [ "$1 $2 $3" = "dgst -sha256 -sign" ]; then
         printf 'Could not open file %s\n' "$4" >&2
         exit 1
     fi
-    # Check if the key file has a valid-looking PEM header.
+    # Check if the key file has a valid-looking PEM header
     if ! head -1 "$4" | grep -q 'PRIVATE KEY'; then
         printf 'unable to load Private Key\n' >&2
         exit 1

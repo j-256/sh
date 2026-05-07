@@ -2,7 +2,7 @@
 # stats - calculate statistics from a whitespace-separated list of integers
 #
 # Computes count, total, average, max, min, range (max-min), and outliers
-# (1.5 * IQR method) from stdin input.
+# (1.5 * IQR method) from stdin input
 #
 # Usage:
 #   command | stats [-n]

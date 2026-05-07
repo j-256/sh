@@ -209,7 +209,7 @@ test_jq_missing() {
     make_valid_json
     # Invoke bash directly rather than through run_script so we bypass
     # test-helpers' env prelude (which needs /usr/bin in PATH). PATH is
-    # restricted to the shim dir so jq is genuinely absent.
+    # restricted to the shim dir so jq is genuinely absent
     PATH="$SHIM_DIR" /bin/bash "$UNDER_TEST" "$(cat "$TEST_DIR/valid.json")" \
         >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"

@@ -5,8 +5,8 @@
 #   install-bash
 #   install-bash -h
 #
-# Works on both Intel (/usr/local) and Apple Silicon (/opt/homebrew) Macs.
-# The actual bash install path is resolved dynamically via `brew --prefix`.
+# Works on both Intel (/usr/local) and Apple Silicon (/opt/homebrew) Macs
+# The actual bash install path is resolved dynamically via `brew --prefix`
 
 _install_bash() {
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
@@ -77,7 +77,7 @@ _install_bash() {
     fi
 
     # If brew was just installed (or isn't on PATH yet in this shell), source its
-    # shellenv from the standard install location before continuing.
+    # shellenv from the standard install location before continuing
     if ! command -v brew >/dev/null 2>&1; then
         if [ -x "/opt/homebrew/bin/brew" ]; then
             eval "$(/opt/homebrew/bin/brew shellenv)"

@@ -16,7 +16,7 @@ _cf_ips_subnets() {
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
 
     _show_help() {
-        # No user-facing placeholders, so $s/$r are unused here.
+        # No user-facing placeholders, so $s/$r are unused here
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
         echo "NAME"

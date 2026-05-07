@@ -56,7 +56,7 @@ _test_runner() {
     script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
     # Pre-compute which names matched a real file. Names that never match
-    # are reported after the run and force a non-zero exit.
+    # are reported after the run and force a non-zero exit
     local matched_count=0
     local unmatched_names=""
     if [ "${#names[@]}" -gt 0 ]; then
@@ -70,9 +70,9 @@ _test_runner() {
         done
     fi
 
-    # Solo-match mode: exactly one name was given and it resolved to a file.
+    # Solo-match mode: exactly one name was given and it resolved to a file
     # Skip the per-file header and the aggregate summary -- the test file's
-    # own summary line is sufficient when there's only one file running.
+    # own summary line is sufficient when there's only one file running
     local solo=0
     if [ "${#names[@]}" -eq 1 ] && [ "$matched_count" -eq 1 ]; then
         solo=1
@@ -91,7 +91,7 @@ _test_runner() {
 
         # With one or more names, only run tests whose filename matches
         # <name>.test.sh. Exact match avoids the substring-glob footgun where
-        # short inputs like `s` would match every file.
+        # short inputs like `s` would match every file
         if [ "${#names[@]}" -gt 0 ]; then
             local matched=0
             local n

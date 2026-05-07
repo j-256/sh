@@ -6,8 +6,8 @@
 #   colorize-url -h
 #
 # Parses a URL into protocol, hostname, path, query parameters, and fragment,
-# then prints it with each component in a distinct color for readability.
-# Query string keys and values are colored separately.
+# then prints it with each component in a distinct color for readability
+# Query string keys and values are colored separately
 
 _colorize_url() {
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
@@ -106,7 +106,7 @@ _colorize_url() {
         return 2
     fi
     # Require an explicit protocol (e.g. https://). Parsing relies on '://' as
-    # the first delimiter; without it, results are silently wrong.
+    # the first delimiter; without it, results are silently wrong
     if ! _contains "$url" "://"; then
         _error "URL must include protocol (e.g. https://...). Run \`$SCRIPT_NAME -h\` for usage"
         return 2

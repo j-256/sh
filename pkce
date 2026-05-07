@@ -90,7 +90,7 @@ _pkce() {
     }
     trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
-    # Default to tab-separated output; -n|--newline switches to newline.
+    # Default to tab-separated output; -n|--newline switches to newline
     local delimiter='\t'
 
     _expand_short_opts "" "$@"
@@ -106,7 +106,7 @@ _pkce() {
     done
 
     # Fail fast if openssl is missing -- otherwise openssl-rand (below) yields
-    # an empty verifier and the subsequent dgst call silently produces garbage.
+    # an empty verifier and the subsequent dgst call silently produces garbage
     if ! command -v openssl >/dev/null 2>&1; then
         _error "openssl is required"
         return 3

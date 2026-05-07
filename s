@@ -6,7 +6,7 @@
 #   s -h
 #
 # Runs augmented subcommands (a/auth, sbx, list, etc.) via sfcc-ci and
-# falls through to sfcc-ci for anything unrecognized.
+# falls through to sfcc-ci for anything unrecognized
 
 _s() {
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
@@ -131,7 +131,7 @@ _s() {
         ;;
         # Start an instance, waiting for it to finish (--sync)
         # FORCE_COLOR=0 disables chalk's coloring in sfcc-ci so output lands
-        # in the default terminal color (sfcc-ci would otherwise emit gray).
+        # in the default terminal color (sfcc-ci would otherwise emit gray)
         'start')
             local instance="${1/_/-}" # zzzz_001 -> zzzz-001
             FORCE_COLOR=0 sfcc-ci sandbox:start -s "$instance" --sync

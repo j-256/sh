@@ -158,7 +158,7 @@ _git_backup() {
 
     # Pre-flight: the named remote must exist. Without this, `git push` later
     # produces a raw git error that doesn't say which side (tooling or config)
-    # is at fault.
+    # is at fault
     if ! git remote get-url "$remote" >/dev/null 2>&1; then
         _error "Remote '$remote' not configured in '$repo_dir'. Run \`$SCRIPT_NAME -h\` for usage"
         return 2

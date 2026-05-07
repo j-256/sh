@@ -279,7 +279,7 @@ test_dry_run_short_flag() {
 }
 
 test_missing_remote_preflight() {
-    # Override git shim: remote get-url fails, everything else succeeds.
+    # Override git shim: remote get-url fails, everything else succeeds
     cat > "$SHIM_DIR/git" <<'SHIM'
 #!/bin/bash
 log="$TEST_DIR/git.log"

@@ -10,8 +10,8 @@
 #   -h, --help   Show help message
 #
 # Starts a socat-based HTTP server where the last path segment of each request
-# is the delay in milliseconds. Requests without a numeric path return 404.
-# e.g. `curl http://localhost:8080/2500` responds after ~2.5 seconds.
+# is the delay in milliseconds. Requests without a numeric path return 404
+# e.g. `curl http://localhost:8080/2500` responds after ~2.5 seconds
 
 _slow_server() {
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
@@ -48,7 +48,7 @@ _slow_server() {
 
     # Function invoked by socat below on each request. Defined inside the wrapper
     # so __unset can clean it up in the parent shell; exported for socat's
-    # SYSTEM: subshell to see it.
+    # SYSTEM: subshell to see it
     #shellcheck disable=SC2317 # "Command appears to be unreachable. Check usage (or ignore if invoked indirectly)."
     _slow_response() {
         _is_number() {
@@ -104,9 +104,9 @@ _slow_server() {
     # Start simple server
     echo "Starting server at http://localhost:$port"
     socat "TCP-LISTEN:$port,fork,reuseaddr" "SYSTEM:_slow_response"
-    # The __unset RETURN trap handles cleanup of _slow_response in this shell.
+    # The __unset RETURN trap handles cleanup of _slow_response in this shell
     # Child sockets in flight may still have the exported function, but those
-    # processes die with the server.
+    # processes die with the server
 }
 
 _slow_server "$@"
