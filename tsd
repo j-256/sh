@@ -1,35 +1,38 @@
-#!/usr/bin/env bash
-#! tested in: GNU bash, version 5.2.21(1)-release (x86_64-apple-darwin23.0.0) | older versions and other shells will work but not guaranteed
-
-################################################################################################################
-# "timestamp or duration" -> "ts d" -> "tsd"                                                                   #
-# Provide a duration (e.g. 7238) or unix epoch timestamp (e.g. 1609477200) to get a human-readable             #
-#  duration (e.g. 2h 0m 38s) or datetime (e.g. 2021-01-01T05:00:00Z), respectively.                            #
-# Datetimes are printed in both UTC (GMT) and the user's local time.                                           #
-# Unit defaults to seconds, but can go up to nanoseconds (for e.g. CF WAF logs). See `tsd --help` for details. #
-# If the duration happens to be long enough to be misinterpreted as a timestamp, the -d,--duration option      #
-#  will override the pattern recognition. That would require a massive duration, but is accounted for anyway.  #
-################################################################################################################
-# You might paste in a timestamp from a log file or pass it from a script:                                     #
-# $ tsd 1609477200                                                                                             #
-# > 2021-01-01T05:00:00Z                                                                                       #
-# > 2021-01-01 00:00:00 EST (GMT-5)                                                                            #
-#                                                                                                              #
-# A neat but contrived example which copies the UTC ISO8601 datetime (line 1) to the clipboard,                #
-#  while also printing both lines to the terminal:                                                             #
-# $ tsd "$(date -u +%s)" | tee /dev/stderr | head -n 1 | pbcopy                                                #
-# > 2023-11-11T11:11:11Z                                                                                       #
-# > 2023-11-11 06:11:11 EST (GMT-5)                                                                            #
-# $ pbpaste                                                                                                    #
-# > 2023-11-11T11:11:11Z                                                                                       #
-#                                                                                                              #
-# If you forgot how long a 1800-second access token lasts, quickly check:                                      #
-# $ tsd 1800                                                                                                   #
-# > 30m                                                                                                        #
-# Or have 1800 milliseconds explained to you like you're five:                                                 #
-# $ tsd 1800 -m  # or `tsd -m 1800`                                                                            #
-# > 1s 800ms                                                                                                   #
-################################################################################################################
+#!/bin/bash
+# tsd - convert a number to a human-readable timestamp or duration
+#
+# Name comes from "timestamp or duration" -> "ts d" -> "tsd"
+# Pass a unix epoch timestamp (e.g. 1609477200) to get a datetime (2021-01-01T05:00:00Z)
+# Pass a duration (e.g. 7238) to get a human-readable form (2h 0m 38s)
+# Datetimes are printed in both UTC and the user's local time
+# Unit defaults to seconds but goes up to nanoseconds (e.g. for CF WAF logs)
+# Use -d,--duration to force duration mode when a long duration would be detected as a timestamp
+#
+# Usage:
+#   tsd [options] <timestamp_or_duration>
+#   tsd -h
+#
+# Options:
+#   -s, --sec, --seconds          Set unit to seconds (default)
+#   -m, --milli, --milliseconds   Set unit to milliseconds
+#   -u, --micro, --microseconds   Set unit to microseconds
+#   -n, --nano, --nanoseconds     Set unit to nanoseconds
+#   -d, --duration                Override timestamp detection, treat input as a duration
+#   -h, --help                    Show help message
+#
+# Examples:
+#   Parse a timestamp from a log:
+#     $ tsd 1609477200
+#     2021-01-01T05:00:00Z
+#     2021-01-01 00:00:00 EST (GMT-5)
+#
+#   Check how long a 1800-second access token lasts:
+#     $ tsd 1800
+#     30m
+#
+#   Explain 1800 milliseconds like you're five:
+#     $ tsd 1800 -m  # or `tsd -m 1800`
+#     1s 800ms
 
 _tsd() {
     # Microseconds (the 3 places following milliseconds) is abbreviated μs, as in the Greek letter mu
