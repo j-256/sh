@@ -2,7 +2,7 @@
 
 [View script](../dot-project)
 
-Generate `.project` files for Salesforce B2C Commerce cartridge directories so Eclipse-based tooling (like UX Studio) can detect and open them as projects.
+Generate `.project` files for Salesforce B2C Commerce cartridge directories so tooling like UX Studio and Prophet Debugger can detect and open them as projects.
 
 In SFCC development, cartridges live as subdirectories under a code version directory. Each one needs a `.project` file with Eclipse project metadata -- specifically, the `com.demandware.studio.core.beehiveNature` nature and the `com.demandware.studio.core.beehiveElementBuilder` builder. This script writes that XML file into each subdirectory, using the directory name as the project name.
 

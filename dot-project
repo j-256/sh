@@ -7,8 +7,8 @@
 #
 # Creates a .project XML file in each subdirectory of the given directory
 # (or the current directory), allowing them to be recognized as Salesforce
-# B2C Commerce (Demandware) cartridges by Eclipse/UX Studio. Each .project
-# file uses the subdirectory name as the project name
+# B2C Commerce (Demandware) cartridges by Eclipse/UX Studio/Prophet Debugger.
+# Each .project file uses the subdirectory name as the project name.
 
 _dot_project() {
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
@@ -28,7 +28,7 @@ _dot_project() {
         echo "DESCRIPTION"
         echo "  Creates a .project XML file in each subdirectory of the given directory"
         echo "  (or the current directory), allowing them to be recognized as Salesforce"
-        echo "  B2C Commerce (Demandware) cartridges by Eclipse/UX Studio."
+        echo "  B2C Commerce (Demandware) cartridges by Eclipse/UX Studio/Prophet Debugger."
         echo "  Each .project file uses the subdirectory name as the project name."
         echo "OPTIONS"
         echo "  -h, --help    Show this help message"
