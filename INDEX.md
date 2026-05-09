@@ -23,6 +23,7 @@ Each row's primary link opens the doc; the `script` link opens the raw script.
 | [`colorize-url`](docs/colorize-url.md?html) · [script](colorize-url) | Apply distinct ANSI colors to URL components for readability |
 | [`render-md`](docs/render-md.md?html) · [script](render-md) | Render markdown to HTML and open it in your browser (Node-based — see notes) |
 | [`convert-size`](docs/convert-size.md?html) · [script](convert-size) | Convert file sizes between SI (1000-based) and binary (1024-based) units |
+| [`baseconv`](docs/baseconv.md?html) · [script](baseconv) | Convert a number between numeral bases (binary, octal, decimal, hexadecimal) |
 
 ## Web & HTTP
 

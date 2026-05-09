@@ -1,0 +1,160 @@
+#!/bin/bash
+# baseconv - convert a number between numeral bases (binary, octal, decimal, hexadecimal)
+#
+# Usage:
+#   baseconv <from> <to> <number>
+#   baseconv -h
+
+_baseconv() {
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="baseconv" ;; esac
+
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+
+    _show_help() {
+        local s; [ -t 1 ] && s=$'\033[4m'
+        local r; [ -t 1 ] && r=$'\033[24m'
+        echo "NAME"
+        echo "  $SCRIPT_NAME - convert a number between numeral bases (binary, octal, decimal, hexadecimal)"
+        echo "SYNOPSIS"
+        echo "  $SCRIPT_NAME ${s}from${r} ${s}to${r} ${s}number${r}"
+        echo "  $SCRIPT_NAME -h"
+        echo "DESCRIPTION"
+        echo "  Converts ${s}number${r} from base ${s}from${r} to base ${s}to${r}. Each base can"
+        echo "  be given as a name, a single-letter abbreviation, or its numeric value:"
+        echo "    Binary:      bin, b, 2"
+        echo "    Octal:       oct, o, 8"
+        echo "    Decimal:     dec, d, 10"
+        echo "    Hexadecimal: hex, h, x, 16"
+        echo "  Hex digits in ${s}number${r} are case-insensitive on input and uppercased on output."
+        echo "OPTIONS"
+        echo "  -h, --help  Show this help message"
+        echo "EXAMPLES"
+        echo "  $SCRIPT_NAME hex dec ff           # 255"
+        echo "  $SCRIPT_NAME dec hex 255          # FF"
+        echo "  $SCRIPT_NAME bin hex 11111111     # FF"
+        echo "  $SCRIPT_NAME 16 2 deadbeef        # 11011110101011011011111011101111"
+        echo "EXIT STATUS"
+        echo "  0  Success"
+        echo "  2  Usage error (missing arg, invalid base, invalid digit for base)"
+        echo "  3  Dependency error (bc missing)"
+        echo "DEPENDENCIES"
+        echo "  bc"
+    }
+
+    _resolve_base() {
+        case "$1" in
+            bin|b|2)    printf '%s' 2  ;;
+            oct|o|8)    printf '%s' 8  ;;
+            dec|d|10)   printf '%s' 10 ;;
+            hex|h|x|16) printf '%s' 16 ;;
+            *) return 1 ;;
+        esac
+    }
+
+    _expand_short_opts() {
+        # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
+        # $2..$N = "$@"
+        # Populates _EXPANDED; caller does: set -- "${_EXPANDED[@]}"; unset _EXPANDED
+        local value_opts="$1"; shift
+        _EXPANDED=()
+        local passthru=""
+        local arg
+        local rest
+        local c
+        for arg in "$@"; do
+            if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
+            case "$arg" in
+                --)          passthru=1; _EXPANDED+=("$arg") ;;
+                --*|-|"")    _EXPANDED+=("$arg") ;;
+                -[a-zA-Z]?*)
+                    rest="${arg#-}"
+                    while [ -n "$rest" ]; do
+                        c="${rest%"${rest#?}"}"; rest="${rest#?}"
+                        _EXPANDED+=("-$c")
+                        case "$value_opts" in *"$c"*)
+                            [ -n "$rest" ] && _EXPANDED+=("$rest")
+                            rest="" ;;
+                        esac
+                    done ;;
+                *)        _EXPANDED+=("$arg") ;;
+            esac
+        done
+    }
+
+    __unset() {
+        unset -f __unset _show_help _error _resolve_base _expand_short_opts
+    }
+    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
+
+    _expand_short_opts "" "$@"
+    set -- "${_EXPANDED[@]}"; unset _EXPANDED
+
+    local args=()
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -h|--help) _show_help; return 0 ;;
+            --)        shift; while [ $# -gt 0 ]; do args+=("$1"); shift; done ;;
+            -*)        _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+            *)         args+=("$1"); shift ;;
+        esac
+    done
+
+    if [ "${#args[@]}" -lt 3 ]; then
+        _error "Must provide <from>, <to>, and <number>. Run \`$SCRIPT_NAME -h\` for usage"
+        return 2
+    fi
+    if [ "${#args[@]}" -gt 3 ]; then
+        _error "Too many arguments (expected 3, got ${#args[@]}). Run \`$SCRIPT_NAME -h\` for usage"
+        return 2
+    fi
+
+    # Dep check before any external-tool use (tr, grep) so a missing bc is reported as such
+    if ! command -v bc >/dev/null 2>&1; then
+        _error "bc is required"
+        return 3
+    fi
+
+    local from_in="${args[0]}"
+    local to_in="${args[1]}"
+    local num="${args[2]}"
+
+    local in_base
+    in_base="$(_resolve_base "$(printf '%s' "$from_in" | tr '[:upper:]' '[:lower:]')")" || {
+        _error "Invalid <from> base '$from_in' (valid: bin|b|2, oct|o|8, dec|d|10, hex|h|x|16). Run \`$SCRIPT_NAME -h\` for usage"
+        return 2
+    }
+    local out_base
+    out_base="$(_resolve_base "$(printf '%s' "$to_in" | tr '[:upper:]' '[:lower:]')")" || {
+        _error "Invalid <to> base '$to_in' (valid: bin|b|2, oct|o|8, dec|d|10, hex|h|x|16). Run \`$SCRIPT_NAME -h\` for usage"
+        return 2
+    }
+
+    # bc requires uppercase hex digits, and case-insensitive input is the friendlier default
+    local up_num; up_num="$(printf '%s' "$num" | tr '[:lower:]' '[:upper:]')"
+
+    # Validate digits against the input base so bc never sees a malformed number
+    local valid_pat
+    case "$in_base" in
+        2)  valid_pat='^[01]+$'     ;;
+        8)  valid_pat='^[0-7]+$'    ;;
+        10) valid_pat='^[0-9]+$'    ;;
+        16) valid_pat='^[0-9A-F]+$' ;;
+    esac
+    if ! printf '%s' "$up_num" | grep -Eq "$valid_pat"; then
+        _error "Invalid number '$num' for base $in_base. Run \`$SCRIPT_NAME -h\` for usage"
+        return 2
+    fi
+
+    # Set obase before ibase so the obase literal is read in base 10 instead of the new ibase
+    echo "obase=$out_base; ibase=$in_base; $up_num" | bc
+}
+
+_baseconv "$@"
+__baseconv_rc=$?
+unset -f _baseconv
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __baseconv_rc; return $__baseconv_rc"
+fi
+eval "unset __baseconv_rc; exit $__baseconv_rc"
