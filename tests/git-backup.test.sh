@@ -30,13 +30,14 @@ cwd="$(basename "$(pwd)")"
 # Simulate failures based on command and current directory
 case "$cwd:$*" in
     fail-stash:stash\ save\ --include-untracked*) exit 1 ;;
-    fail-checkout:checkout\ -b*) exit 1 ;;
+    fail-checkout:checkout\ --detach*) exit 1 ;;
     fail-apply:stash\ apply*) exit 1 ;;
     fail-add:add\ .*) exit 1 ;;
     fail-commit:commit\ -m*) exit 1 ;;
+    fail-tag:tag\ backup-*) exit 1 ;; # Match `tag <name>`, not `tag -d <name>`
     fail-push:push*) exit 1 ;;
-    fail-checkout-dash:checkout\ -) exit 1 ;; # Match exactly "checkout -", not "checkout -b"
-    fail-branch:branch\ -D*) exit 1 ;;
+    fail-checkout-dash:checkout\ -) exit 1 ;; # Match exactly "checkout -", not "checkout --detach"
+    fail-tag-d:tag\ -d*) exit 1 ;;
 esac
 
 # Conflict mode handling (for test-repo directory only)
@@ -91,9 +92,10 @@ SHIM
     mkdir -p "$TEST_DIR/fail-apply"
     mkdir -p "$TEST_DIR/fail-add"
     mkdir -p "$TEST_DIR/fail-commit"
+    mkdir -p "$TEST_DIR/fail-tag"
     mkdir -p "$TEST_DIR/fail-push"
     mkdir -p "$TEST_DIR/fail-checkout-dash"
-    mkdir -p "$TEST_DIR/fail-branch"
+    mkdir -p "$TEST_DIR/fail-tag-d"
     mkdir -p "$TEST_DIR/dir with spaces"
 }
 
@@ -118,26 +120,27 @@ test_basic_backup_flow() {
     run_script "$TEST_DIR/test-repo"
     assert_rc "basic backup" 0
     assert_contains "stash save called" "$(get_git_log)" "git stash save --include-untracked backup-2025-01-15-1430.45"
-    assert_contains "checkout -b called" "$(get_git_log)" "git checkout -b backup-2025-01-15-1430.45"
+    assert_contains "checkout --detach called" "$(get_git_log)" "git checkout --detach"
     assert_contains "stash apply called" "$(get_git_log)" "git stash apply"
     assert_contains "add called" "$(get_git_log)" "git add ."
     assert_contains "commit called" "$(get_git_log)" "git commit -m Backup 2025-01-15-1430.45"
-    assert_contains "push to origin" "$(get_git_log)" "git push origin backup-2025-01-15-1430.45"
+    assert_contains "tag created" "$(get_git_log)" "git tag backup-2025-01-15-1430.45"
+    assert_contains "push tag to origin" "$(get_git_log)" "git push origin refs/tags/backup-2025-01-15-1430.45"
     assert_contains "checkout dash" "$(get_git_log)" "git checkout -"
-    assert_contains "branch delete" "$(get_git_log)" "git branch -D backup-2025-01-15-1430.45"
+    assert_contains "tag deleted" "$(get_git_log)" "git tag -d backup-2025-01-15-1430.45"
     assert_stdout_contains "timestamp message" "Starting git repo backup 2025-01-15-1430.45"
 }
 
 test_custom_remote() {
     run_script "$TEST_DIR/test-repo" "upstream"
     assert_rc "custom remote" 0
-    assert_contains "push to upstream" "$(get_git_log)" "git push upstream backup-2025-01-15-1430.45"
+    assert_contains "push tag to upstream" "$(get_git_log)" "git push upstream refs/tags/backup-2025-01-15-1430.45"
 }
 
 test_default_remote_origin() {
     run_script "$TEST_DIR/test-repo"
     assert_rc "default remote" 0
-    assert_contains "uses origin" "$(get_git_log)" "git push origin backup-2025-01-15-1430.45"
+    assert_contains "uses origin" "$(get_git_log)" "git push origin refs/tags/backup-2025-01-15-1430.45"
 }
 
 test_cd_failure() {
@@ -152,10 +155,10 @@ test_stash_save_failure() {
     assert_stderr_contains "stash error" '[ERR][git-backup] `git stash save --include-untracked "backup-2025-01-15-1430.45"` failed'
 }
 
-test_checkout_b_failure() {
+test_checkout_detach_failure() {
     run_script "$TEST_DIR/fail-checkout"
-    assert_rc "checkout -b fails" 1
-    assert_stderr_contains "checkout error" '[ERR][git-backup] `git checkout -b "backup-2025-01-15-1430.45"` failed'
+    assert_rc "checkout --detach fails" 1
+    assert_stderr_contains "checkout error" '[ERR][git-backup] `git checkout --detach` failed'
 }
 
 test_stash_apply_failure() {
@@ -176,10 +179,16 @@ test_commit_failure() {
     assert_stderr_contains "commit error" '[ERR][git-backup] `git commit -m "Backup 2025-01-15-1430.45"` failed'
 }
 
+test_tag_failure() {
+    run_script "$TEST_DIR/fail-tag"
+    assert_rc "git tag fails" 1
+    assert_stderr_contains "tag error" '[ERR][git-backup] `git tag "backup-2025-01-15-1430.45"` failed'
+}
+
 test_push_failure() {
     run_script "$TEST_DIR/fail-push"
     assert_rc "git push fails" 1
-    assert_stderr_contains "push error" '[ERR][git-backup] `git push "origin" "backup-2025-01-15-1430.45"` failed'
+    assert_stderr_contains "push error" '[ERR][git-backup] `git push "origin" "refs/tags/backup-2025-01-15-1430.45"` failed'
 }
 
 test_checkout_dash_failure() {
@@ -188,10 +197,10 @@ test_checkout_dash_failure() {
     assert_stderr_contains "checkout - error" '[ERR][git-backup] `git checkout -` failed'
 }
 
-test_branch_delete_failure() {
-    run_script "$TEST_DIR/fail-branch"
-    assert_rc "branch -D fails" 1
-    assert_stderr_contains "branch error" '[ERR][git-backup] `git branch -D "backup-2025-01-15-1430.45"` failed'
+test_tag_delete_failure() {
+    run_script "$TEST_DIR/fail-tag-d"
+    assert_rc "tag -d fails" 1
+    assert_stderr_contains "tag -d error" '[ERR][git-backup] `git tag -d "backup-2025-01-15-1430.45"` failed'
 }
 
 test_stash_apply_conflict_path() {
@@ -225,7 +234,8 @@ test_backup_name_in_all_commands() {
     # Count occurrences of backup name in log
     local count
     count="$(echo "$log" | grep -c "backup-2025-01-15-1430.45" || true)"
-    # Should appear in: stash save, checkout -b, push, branch -D = 4 times (commit uses timestamp only)
+    # Should appear in: stash save, tag, push, tag -d = 4 times
+    # (commit uses timestamp only, no "backup-" prefix)
     if [ "$count" -ge 4 ]; then
         _ok "backup name appears in multiple commands"
     else
@@ -238,7 +248,7 @@ test_stash_apply_twice() {
     assert_rc "two stash applies" 0
     local log
     log="$(get_git_log)"
-    # First apply is after checkout -b, second is after checkout -
+    # First apply is after checkout --detach, second is after checkout -
     local count
     count="$(echo "$log" | grep -c "git stash apply" || true)"
     if [ "$count" -eq 2 ]; then
@@ -258,7 +268,7 @@ test_directory_with_spaces() {
 test_remote_with_special_chars() {
     run_script "$TEST_DIR/test-repo" "origin-2.0"
     assert_rc "remote special chars" 0
-    assert_contains "push to origin-2.0" "$(get_git_log)" "git push origin-2.0 backup-2025-01-15-1430.45"
+    assert_contains "push to origin-2.0" "$(get_git_log)" "git push origin-2.0 refs/tags/backup-2025-01-15-1430.45"
 }
 
 test_dry_run() {
@@ -301,7 +311,7 @@ SHIM
     local git_log
     git_log="$(get_git_log)"
     assert_not_contains "no stash save" "$git_log" "stash save"
-    assert_not_contains "no checkout -b" "$git_log" "checkout -b"
+    assert_not_contains "no checkout --detach" "$git_log" "checkout --detach"
     assert_not_contains "no push" "$git_log" "git push"
 }
 
