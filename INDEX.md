@@ -58,7 +58,7 @@ Each row's primary link opens the doc; the `script` link opens the raw script.
 
 | Tool | Description |
 |------|-------------|
-| [`pwgen`](docs/pwgen.md?html) · [script](pwgen) | Generate random passwords or strings with configurable length, charset, and exclusions |
+| [`genpw`](docs/genpw.md?html) · [script](genpw) | Generate random passwords or strings with configurable length, charset, and exclusions |
 | [`pkce`](docs/pkce.md?html) · [script](pkce) | Generate a PKCE code verifier and its SHA256 challenge for OAuth2 authorization flows |
 | [`client-credentials`](docs/client-credentials.md?html) · [script](client-credentials) | Fetch an OAuth2 access token via the `client_credentials` grant (defaults tuned for SFCC, works against any token URL) |
 

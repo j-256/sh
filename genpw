@@ -1,9 +1,9 @@
 #!/bin/bash
-# pwgen - Generate a random password and print it to stdout
+# genpw - Generate a random password and print it to stdout
 #
 # Usage:
-#   pwgen [-l|--length length] [-c|--charset charset] [-e|--exclude charset] [length]
-#   pwgen -h
+#   genpw [-l|--length length] [-c|--charset charset] [-e|--exclude charset] [length]
+#   genpw -h
 #
 # Options:
 #   -l, --length   Generate a password with [length] characters        Default: 32
@@ -11,10 +11,10 @@
 #   -e, --exclude  `tr` charset to exclude from the password           Default: (None)
 #   -h, --help     Show help message
 
-_pwgen() {
+_genpw() {
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
-    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="pwgen" ;; esac
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="genpw" ;; esac
     # Default 32 characters (arbitrary "long" length)
     local length=32
     # Generate from alphanumeric + OWASP password special characters: https://owasp.org/www-community/password-special-characters
@@ -357,10 +357,10 @@ _pwgen() {
     echo "$password"
 }
 
-_pwgen "$@"
-__pwgen_rc=$?
-unset -f _pwgen
+_genpw "$@"
+__genpw_rc=$?
+unset -f _genpw
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
-    eval "unset __pwgen_rc; return $__pwgen_rc"
+    eval "unset __genpw_rc; return $__genpw_rc"
 fi
-eval "unset __pwgen_rc; exit $__pwgen_rc"
+eval "unset __genpw_rc; exit $__genpw_rc"

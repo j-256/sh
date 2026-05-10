@@ -1,17 +1,17 @@
 #!/bin/bash
-# pwgen.test.sh - Tests for pwgen
+# genpw.test.sh - Tests for genpw
 # shellcheck source-path=SCRIPTDIR disable=SC2329
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=test-helpers.sh
 source "$SCRIPT_DIR/test-helpers.sh"
 
-UNDER_TEST="$SCRIPT_DIR/../pwgen"
+UNDER_TEST="$SCRIPT_DIR/../genpw"
 
 # --- helpers ---
 
-# Create a modified version of pwgen that uses a test data source
-setup_test_pwgen() {
+# Create a modified version of genpw that uses a test data source
+setup_test_genpw() {
     # Create fake_random with many repetitions of all printable ASCII
     # Build character set: printable ASCII 32-126
     local all_chars
@@ -28,19 +28,19 @@ setup_test_pwgen() {
         } >> "$TEST_DIR/fake_random"
     done
 
-    # Copy pwgen to a subdir under its real basename so that the script's
+    # Copy genpw to a subdir under its real basename so that the script's
     # $SCRIPT_NAME (derived via basename) matches the production value
     local fake_random_path="$TEST_DIR/fake_random"
     mkdir -p "$TEST_DIR/bin"
-    sed "s|</dev/random|<\"$fake_random_path\"|g" "$UNDER_TEST" > "$TEST_DIR/bin/pwgen"
-    chmod +x "$TEST_DIR/bin/pwgen"
-    UNDER_TEST="$TEST_DIR/bin/pwgen"
+    sed "s|</dev/random|<\"$fake_random_path\"|g" "$UNDER_TEST" > "$TEST_DIR/bin/genpw"
+    chmod +x "$TEST_DIR/bin/genpw"
+    UNDER_TEST="$TEST_DIR/bin/genpw"
 }
 
 # --- shims ---
 
 write_shims() {
-    setup_test_pwgen
+    setup_test_genpw
 }
 
 # --- test cases ---
@@ -59,32 +59,32 @@ test_help_output() {
 test_missing_length_value() {
     run_script --length
     assert_rc "missing length" 2
-    assert_stderr_contains "error message" "[ERR][pwgen] --length specified but no length provided"
+    assert_stderr_contains "error message" "[ERR][genpw] --length specified but no length provided"
 }
 
 test_missing_charset_value() {
     run_script --charset
     assert_rc "missing charset" 2
-    assert_stderr_contains "error message" "[ERR][pwgen] --charset specified but no charset provided"
+    assert_stderr_contains "error message" "[ERR][genpw] --charset specified but no charset provided"
 }
 
 test_missing_exclude_value() {
     run_script --exclude
     assert_rc "missing exclude" 2
-    assert_stderr_contains "error message" "[ERR][pwgen] --exclude specified but no charset provided"
+    assert_stderr_contains "error message" "[ERR][genpw] --exclude specified but no charset provided"
 }
 
 test_unknown_option() {
     run_script --invalid
     assert_rc "unknown option" 2
-    assert_stderr_contains "error message" "[ERR][pwgen] Unknown argument '--invalid'"
+    assert_stderr_contains "error message" "[ERR][genpw] Unknown argument '--invalid'"
 }
 
 test_empty_charset_after_exclusions() {
     # Exclude all alphanumeric and punctuation
     run_script --charset "abc" --exclude "abc"
     assert_rc "empty charset" 5
-    assert_stderr_contains "error message" "[ERR][pwgen] Charset is empty after exclusions"
+    assert_stderr_contains "error message" "[ERR][genpw] Charset is empty after exclusions"
 }
 
 test_default_length() {

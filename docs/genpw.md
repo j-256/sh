@@ -1,17 +1,15 @@
-# pwgen
+# genpw
 
-[View script](../pwgen)
+[View script](../genpw)
 
 Generate random passwords or strings with configurable length, charset, and character exclusions.
 
-Especially useful for sites with restrictive password requirements -- "must be exactly 12 characters, lowercase and numbers only, no special characters" becomes `pwgen -c '[:lower:][:digit:]' 12`.
-
-Unlike the popular Linux `pwgen` utility (Tollef Fog Heen's tool from the 2000s), this is a simpler, customizable generator focused on charset flexibility rather than pronounceability.
+Especially useful for sites with restrictive password requirements -- "must be exactly 12 characters, lowercase and numbers only, no special characters" becomes `genpw -c '[:lower:][:digit:]' 12`.
 
 ## Quick start
 
 ```
-$ pwgen
+$ genpw
 eOC3OCKtXbLGQ=}q?GC)p&8MqhO&e|2/
 ```
 
@@ -22,42 +20,42 @@ Default: 32 characters from alphanumeric + punctuation (equivalent to `[:alnum:]
 **Generate a 12-character password:**
 
 ```
-$ pwgen 12
+$ genpw 12
 il6ZtXx2%/NC
 ```
 
 **Numeric PIN (8 digits):**
 
 ```
-$ pwgen -c '[:digit:]' 8
+$ genpw -c '[:digit:]' 8
 50743836
 ```
 
 **Lowercase letters and numbers only** (common restriction):
 
 ```
-$ pwgen -c '[:lower:][:digit:]' -l 10
+$ genpw -c '[:lower:][:digit:]' -l 10
 j27n9o641w
 ```
 
 **Exclude ambiguous characters** (0/O, 1/l, I) for readability:
 
 ```
-$ pwgen -e '0O1lI' 16
+$ genpw -e '0O1lI' 16
 v'k8p=39('~{cEfL
 ```
 
 **Exclude special characters that break certain parsers:**
 
 ```
-$ pwgen -l 16 -e '!@#$%^&*()'
+$ genpw -l 16 -e '!@#$%^&*()'
 lW?mj";.xO]ZPA5w
 ```
 
 **Uppercase only** (rare but occasionally required):
 
 ```
-$ pwgen -c '[:upper:]' 6
+$ genpw -c '[:upper:]' 6
 FZSAQS
 ```
 
@@ -83,8 +81,8 @@ Mix and match: `[:lower:][:digit:]_-` gives you lowercase, digits, underscore, a
 Hyphenated ranges like `a-z` or `0-9` expand in place at the top level or inside bracket expressions:
 
 ```bash
-pwgen -c 'a-z0-9' 10         # lowercase + digits
-pwgen -c 'A-Fa-f0-9' 16      # hex characters
+genpw -c 'a-z0-9' 10         # lowercase + digits
+genpw -c 'A-Fa-f0-9' 16      # hex characters
 ```
 
 ### Bracket expressions
@@ -92,9 +90,9 @@ pwgen -c 'A-Fa-f0-9' 16      # hex characters
 Group characters, ranges, and POSIX classes together with `[...]`:
 
 ```bash
-pwgen -c '[0-9ab]' 12                # digits plus a and b
-pwgen -c '[[:lower:][:digit:]]' 12   # same as [:lower:][:digit:]
-pwgen -c '[A-Za-z0-9_]' 12           # identifier-safe chars
+genpw -c '[0-9ab]' 12                # digits plus a and b
+genpw -c '[[:lower:][:digit:]]' 12   # same as [:lower:][:digit:]
+genpw -c '[A-Za-z0-9_]' 12           # identifier-safe chars
 ```
 
 Unclosed brackets produce a clear error (exit 6).
@@ -107,13 +105,13 @@ The `-e` / `--exclude` flag removes characters from the final charset. Useful fo
 
 ```bash
 # Avoid shell-sensitive characters
-pwgen -e '\$`"' 20
+genpw -e '\$`"' 20
 
 # Classic ambiguous set
-pwgen -e '0O1lI' 16
+genpw -e '0O1lI' 16
 ```
 
-Exclusion applies after charset expansion, so `pwgen -c '[:alnum:]' -e '0O1lI'` works as expected.
+Exclusion applies after charset expansion, so `genpw -c '[:alnum:]' -e '0O1lI'` works as expected.
 
 ---
 
@@ -128,7 +126,7 @@ Exclusion applies after charset expansion, so `pwgen -c '[:alnum:]' -e '0O1lI'` 
 | `-e, --exclude CHARSET` | Exclude characters from the charset (default: none) |
 | `-h, --help` | Display help |
 
-Positional argument: If a single number is provided without flags, it's treated as the length (e.g. `pwgen 16`).
+Positional argument: If a single number is provided without flags, it's treated as the length (e.g. `genpw 16`).
 
 ### Exit codes
 

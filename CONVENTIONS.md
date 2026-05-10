@@ -233,7 +233,7 @@ Usage `--help` should document exactly the codes the script uses, with short des
 | `3` | Dependency error (required tool not installed) |
 | `4`+ | Script-specific (document in `--help` EXIT STATUS section) |
 
-Reserve `2` strictly for usage/precondition issues so callers can distinguish "the user invoked me wrong" from "something went wrong while running". Reserve `3` for missing external tools. Scripts with domain-specific failures (e.g. `pwgen`'s `5` for empty charset, `6` for invalid charset) extend with `4`+.
+Reserve `2` strictly for usage/precondition issues so callers can distinguish "the user invoked me wrong" from "something went wrong while running". Reserve `3` for missing external tools. Scripts with domain-specific failures (e.g. `genpw`'s `5` for empty charset, `6` for invalid charset) extend with `4`+.
 
 Early-exit validation pattern:
 

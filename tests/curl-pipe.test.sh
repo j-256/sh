@@ -35,7 +35,7 @@ SCRIPTS=(
     dw-jwt explode find-zone-by-name gen-catalog generate-p12
     get git-add-nonsub git-backup httpcode inflate install-bash
     notify ods-usage pin-dns pkce progress
-    prompt propfind-p12 pwa-prereqs pwgen s
+    prompt propfind-p12 pwa-prereqs genpw s
     screenshot-rename slow-server snippet spf-find-ip stats
     swap tsd unbak verify-p12
 )
@@ -82,7 +82,8 @@ procsub_source_script() {
 # Shared assertions: help exits 0, mentions the canonical name, and
 # doesn't leak an interpreter name or digit in place of SCRIPT_NAME
 assert_help_clean() {
-    local s="$1" label="$2"
+    local s="$1"
+    local label="$2"
     local combined
     assert_rc "$s: $label exits 0" 0
     assert_stderr_not_contains "$s: $label: no 'return: can only' error" "return: can only"
