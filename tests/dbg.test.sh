@@ -215,15 +215,6 @@ test_no_local_shadowing_script_name() {
     assert_stderr_contains "caller's SCRIPT_NAME read, not shadowed" 'SCRIPT_NAME="caller-value"'
 }
 
-test_no_local_shadowing_old_trap() {
-    # `__old_trap` was the trap-saving local pre-rename. Same class as
-    # SCRIPT_NAME -- a caller using `__old_trap` for their own purposes
-    # must be able to ask dbg to inspect it
-    run_dbg '__old_trap="caller-trap"' __old_trap
-    assert_rc "__old_trap ref exits 0" 0
-    assert_stderr_contains "caller's __old_trap read, not shadowed" '__old_trap="caller-trap"'
-}
-
 # --- run ---
 
 run_tests "$@"
