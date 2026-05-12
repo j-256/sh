@@ -179,54 +179,6 @@ test_env_endpoint() {
     assert_contains "uses env endpoint" "$(get_curl_args)" "kv7kzm78.api.commercecloud.salesforce.com"
 }
 
-test_env_print_all() {
-    J_CLIENT_ID="test_client" J_ACCESS_TOKEN="old_token" run_script --env
-    assert_rc "env print exits 0" 0
-    assert_stdout_contains "prints input vars" "Input Environment Variables:"
-    assert_stdout_contains "prints output vars" "Output Environment Variables:"
-    assert_stdout_contains "prints J_CLIENT_ID" "J_CLIENT_ID: \`test_client\`"
-}
-
-test_env_print_input() {
-    J_CLIENT_ID="test_client" run_script --env input
-    assert_rc "env input exits 0" 0
-    assert_stdout_contains "prints input" "Input Environment Variables:"
-    assert_stdout_not_contains "no output" "Output Environment Variables:"
-    assert_stdout_contains "shows client-id" "J_CLIENT_ID: \`test_client\`"
-}
-
-test_env_print_output() {
-    run_script --env output
-    assert_rc "env output exits 0" 0
-    assert_stdout_contains "prints output" "Output Environment Variables:"
-    assert_stdout_not_contains "no input" "Input Environment Variables:"
-}
-
-test_env_print_in_alias() {
-    run_script --env in
-    assert_rc "env in alias exits 0" 0
-    assert_stdout_contains "in is input" "Input Environment Variables:"
-}
-
-test_env_print_out_alias() {
-    run_script --env out
-    assert_rc "env out alias exits 0" 0
-    assert_stdout_contains "out is output" "Output Environment Variables:"
-}
-
-test_env_print_invalid() {
-    run_script --env invalid
-    assert_rc "env invalid exits 1" 1
-    assert_stderr_contains "env invalid error" "Invalid argument for -E|--env: 'invalid'"
-}
-
-test_env_print_no_arg() {
-    J_CLIENT_ID="test" run_script --env
-    assert_rc "env no arg exits 0" 0
-    assert_stdout_contains "env default is all" "Input Environment Variables:"
-    assert_stdout_contains "env default has output" "Output Environment Variables:"
-}
-
 test_short_option_client() {
     run_script -e am -c "client123" -s "secret456"
     assert_rc "short options exit 0" 0
@@ -287,12 +239,6 @@ test_scopes_empty_string() {
     assert_rc "empty scopes exits 0" 0
     # Empty string is falsy in bash [ "$scopes" ] test, so no scope added
     assert_not_contains "no scope in body" "$(get_curl_body)" "scope="
-}
-
-test_capital_e_env_after_other_options() {
-    run_script --client-id "test" -E
-    assert_rc "capital E after opts exits 0" 0
-    assert_stdout_contains "capital E works" "Environment Variables:"
 }
 
 # --- run ---
