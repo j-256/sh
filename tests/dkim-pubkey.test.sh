@@ -336,6 +336,65 @@ test_server_default_no_at() {
     assert_stderr_not_contains "no @ in stderr command line" "@"
 }
 
+test_quiet_basic() {
+    run_script -q "test" "example.com"
+    assert_rc "quiet basic exits 0" 0
+    assert_stdout_contains "key still on stdout" "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1234567890abcdefghijklmnopqrstuvwxyz"
+    # Stderr should be empty in quiet mode on success
+    local stderr
+    stderr="$(get_stderr)"
+    assert_eq "stderr empty in quiet mode" "$stderr" ""
+}
+
+test_quiet_long_flag() {
+    run_script --quiet "test" "example.com"
+    assert_rc "--quiet long flag exits 0" 0
+    local stderr
+    stderr="$(get_stderr)"
+    assert_eq "stderr empty with --quiet" "$stderr" ""
+}
+
+test_quiet_validate_success() {
+    run_script -q --validate "test" "example.com"
+    assert_rc "quiet+validate success exits 0" 0
+    assert_stdout_contains "key on stdout" "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1234567890abcdefghijklmnopqrstuvwxyz"
+    # No [INF] success line in quiet mode
+    assert_stderr_not_contains "no [INF] in quiet success" "[INF]"
+    # And no [ERR] either, since it succeeded
+    assert_stderr_not_contains "no [ERR] in quiet success" "[ERR]"
+}
+
+test_quiet_validate_failure_keeps_error() {
+    run_script -q --validate "bad-b64" "example.com"
+    assert_rc "quiet+validate failure exits 5" 5
+    # Errors still surface in quiet mode — the user wants to know about failures
+    assert_stderr_contains "[ERR] still surfaces in quiet" "Validation failed"
+    # Key still printed (so user can see what was found)
+    assert_stdout_contains "key still on stdout" "MIIBIjANBgkqhkiG9w0BAQE@AAOCAQ8AMIIBCgKCAQEA"
+}
+
+test_quiet_validate_escape_hint_kept() {
+    run_script -q --validate "escape-lf" "example.com"
+    assert_rc "quiet+escape-lf exits 5" 5
+    # The escape hint is failure-context, not happy-path info — keep it in quiet mode
+    assert_stderr_contains "escape hint kept in quiet" "literal LF (\\010)"
+}
+
+test_quiet_dns_empty_keeps_error() {
+    run_script -q "empty" "example.com"
+    assert_rc "quiet empty DNS exits 1" 1
+    assert_stderr_contains "[ERR] still surfaces" "DNS response empty"
+}
+
+test_quiet_no_dig_echo() {
+    run_script -q "test" "example.com"
+    assert_rc "quiet exits 0" 0
+    # The "$ dig +short TXT ..." echo line must not appear
+    assert_stderr_not_contains "no dig command echo" "dig +short TXT"
+    # Nor the DNS response body
+    assert_stderr_not_contains "no DNS body" "v=DKIM1"
+}
+
 test_no_validate_skips_openssl_check() {
     # Without --validate, missing openssl must not matter
     rm -f "$SHIM_DIR/openssl"

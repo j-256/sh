@@ -23,17 +23,19 @@ The last line on stdout is the extracted public key, ready to save to a file or 
 
 ## Common examples
 
-**Capture just the key** (silence stderr):
+**Capture just the key** (use `-q` instead of `2>/dev/null`):
 
 ```
-$ dkim-pubkey s1 github.com 2>/dev/null
+$ dkim-pubkey -q s1 github.com
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyn3fMCVpb7ryIRKOGXhXVGYmsWUitNlSckqGHOwNFZgFadplOrD+Qzf1XQkP7MH/VB/97DsAAJGtEXW1Uq71Hjnfr/DuBN/YfjF/gU70qEFb7q1sdIiNtjFL2TkOpoW+X/bhhPNheW/fYwyFb6ZHFM6LTgXyuimWRHTOUP3VjZzhNVda79nt+2WZYbS4l8HdMgWpTNHjpVw5PtXESA9KBg/evSRk5fIaXIX5eRXW3baoV9yVzD8O29/IL/DiSk+yNvaO0EHL5c4yGuZJhGzvpiznb2IDVdemJK4Dqzdy5FTN/SGYZhAEr7MguG3Z314hMS2scgMsOMgB64uj/6+6UwIDAQAB
 ```
+
+`-q` suppresses the dig command echo, DNS response body, and validation success info. Errors still go to stderr, so failures aren't hidden. (`2>/dev/null` still works if you want absolute silence regardless of outcome.)
 
 **Save the key to a file:**
 
 ```bash
-dkim-pubkey selector1 example.com 2>/dev/null > dkim-key.txt
+dkim-pubkey -q selector1 example.com > dkim-key.txt
 ```
 
 **Check multiple selectors** for the same domain to see which one is active:
@@ -49,7 +51,7 @@ done
 **Verify a DKIM key matches what you expect** (compare against a known good key):
 
 ```bash
-current_key=$(dkim-pubkey s1 yourdomain.com 2>/dev/null)
+current_key=$(dkim-pubkey -q s1 yourdomain.com)
 if [ "$current_key" = "$EXPECTED_KEY" ]; then
   echo "Key matches"
 else
@@ -129,6 +131,7 @@ dkim-pubkey s1 github.com @9.9.9.9           # Quad9
 | `domain` | Domain name (second positional argument, required) |
 | `-s, --server <host>` | Query `<host>` instead of the system resolver (also `@host`) |
 | `-V, --validate` | Verify the extracted key is a well-formed public key |
+| `-q, --quiet` | Suppress dig command echo, DNS response body, and validation success info (errors still surface) |
 | `-h, --help` | Display help message |
 
 ### Exit codes

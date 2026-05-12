@@ -8,6 +8,7 @@
 # Options:
 #   -s, --server <host>  Query <host> instead of the system resolver (also @host)
 #   -V, --validate       Verify the extracted key is a well-formed public key
+#   -q, --quiet          Suppress dig command echo, DNS response body, and validation success info
 #   -h, --help           Show help message
 #
 # Queries the TXT record at <selector>._domainkey.<domain>, prints the raw
@@ -37,12 +38,14 @@ _dkim_pubkey() (
         echo "OPTIONS"
         echo "  -s, --server ${s}host${r}  Query ${s}host${r} instead of the system resolver (also @${s}host${r})"
         echo "  -V, --validate     Verify the extracted key is a well-formed public key"
+        echo "  -q, --quiet        Suppress dig command echo, DNS response body, and validation success info (errors still surface)"
         echo "  -h, --help         Show this help message"
         echo "EXAMPLE"
         echo "  $SCRIPT_NAME dkim-prd gmail.com"
         echo "  $SCRIPT_NAME --validate s1 github.com"
         echo "  $SCRIPT_NAME s1 github.com @8.8.8.8           # Google DNS"
         echo "  $SCRIPT_NAME --server 1.1.1.1 s1 github.com   # Cloudflare DNS"
+        echo "  $SCRIPT_NAME -q s1 github.com > key.txt       # Just the key, no stderr noise"
         echo "CAVEATS"
         echo "  Selector must be known in advance; check SPF/DMARC records,"
         echo "  email headers, or the domain's DNS provider."
@@ -93,11 +96,13 @@ _dkim_pubkey() (
 
     local validate=""
     local server=""
+    local quiet=""
     local args=()
     while [ $# -gt 0 ]; do
         case "$1" in
             -h|--help)     _show_help; return 0 ;;
             -V|--validate) validate=1; shift ;;
+            -q|--quiet)    quiet=1; shift ;;
             -s|--server)
                 [ -n "${2-}" ] || { _error "--server requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 [ -z "$server" ] || { _error "Multiple --server not allowed (already set to '$server'). Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
@@ -136,17 +141,21 @@ _dkim_pubkey() (
     local dig_args=(+short TXT "$dns_hostname")
     [ -n "$server" ] && dig_args=("@$server" "${dig_args[@]}")
     local dns_response; dns_response="$(dig "${dig_args[@]}")"
-    if [ -n "$server" ]; then
-        echo "\$ dig @$server +short TXT \"$dns_hostname\"" >&2
-    else
-        echo "\$ dig +short TXT \"$dns_hostname\"" >&2
+    if [ -z "$quiet" ]; then
+        if [ -n "$server" ]; then
+            echo "\$ dig @$server +short TXT \"$dns_hostname\"" >&2
+        else
+            echo "\$ dig +short TXT \"$dns_hostname\"" >&2
+        fi
     fi
     if [ -z "$dns_response" ]; then
         _error "DNS response empty"
         return 1
     fi
-    echo "$dns_response" >&2
-    echo >&2
+    if [ -z "$quiet" ]; then
+        echo "$dns_response" >&2
+        echo >&2
+    fi
     # CNAME-fronted records (Sendgrid, Mailgun, etc.) cause `dig +short TXT` to
     # return both the CNAME target and the TXT body on separate lines. Pick out
     # only the line that actually contains p=, then strip quoting/joining
@@ -203,13 +212,15 @@ _dkim_pubkey() (
             return 5
         fi
 
-        # Parse "Public-Key: (2048 bit)" / "RSA Public-Key:" / "ED25519 Public-Key:" etc.
-        local key_summary
-        key_summary="$(printf '%s' "$pkey_text" | grep -m1 -iE 'public-key' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
-        [ -z "$key_summary" ] && key_summary="public key"
         echo "$pubkey"
-        echo >&2
-        _info "Key valid ($key_summary)"
+        if [ -z "$quiet" ]; then
+            # Parse "Public-Key: (2048 bit)" / "RSA Public-Key:" / "ED25519 Public-Key:" etc.
+            local key_summary
+            key_summary="$(printf '%s' "$pkey_text" | grep -m1 -iE 'public-key' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+            [ -z "$key_summary" ] && key_summary="public key"
+            echo >&2
+            _info "Key valid ($key_summary)"
+        fi
         return 0
     fi
 
