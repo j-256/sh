@@ -537,6 +537,32 @@ List non-universal tools in the `DEPENDENCIES` section of `--help` and the `.md`
 
 Non-universal tools that **do** warrant listing: `jq`, `curl`, `openssl`, `dig`, `bc`, `ipcalc`, `fswatch`, `osascript`, `pbpaste`, `stty`, `defaults`, `brew`, `chsh`, `git`, `sudo`, `base64`, and anything platform-specific.
 
+### Conditional dependencies
+
+Some tools are needed only when a specific flag or mode is used. Place the `command -v` check inside the gated code path -- after argument parsing, immediately before the first call -- not unconditionally at the top of the script. A user who never reaches for `--validate` should not be blocked by a missing `openssl`.
+
+```bash
+if [ "$validate" ]; then
+    if ! command -v openssl >/dev/null 2>&1; then
+        _error "openssl is required"
+        return 3
+    fi
+    # ... use openssl
+fi
+```
+
+The error message uses the canonical `"<tool> is required"` phrasing -- no need to mention the gating flag, since the tool is only invoked when the flag is set and the user already knows what they asked for. The exit code remains `3` (dependency error).
+
+In the `--help` `DEPENDENCIES` section and the `.md` Dependencies list, mark conditional tools with a parenthetical noting when they're needed:
+
+```
+DEPENDENCIES
+  dig
+  openssl (required only for --validate)
+```
+
+This keeps the unconditional deps prominent while making the conditional ones discoverable.
+
 ## Commit Style
 
 - **Subject format:** `Update <script> - <short description>` (leading verb "Update", no final period). For truly new additions, `Add <script> - <short description>`.
