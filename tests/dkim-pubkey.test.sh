@@ -39,15 +39,15 @@ case "$query" in
         printf '%s\n' '"v=DKIM1; k=rsa; " "p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC3QEKyU1fSma0axspqYK5iAj+54lsAg"'
         ;;
     bad-b64._domainkey.*)
-        # Contains '@' — not in base64 alphabet, fails regex stage
+        # Contains '@' -- not in base64 alphabet, fails regex stage
         printf '%s\n' '"v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQE@AAOCAQ8AMIIBCgKCAQEA"'
         ;;
     escape-lf._domainkey.*)
-        # Trailing dig-style \010 (LF) escape — common DNS-editor artifact
+        # Trailing dig-style \010 (LF) escape -- common DNS-editor artifact
         printf '%s\n' '"v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1234567890\010"'
         ;;
     bad-key._domainkey.*)
-        # Valid base64 but trivially short — passes regex, fails openssl-shim stage
+        # Valid base64 but trivially short -- passes regex, fails openssl-shim stage
         printf '%s\n' '"v=DKIM1; k=rsa; p=AAAA"'
         ;;
     cname._domainkey.*)
@@ -224,8 +224,8 @@ test_validate_dig_escape_hint() {
     run_script --validate "escape-lf" "example.com"
     assert_rc "escape-lf exits 5" 5
     assert_stderr_contains "regex-stage error" "Validation failed: key is not valid base64"
-    assert_stderr_contains "decoded LF hint" "literal LF (\\010)"
-    assert_stderr_contains "hint mentions DNS editor" "stray LF in the DNS provider's editor"
+    assert_stderr_contains "decoded newline hint" "literal newline (\\010)"
+    assert_stderr_contains "hint mentions DNS editor" "stray newline in the DNS provider's editor"
 }
 
 test_validate_bad_key_bytes() {
@@ -304,7 +304,7 @@ test_server_equals_form() {
 
 test_server_missing_value() {
     run_script --server "test" "example.com"
-    # --server consumes "test" as the value, leaving only "example.com" — domain missing
+    # --server consumes "test" as the value, leaving only "example.com" -- domain missing
     assert_rc "--server consumes next arg, then domain missing" 2
     assert_stderr_contains "domain missing error" "domain is required"
 }
@@ -367,7 +367,7 @@ test_quiet_validate_success() {
 test_quiet_validate_failure_keeps_error() {
     run_script -q --validate "bad-b64" "example.com"
     assert_rc "quiet+validate failure exits 5" 5
-    # Errors still surface in quiet mode — the user wants to know about failures
+    # Errors still surface in quiet mode -- the user wants to know about failures
     assert_stderr_contains "[ERR] still surfaces in quiet" "Validation failed"
     # Key still printed (so user can see what was found)
     assert_stdout_contains "key still on stdout" "MIIBIjANBgkqhkiG9w0BAQE@AAOCAQ8AMIIBCgKCAQEA"
@@ -376,8 +376,8 @@ test_quiet_validate_failure_keeps_error() {
 test_quiet_validate_escape_hint_kept() {
     run_script -q --validate "escape-lf" "example.com"
     assert_rc "quiet+escape-lf exits 5" 5
-    # The escape hint is failure-context, not happy-path info — keep it in quiet mode
-    assert_stderr_contains "escape hint kept in quiet" "literal LF (\\010)"
+    # The escape hint is failure-context, not happy-path info -- keep it in quiet mode
+    assert_stderr_contains "escape hint kept in quiet" "literal newline (\\010)"
 }
 
 test_quiet_dns_empty_keeps_error() {
