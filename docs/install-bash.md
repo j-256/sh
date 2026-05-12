@@ -22,7 +22,7 @@ Password:
 
 When prompted for your password, that's `sudo` asking permission to modify `/etc/shells` (the system-level list of allowed shells). The `chsh` step at the end also prompts for your password but uses macOS authentication directly (not sudo).
 
-After the script completes, restart Terminal or open a new tab to start using the new shell. You can verify which bash is running with:
+After the script completes, restart Terminal or open a new tab to pick up the new shell and the `brew shellenv` setup that was appended to `~/.bash_profile`. The current shell still has the old `PATH` and the old login shell -- the change only takes effect in new sessions. You can verify which bash is running with:
 
 ```bash
 $ echo $BASH_VERSION

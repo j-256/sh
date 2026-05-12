@@ -41,6 +41,8 @@ Node.js installed successfully.
 --- FINISH node/npm ---
 ```
 
+After `--install` completes, the new tools won't be on `PATH` in your current shell. The Homebrew and nvm installers append setup snippets to your shell's rc files, which only take effect in new sessions -- open a new terminal tab to use `brew`, `nvm`, and `node`.
+
 ## What it checks/installs
 
 In order:
