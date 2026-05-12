@@ -88,7 +88,7 @@ If the CNAME target itself does not resolve to a TXT record, `dig` returns nothi
 
 **Validating the extracted key:**
 
-Pass `--validate` (or `-V`) to verify the key is well-formed. The check has two stages: a strict base64 shape check (alphabet, padding, no whitespace), then a structural decode via `openssl pkey -pubin -inform DER` to confirm the bytes parse as a public key. On success, an `[INF]` line summarizing the key (algorithm and size) is printed to stderr; the key still goes to stdout. On failure, the key is still printed (so you can see what was found) and the script exits 5.
+Pass `--validate` (or `-V`) to verify the key is well-formed. The check has two stages: a strict base64 shape check (alphabet, padding, no whitespace), then a structural decode via `openssl pkey -pubin -inform DER` to confirm the bytes parse as a public key. The key is always printed to stdout; the validation verdict is printed to stderr after the key, so the diagnostic position is consistent on success (`[INF]`) and failure (`[ERR]`, exit 5).
 
 ```
 $ dkim-pubkey --validate s1 github.com
@@ -96,8 +96,9 @@ $ dig +short TXT "s1._domainkey.github.com"
 s1.domainkey.u51742174.wl175.sendgrid.net.
 "k=rsa; t=s; p=MIIBIjANBgkqhkiG9w0BAQ..."
 
-[INF][dkim-pubkey] Key valid (Public-Key: (2048 bit))
 MIIBIjANBgkqhkiG9w0BAQ...
+
+[INF][dkim-pubkey] Key valid (Public-Key: (2048 bit))
 ```
 
 DKIM records sometimes get corrupted in transit -- a stray space, a truncated line, or a copy/paste error in the DNS provider's editor. The base64 stage catches encoding-level damage; the openssl stage catches structurally invalid keys (right alphabet, wrong bytes). `openssl` is required only when `--validate` is used.

@@ -161,6 +161,7 @@ _dkim_pubkey() (
         local len=${#pubkey}
         if ! printf '%s' "$pubkey" | grep -Eq '^[A-Za-z0-9+/]+=*$' || [ $((len % 4)) -ne 0 ]; then
             echo "$pubkey"
+            echo >&2
             _error "Validation failed: key is not valid base64 (alphabet/padding)"
             return 5
         fi
@@ -175,6 +176,7 @@ _dkim_pubkey() (
         local pkey_text
         if ! pkey_text="$(printf '%s' "$pubkey" | base64 -d 2>/dev/null | openssl pkey -pubin -inform DER -text -noout 2>/dev/null)"; then
             echo "$pubkey"
+            echo >&2
             _error "Validation failed: key bytes do not parse as a public key"
             return 5
         fi
@@ -183,7 +185,10 @@ _dkim_pubkey() (
         local key_summary
         key_summary="$(printf '%s' "$pkey_text" | grep -m1 -iE 'public-key' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
         [ -z "$key_summary" ] && key_summary="public key"
+        echo "$pubkey"
+        echo >&2
         _info "Key valid ($key_summary)"
+        return 0
     fi
 
     echo "$pubkey"

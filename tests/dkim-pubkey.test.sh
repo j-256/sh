@@ -190,6 +190,12 @@ test_validate_happy_path() {
     assert_rc "validate happy path exits 0" 0
     assert_stdout_contains "key still on stdout" "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1234567890abcdefghijklmnopqrstuvwxyz"
     assert_stderr_contains "info line on success" "[INF][dkim-pubkey] Key valid"
+    # Diagnostic comes AFTER the key on both success and failure (consistent
+    # ordering); [INF] line preceded by a blank so the key on stdout doesn't
+    # visually run into it
+    local before_inf
+    before_inf="$(get_stderr | grep -B1 '\[INF\]' | head -1)"
+    assert_eq "blank line precedes [INF]" "$before_inf" ""
 }
 
 test_validate_short_flag() {
@@ -203,6 +209,11 @@ test_validate_bad_base64() {
     assert_rc "bad base64 exits 5" 5
     assert_stderr_contains "regex-stage error" "Validation failed: key is not valid base64"
     assert_stdout_contains "key still printed on failure" "MIIBIjANBgkqhkiG9w0BAQE@AAOCAQ8AMIIBCgKCAQEA"
+    # [ERR] line is preceded by a blank line on stderr so the key on stdout
+    # doesn't visually run into the diagnostic
+    local before_err
+    before_err="$(get_stderr | grep -B1 '\[ERR\]' | head -1)"
+    assert_eq "blank line precedes [ERR]" "$before_err" ""
 }
 
 test_validate_bad_key_bytes() {
