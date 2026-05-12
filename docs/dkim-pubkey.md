@@ -102,6 +102,18 @@ MIIBIjANBgkqhkiG9w0BAQ...
 
 DKIM records sometimes get corrupted in transit -- a stray space, a truncated line, or a copy/paste error in the DNS provider's editor. The base64 stage catches encoding-level damage; the openssl stage catches structurally invalid keys (right alphabet, wrong bytes). `openssl` is required only when `--validate` is used.
 
+**Querying a specific DNS server:**
+
+By default the script uses the system resolver. Pass `-s <host>`, `--server <host>`, or the dig-style `@host` shorthand to override -- handy when you want to compare what different resolvers see for a record (caching divergence, propagation delays, regional differences):
+
+```bash
+dkim-pubkey s1 github.com @8.8.8.8           # Google DNS
+dkim-pubkey --server 1.1.1.1 s1 github.com   # Cloudflare DNS
+dkim-pubkey s1 github.com @9.9.9.9           # Quad9
+```
+
+`--server` and `@host` are interchangeable but not combinable -- specifying both (or `--server` twice) is a usage error.
+
 ---
 
 ## Reference
@@ -112,6 +124,7 @@ DKIM records sometimes get corrupted in transit -- a stray space, a truncated li
 |---|---|
 | `selector` | DKIM selector (first positional argument, required) |
 | `domain` | Domain name (second positional argument, required) |
+| `-s, --server <host>` | Query `<host>` instead of the system resolver (also `@host`) |
 | `-V, --validate` | Verify the extracted key is a well-formed public key |
 | `-h, --help` | Display help message |
 

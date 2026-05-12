@@ -19,10 +19,11 @@ printf 'dig' >> "$log"
 for a in "$@"; do printf ' %s' "$a" >> "$log"; done
 printf '\n' >> "$log"
 
-# Extract query hostname (last non-option arg)
+# Extract query hostname (last non-option arg). Skip dig flags (+short) and
+# server overrides (@host)
 query=""
 for a in "$@"; do
-    case "$a" in +*) ;; *) query="$a" ;; esac
+    case "$a" in +*|@*) ;; *) query="$a" ;; esac
 done
 
 case "$query" in
@@ -243,6 +244,73 @@ test_cname_fronted_extraction() {
     local stdout_lines
     stdout_lines="$(get_stdout | wc -l | tr -d ' ')"
     assert_eq "stdout is one line" "$stdout_lines" "1"
+}
+
+test_server_long_flag() {
+    run_script --server "8.8.8.8" "test" "example.com"
+    assert_rc "--server long flag exits 0" 0
+    local dig_log
+    dig_log="$(cat "$TEST_DIR/dig.log")"
+    assert_contains "dig invoked with @server" "$dig_log" "@8.8.8.8"
+    assert_stderr_contains "stderr shows @server" "@8.8.8.8 +short TXT"
+}
+
+test_server_short_flag() {
+    run_script -s "1.1.1.1" "test" "example.com"
+    assert_rc "-s short flag exits 0" 0
+    local dig_log
+    dig_log="$(cat "$TEST_DIR/dig.log")"
+    assert_contains "dig invoked with @server (short)" "$dig_log" "@1.1.1.1"
+}
+
+test_server_at_shorthand() {
+    run_script "test" "example.com" "@9.9.9.9"
+    assert_rc "@host shorthand exits 0" 0
+    local dig_log
+    dig_log="$(cat "$TEST_DIR/dig.log")"
+    assert_contains "dig invoked with @server (@-form)" "$dig_log" "@9.9.9.9"
+}
+
+test_server_equals_form() {
+    run_script "--server=8.8.4.4" "test" "example.com"
+    assert_rc "--server=val exits 0" 0
+    local dig_log
+    dig_log="$(cat "$TEST_DIR/dig.log")"
+    assert_contains "dig invoked with @server (= form)" "$dig_log" "@8.8.4.4"
+}
+
+test_server_missing_value() {
+    run_script --server "test" "example.com"
+    # --server consumes "test" as the value, leaving only "example.com" — domain missing
+    assert_rc "--server consumes next arg, then domain missing" 2
+    assert_stderr_contains "domain missing error" "domain is required"
+}
+
+test_server_empty_after_equals() {
+    run_script "--server=" "test" "example.com"
+    assert_rc "--server= empty value exits 2" 2
+    assert_stderr_contains "empty server value error" "--server requires a value"
+}
+
+test_server_at_empty() {
+    run_script "test" "example.com" "@"
+    assert_rc "bare @ exits 2" 2
+    assert_stderr_contains "bare @ error" "@<host> requires a value"
+}
+
+test_server_duplicate() {
+    run_script -s "8.8.8.8" "test" "example.com" "@1.1.1.1"
+    assert_rc "duplicate --server/@host exits 2" 2
+    assert_stderr_contains "duplicate server error" "Multiple --server not allowed"
+}
+
+test_server_default_no_at() {
+    run_script "test" "example.com"
+    assert_rc "no --server exits 0" 0
+    local dig_log
+    dig_log="$(cat "$TEST_DIR/dig.log")"
+    assert_not_contains "no @server in dig args by default" "$dig_log" "@"
+    assert_stderr_not_contains "no @ in stderr command line" "@"
 }
 
 test_no_validate_skips_openssl_check() {

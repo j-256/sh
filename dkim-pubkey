@@ -2,12 +2,13 @@
 # dkim-pubkey - print base64-encoded DKIM public key for a domain
 #
 # Usage:
-#   dkim-pubkey [options] <selector> <domain>
+#   dkim-pubkey [options] <selector> <domain> [@server]
 #   dkim-pubkey -h
 #
 # Options:
-#   -V, --validate  Verify the extracted key is a well-formed public key
-#   -h, --help      Show help message
+#   -s, --server <host>  Query <host> instead of the system resolver (also @host)
+#   -V, --validate       Verify the extracted key is a well-formed public key
+#   -h, --help           Show help message
 #
 # Queries the TXT record at <selector>._domainkey.<domain>, prints the raw
 # DNS response to stderr, and extracts the base64 public key (the p= value)
@@ -27,18 +28,21 @@ _dkim_pubkey() (
         echo "NAME"
         echo "  $SCRIPT_NAME - print base64-encoded DKIM public key for a domain"
         echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME [${s}options${r}] ${s}selector${r} ${s}domain${r}"
+        echo "  $SCRIPT_NAME [${s}options${r}] ${s}selector${r} ${s}domain${r} [@${s}server${r}]"
         echo "  $SCRIPT_NAME -h"
         echo "DESCRIPTION"
         echo "  Queries DNS TXT record at ${s}selector${r}._domainkey.${s}domain${r},"
         echo "  prints the raw response to stderr, and extracts the base64"
         echo "  public key (the p= value) to stdout."
         echo "OPTIONS"
-        echo "  -V, --validate  Verify the extracted key is a well-formed public key"
-        echo "  -h, --help      Show this help message"
+        echo "  -s, --server ${s}host${r}  Query ${s}host${r} instead of the system resolver (also @${s}host${r})"
+        echo "  -V, --validate     Verify the extracted key is a well-formed public key"
+        echo "  -h, --help         Show this help message"
         echo "EXAMPLE"
         echo "  $SCRIPT_NAME dkim-prd gmail.com"
         echo "  $SCRIPT_NAME --validate s1 github.com"
+        echo "  $SCRIPT_NAME s1 github.com @8.8.8.8           # Google DNS"
+        echo "  $SCRIPT_NAME --server 1.1.1.1 s1 github.com   # Cloudflare DNS"
         echo "CAVEATS"
         echo "  Selector must be known in advance; check SPF/DMARC records,"
         echo "  email headers, or the domain's DNS provider."
@@ -84,15 +88,29 @@ _dkim_pubkey() (
         done
     }
 
-    _expand_short_opts "" "$@"
+    _expand_short_opts "s" "$@"
     set -- "${_EXPANDED[@]}"; unset _EXPANDED
 
     local validate=""
+    local server=""
     local args=()
     while [ $# -gt 0 ]; do
         case "$1" in
             -h|--help)     _show_help; return 0 ;;
             -V|--validate) validate=1; shift ;;
+            -s|--server)
+                [ -n "${2-}" ] || { _error "--server requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                [ -z "$server" ] || { _error "Multiple --server not allowed (already set to '$server'). Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                server="$2"; shift 2 ;;
+            --server=*)
+                server="${1#*=}"
+                [ -n "$server" ] || { _error "--server requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                shift ;;
+            @*)
+                [ -z "$server" ] || { _error "Multiple --server not allowed (already set to '$server'). Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                server="${1#@}"
+                [ -n "$server" ] || { _error "@<host> requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                shift ;;
             --)            shift; while [ $# -gt 0 ]; do args+=("$1"); shift; done ;;
             -*)            _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
             *)             args+=("$1"); shift ;;
@@ -115,8 +133,14 @@ _dkim_pubkey() (
     local selector="${args[0]}"
     local domain="${args[1]}"
     local dns_hostname="$selector._domainkey.$domain"
-    local dns_response; dns_response="$(dig +short TXT "$dns_hostname")"
-    echo "\$ dig +short TXT \"$dns_hostname\"" >&2
+    local dig_args=(+short TXT "$dns_hostname")
+    [ -n "$server" ] && dig_args=("@$server" "${dig_args[@]}")
+    local dns_response; dns_response="$(dig "${dig_args[@]}")"
+    if [ -n "$server" ]; then
+        echo "\$ dig @$server +short TXT \"$dns_hostname\"" >&2
+    else
+        echo "\$ dig +short TXT \"$dns_hostname\"" >&2
+    fi
     if [ -z "$dns_response" ]; then
         _error "DNS response empty"
         return 1
