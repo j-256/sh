@@ -2,8 +2,12 @@
 # dkim-pubkey - print base64-encoded DKIM public key for a domain
 #
 # Usage:
-#   dkim-pubkey <selector> <domain>
+#   dkim-pubkey [options] <selector> <domain>
 #   dkim-pubkey -h
+#
+# Options:
+#   -V, --validate  Verify the extracted key is a well-formed public key
+#   -h, --help      Show help message
 #
 # Queries the TXT record at <selector>._domainkey.<domain>, prints the raw
 # DNS response to stderr, and extracts the base64 public key (the p= value)
@@ -15,6 +19,7 @@ _dkim_pubkey() (
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="dkim-pubkey" ;; esac
 
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+    _info()  { echo "[INF][$SCRIPT_NAME] $*" >&2; }
 
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
@@ -22,14 +27,18 @@ _dkim_pubkey() (
         echo "NAME"
         echo "  $SCRIPT_NAME - print base64-encoded DKIM public key for a domain"
         echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME ${s}selector${r} ${s}domain${r}"
+        echo "  $SCRIPT_NAME [${s}options${r}] ${s}selector${r} ${s}domain${r}"
         echo "  $SCRIPT_NAME -h"
         echo "DESCRIPTION"
         echo "  Queries DNS TXT record at ${s}selector${r}._domainkey.${s}domain${r},"
         echo "  prints the raw response to stderr, and extracts the base64"
         echo "  public key (the p= value) to stdout."
+        echo "OPTIONS"
+        echo "  -V, --validate  Verify the extracted key is a well-formed public key"
+        echo "  -h, --help      Show this help message"
         echo "EXAMPLE"
         echo "  $SCRIPT_NAME dkim-prd gmail.com"
+        echo "  $SCRIPT_NAME --validate s1 github.com"
         echo "CAVEATS"
         echo "  Selector must be known in advance; check SPF/DMARC records,"
         echo "  email headers, or the domain's DNS provider."
@@ -37,34 +46,74 @@ _dkim_pubkey() (
         echo "  0  Success (key printed)"
         echo "  1  Runtime failure (DNS response empty)"
         echo "  2  Usage error (missing selector or domain)"
-        echo "  3  Dependency error (dig missing)"
+        echo "  3  Dependency error (dig missing, or openssl missing with --validate)"
         echo "  4  Domain-specific (record found but p= value missing)"
+        echo "  5  Validation failed (with --validate)"
         echo "DEPENDENCIES"
         echo "  dig"
+        echo "  openssl (required only for --validate)"
     }
 
-    case "$1" in
-        -h|--help)
-            _show_help
-            return 0
-            ;;
-    esac
+    _expand_short_opts() {
+        # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
+        # $2..$N = "$@"
+        # Populates _EXPANDED; caller does: set -- "${_EXPANDED[@]}"; unset _EXPANDED
+        local value_opts="$1"; shift
+        _EXPANDED=()
+        local passthru=""
+        local arg
+        local rest
+        local c
+        for arg in "$@"; do
+            if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
+            case "$arg" in
+                --)          passthru=1; _EXPANDED+=("$arg") ;;
+                --*|-|"")    _EXPANDED+=("$arg") ;;
+                -[a-zA-Z]?*)
+                    rest="${arg#-}"
+                    while [ -n "$rest" ]; do
+                        c="${rest%"${rest#?}"}"; rest="${rest#?}"
+                        _EXPANDED+=("-$c")
+                        case "$value_opts" in *"$c"*)
+                            [ -n "$rest" ] && _EXPANDED+=("$rest")
+                            rest="" ;;
+                        esac
+                    done ;;
+                *)        _EXPANDED+=("$arg") ;;
+            esac
+        done
+    }
+
+    _expand_short_opts "" "$@"
+    set -- "${_EXPANDED[@]}"; unset _EXPANDED
+
+    local validate=""
+    local args=()
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -h|--help)     _show_help; return 0 ;;
+            -V|--validate) validate=1; shift ;;
+            --)            shift; while [ $# -gt 0 ]; do args+=("$1"); shift; done ;;
+            -*)            _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+            *)             args+=("$1"); shift ;;
+        esac
+    done
 
     if ! command -v dig >/dev/null 2>&1; then
         _error "dig is required"
         return 3
     fi
 
-    if [ -z "${1:-}" ]; then
+    if [ -z "${args[0]:-}" ]; then
         _error "selector is required. Run \`$SCRIPT_NAME -h\` for usage"
         return 2
     fi
-    if [ -z "${2:-}" ]; then
+    if [ -z "${args[1]:-}" ]; then
         _error "domain is required. Run \`$SCRIPT_NAME -h\` for usage"
         return 2
     fi
-    local selector="$1"
-    local domain="$2"
+    local selector="${args[0]}"
+    local domain="${args[1]}"
     local dns_hostname="$selector._domainkey.$domain"
     local dns_response; dns_response="$(dig +short TXT "$dns_hostname")"
     echo "\$ dig +short TXT \"$dns_hostname\"" >&2
@@ -74,11 +123,45 @@ _dkim_pubkey() (
     fi
     echo "$dns_response" >&2
     echo >&2
-    local pubkey; pubkey="$(echo "$dns_response" | sed 's/^.*p=//; s/"$//; s/" "//g')"
+    # CNAME-fronted records (Sendgrid, Mailgun, etc.) cause `dig +short TXT` to
+    # return both the CNAME target and the TXT body on separate lines. Pick out
+    # only the line that actually contains p=, then strip quoting/joining
+    local pubkey; pubkey="$(echo "$dns_response" | grep 'p=' | sed 's/^.*p=//; s/"$//; s/" "//g')"
     if [ -z "$pubkey" ]; then
         _error "Record found but key is empty (p= value missing)"
         return 4
     fi
+
+    if [ "$validate" ]; then
+        # Strict base64 shape: alphabet only, no whitespace, length divisible by 4
+        local len=${#pubkey}
+        if ! printf '%s' "$pubkey" | grep -Eq '^[A-Za-z0-9+/]+=*$' || [ $((len % 4)) -ne 0 ]; then
+            echo "$pubkey"
+            _error "Validation failed: key is not valid base64 (alphabet/padding)"
+            return 5
+        fi
+
+        if ! command -v openssl >/dev/null 2>&1; then
+            _error "openssl is required"
+            return 3
+        fi
+
+        # Decode and parse as a SubjectPublicKeyInfo. -text prints algorithm + size,
+        # which we use for the success summary below
+        local pkey_text
+        if ! pkey_text="$(printf '%s' "$pubkey" | base64 -d 2>/dev/null | openssl pkey -pubin -inform DER -text -noout 2>/dev/null)"; then
+            echo "$pubkey"
+            _error "Validation failed: key bytes do not parse as a public key"
+            return 5
+        fi
+
+        # Parse "Public-Key: (2048 bit)" / "RSA Public-Key:" / "ED25519 Public-Key:" etc.
+        local key_summary
+        key_summary="$(printf '%s' "$pkey_text" | grep -m1 -iE 'public-key' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+        [ -z "$key_summary" ] && key_summary="public key"
+        _info "Key valid ($key_summary)"
+    fi
+
     echo "$pubkey"
 )
 

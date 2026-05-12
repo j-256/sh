@@ -37,6 +37,20 @@ case "$query" in
         # Multi-line response with quotes
         printf '%s\n' '"v=DKIM1; k=rsa; " "p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC3QEKyU1fSma0axspqYK5iAj+54lsAg"'
         ;;
+    bad-b64._domainkey.*)
+        # Contains '@' — not in base64 alphabet, fails regex stage
+        printf '%s\n' '"v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQE@AAOCAQ8AMIIBCgKCAQEA"'
+        ;;
+    bad-key._domainkey.*)
+        # Valid base64 but trivially short — passes regex, fails openssl-shim stage
+        printf '%s\n' '"v=DKIM1; k=rsa; p=AAAA"'
+        ;;
+    cname._domainkey.*)
+        # CNAME-fronted record: dig returns the CNAME target on line 1
+        # and the resolved TXT body on line 2
+        printf '%s\n' 'cname.target.example.net.'
+        printf '%s\n' '"v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAcname1234567890abcdefghijklmnopqrstuvwxyz"'
+        ;;
     *)
         # Standard single-line response
         printf '%s\n' '"v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1234567890abcdefghijklmnopqrstuvwxyz"'
@@ -45,6 +59,23 @@ esac
 exit 0
 SHIM
     chmod +x "$SHIM_DIR/dig"
+
+    # openssl shim: only used by --validate. Reads DER bytes on stdin and emits
+    # pkey -text-style output. Treats stdin shorter than 32 bytes as "not a real key"
+    # so the bad-key selector above can drive a structural-failure case
+    cat > "$SHIM_DIR/openssl" <<'SHIM'
+#!/bin/bash
+# We only stub the `pkey -pubin -inform DER -text -noout` invocation
+input="$(cat)"
+if [ "${#input}" -lt 32 ]; then
+    exit 1
+fi
+echo "Public-Key: (2048 bit)"
+echo "Modulus:"
+echo "    00:de:ad:be:ef"
+echo "Exponent: 65537 (0x10001)"
+SHIM
+    chmod +x "$SHIM_DIR/openssl"
 }
 
 # --- test cases ---
@@ -151,6 +182,75 @@ test_p_value_extraction() {
     assert_not_contains "strips v=DKIM1" "$stdout" "v=DKIM1"
     assert_not_contains "strips quotes" "$stdout" '"'
     assert_not_contains "strips p=" "$stdout" "p="
+}
+
+test_validate_happy_path() {
+    run_script --validate "test" "example.com"
+    assert_rc "validate happy path exits 0" 0
+    assert_stdout_contains "key still on stdout" "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1234567890abcdefghijklmnopqrstuvwxyz"
+    assert_stderr_contains "info line on success" "[INF][dkim-pubkey] Key valid"
+}
+
+test_validate_short_flag() {
+    run_script -V "test" "example.com"
+    assert_rc "-V short flag exits 0" 0
+    assert_stderr_contains "-V triggers validation" "[INF][dkim-pubkey] Key valid"
+}
+
+test_validate_bad_base64() {
+    run_script --validate "bad-b64" "example.com"
+    assert_rc "bad base64 exits 5" 5
+    assert_stderr_contains "regex-stage error" "Validation failed: key is not valid base64"
+    assert_stdout_contains "key still printed on failure" "MIIBIjANBgkqhkiG9w0BAQE@AAOCAQ8AMIIBCgKCAQEA"
+}
+
+test_validate_bad_key_bytes() {
+    run_script --validate "bad-key" "example.com"
+    assert_rc "bad key bytes exits 5" 5
+    assert_stderr_contains "openssl-stage error" "Validation failed: key bytes do not parse"
+    assert_stdout_contains "key still printed on failure" "AAAA"
+}
+
+test_validate_openssl_missing() {
+    # Build a minimal PATH containing the shim dir plus symlinks to the POSIX
+    # tools the script reaches before the openssl check (sed, grep). Crucially
+    # excludes any path containing a real openssl, so `command -v openssl` fails
+    rm -f "$SHIM_DIR/openssl"
+    local minpath="$TEST_DIR/minpath"
+    mkdir -p "$minpath"
+    local tool
+    local tool_path
+    for tool in sed grep; do
+        tool_path="$(PATH="/usr/bin:/bin:/usr/local/bin" command -v "$tool")"
+        ln -sf "$tool_path" "$minpath/$tool"
+    done
+    env PATH="$SHIM_DIR:$minpath" TEST_DIR="$TEST_DIR" \
+        /bin/bash "$UNDER_TEST" --validate "test" "example.com" >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
+    printf '%s\n' "$?" > "$TEST_DIR/rc"
+    assert_rc "openssl missing exits 3" 3
+    assert_stderr_contains "openssl error" "openssl is required"
+}
+
+test_cname_fronted_extraction() {
+    run_script "cname" "example.com"
+    assert_rc "cname-fronted exits 0" 0
+    assert_stderr_contains "stderr shows cname target" "cname.target.example.net."
+    local stdout
+    stdout="$(get_stdout)"
+    assert_contains "stdout has key" "$stdout" "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAcname1234567890abcdefghijklmnopqrstuvwxyz"
+    assert_not_contains "stdout omits cname target" "$stdout" "cname.target.example.net"
+    # Stdout must be a single line (CNAME target line was filtered out)
+    local stdout_lines
+    stdout_lines="$(get_stdout | wc -l | tr -d ' ')"
+    assert_eq "stdout is one line" "$stdout_lines" "1"
+}
+
+test_no_validate_skips_openssl_check() {
+    # Without --validate, missing openssl must not matter
+    rm -f "$SHIM_DIR/openssl"
+    run_script "test" "example.com"
+    assert_rc "no --validate ignores openssl" 0
+    assert_stderr_not_contains "no openssl error" "openssl is required"
 }
 
 # --- run ---

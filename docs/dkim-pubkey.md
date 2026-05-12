@@ -16,11 +16,10 @@ $ dig +short TXT "s1._domainkey.github.com"
 s1.domainkey.u51742174.wl175.sendgrid.net.
 "k=rsa; t=s; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyn3fMCVpb7ryIRKOGXhXVGYmsWUitNlSckqGHOwNFZgFadplOrD+Qzf1XQkP7MH/VB/97DsAAJGtEXW1Uq71Hjnfr/DuBN/YfjF/gU70qEFb7q1sdIiNtjFL2TkOpoW+X/bhhPNheW/fYwyFb6ZHFM6LTgXyuimWRHTOUP3VjZzhNVda79nt+2WZYbS4l8HdMgWpT" "NHjpVw5PtXESA9KBg/evSRk5fIaXIX5eRXW3baoV9yVzD8O29/IL/DiSk+yNvaO0EHL5c4yGuZJhGzvpiznb2IDVdemJK4Dqzdy5FTN/SGYZhAEr7MguG3Z314hMS2scgMsOMgB64uj/6+6UwIDAQAB"
 
-s1.domainkey.u51742174.wl175.sendgrid.net.
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyn3fMCVpb7ryIRKOGXhXVGYmsWUitNlSckqGHOwNFZgFadplOrD+Qzf1XQkP7MH/VB/97DsAAJGtEXW1Uq71Hjnfr/DuBN/YfjF/gU70qEFb7q1sdIiNtjFL2TkOpoW+X/bhhPNheW/fYwyFb6ZHFM6LTgXyuimWRHTOUP3VjZzhNVda79nt+2WZYbS4l8HdMgWpTNHjpVw5PtXESA9KBg/evSRk5fIaXIX5eRXW3baoV9yVzD8O29/IL/DiSk+yNvaO0EHL5c4yGuZJhGzvpiznb2IDVdemJK4Dqzdy5FTN/SGYZhAEr7MguG3Z314hMS2scgMsOMgB64uj/6+6UwIDAQAB
 ```
 
-The last line is the extracted public key, ready to save to a file or verify against a signature.
+The last line on stdout is the extracted public key, ready to save to a file or verify against a signature. The stderr block above shows the raw DNS response (including the CNAME target on line 1) and the `dig` command for transparency.
 
 ## Common examples
 
@@ -83,7 +82,25 @@ This means either the selector doesn't exist, or the domain doesn't have DKIM co
 
 **CNAME redirects:**
 
-Some DKIM records use CNAMEs that point to a third-party email provider's infrastructure (e.g., Sendgrid, Mailgun). The script will show the CNAME target in the stderr output, but you may not see a `p=` value directly. If you see a CNAME, you can manually query the target or use your email provider's tools to verify the setup.
+Some DKIM records use CNAMEs that point to a third-party email provider's infrastructure (e.g., Sendgrid, Mailgun). When `dig +short TXT` follows the CNAME and returns both the CNAME target and the resolved TXT record on separate lines, the script picks the line containing `p=` and discards the rest -- stdout always contains exactly one line (the key) on success. The CNAME target is still visible in the stderr block for context.
+
+If the CNAME target itself does not resolve to a TXT record, `dig` returns nothing for `p=` and the script exits 4.
+
+**Validating the extracted key:**
+
+Pass `--validate` (or `-V`) to verify the key is well-formed. The check has two stages: a strict base64 shape check (alphabet, padding, no whitespace), then a structural decode via `openssl pkey -pubin -inform DER` to confirm the bytes parse as a public key. On success, an `[INF]` line summarizing the key (algorithm and size) is printed to stderr; the key still goes to stdout. On failure, the key is still printed (so you can see what was found) and the script exits 5.
+
+```
+$ dkim-pubkey --validate s1 github.com
+$ dig +short TXT "s1._domainkey.github.com"
+s1.domainkey.u51742174.wl175.sendgrid.net.
+"k=rsa; t=s; p=MIIBIjANBgkqhkiG9w0BAQ..."
+
+[INF][dkim-pubkey] Key valid (Public-Key: (2048 bit))
+MIIBIjANBgkqhkiG9w0BAQ...
+```
+
+DKIM records sometimes get corrupted in transit -- a stray space, a truncated line, or a copy/paste error in the DNS provider's editor. The base64 stage catches encoding-level damage; the openssl stage catches structurally invalid keys (right alphabet, wrong bytes). `openssl` is required only when `--validate` is used.
 
 ---
 
@@ -95,6 +112,7 @@ Some DKIM records use CNAMEs that point to a third-party email provider's infras
 |---|---|
 | `selector` | DKIM selector (first positional argument, required) |
 | `domain` | Domain name (second positional argument, required) |
+| `-V, --validate` | Verify the extracted key is a well-formed public key |
 | `-h, --help` | Display help message |
 
 ### Exit codes
@@ -104,9 +122,11 @@ Some DKIM records use CNAMEs that point to a third-party email provider's infras
 | 0 | Success (key extracted and printed) |
 | 1 | Runtime failure (DNS response empty) |
 | 2 | Usage error (missing selector or domain) |
-| 3 | Dependency error (`dig` missing) |
+| 3 | Dependency error (`dig` missing, or `openssl` missing with `--validate`) |
 | 4 | Domain-specific: record found but `p=` value missing (malformed record) |
+| 5 | Validation failed (with `--validate`) |
 
 ### Dependencies
 
 - `dig` (part of BIND tools, typically pre-installed on most systems)
+- `openssl` (required only for `--validate`)
