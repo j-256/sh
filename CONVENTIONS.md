@@ -457,7 +457,7 @@ Every long option that takes a value has a sibling `--foo=*)` arm next to its `-
 
 The `--num=*)` guard catches `--num=` (empty value after `=`), symmetric with how the `-n|--num)` arm catches a missing `$2`. Both paths emit the same canonical message.
 
-Long flag options (no value) have no `--foo=*)` arm. `--verbose=oops` falls through to `-*)` and errors with the canonical "Unknown argument" phrasing.
+Long flag options (no value) have no `--foo=*)` arm. The arm exists to extract a value (`${1#*=}`) and assign it; a flag has nothing to extract, so the arm would be dead weight in every parse loop. `--verbose=oops` falls through to `-*)` and errors with the canonical "Unknown argument" phrasing -- a reasonable result without the extra arm.
 
 ### Parse loop shape
 
