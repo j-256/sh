@@ -166,8 +166,14 @@ hr() { # horizontal rule, as in <hr> in HTML
 
 
 
-#region Function/command skeleton - parameter handling, help, cleanup trap
-shell_func() {
+#region Function/command skeleton - parameter handling, help
+# Wrapper body is a subshell `( ... )`, not braces. Helpers, locals, traps,
+# and any shell state set inside die with the subshell on return. `return N`
+# still propagates as the function's exit status, so source/execute dispatch
+# at the bottom of a real script works unchanged. For a script that needs to
+# mutate the caller's shell (`prompt`, `dbg`), use a `{ ... }` body and the
+# cleanup-trap pattern -- see CONVENTIONS.md "Source-only scripts"
+shell_func() (
     # ${BASH_SOURCE[0]} resolves to the *definition file*, which is what you want
     # for a standalone script. For a function pasted into ~/.bash_profile or
     # similar, replace this with `local SCRIPT_NAME="shell_func"` -- otherwise it
@@ -226,12 +232,6 @@ shell_func() {
     _info() {
         echo "[INF] $SCRIPT_NAME: $*"
     }
-
-    # shellcheck disable=SC2329 # "This function is never invoked. Check usage (or ignored if invoked indirectly)."
-    __unset() {
-        unset -f __unset _show_help _verbose _error _warn _info
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
     # Parse parameters
     while [ $# -gt 0 ]; do
@@ -309,7 +309,7 @@ shell_func() {
     echo "opt_val_optional: $opt_val_optional"
     echo "verbose: $verbose"
     echo "Positional parameters: $(printf '[%s] ' "${args[@]}")"
-}
+)
 #endregion
 
 

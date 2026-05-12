@@ -17,19 +17,19 @@ Standards for scripts in this repository.
 #   -v, --verbose  Enable verbose output
 #   -h, --help     Show help message
 
-_script_name() {
+_script_name() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
 
     _show_help() { ... }
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
 
-    # --- cleanup trap (see below) ---
-
     # --- argument parsing, main logic ---
-}
+)
 
 # --- source/execute exit handler (see below) ---
 ```
+
+The wrapper body is `( ... )`, not `{ ... }`. A subshell-bodied function runs in its own process: helper functions, `local` vars, `cd`, `set` flags, traps -- everything dies when the function returns. Nothing leaks into the caller's shell. `return N` from inside the subshell still propagates the exit status to the caller, so the source/execute exit handler at the bottom of the file works unchanged. See [Source-only scripts](#source-only-scripts) for the exception: scripts that need to mutate the caller's shell can't use a subshell body.
 
 ### Naming
 
@@ -41,7 +41,9 @@ _script_name() {
 
 A script is *source-only* when it manipulates the caller's shell directly -- reading caller-shell variables (like `dbg`) or setting them (like `prompt`). These scripts must be sourced rather than executed; an executed copy runs in a subprocess and can't touch the caller's variables.
 
-Source-only scripts have a stricter naming rule than executable scripts: every inner function (including the wrapper) and every top-level variable is prefixed with `__<script>__` rather than a single leading `_`. The reason is namespace collision -- when a script is sourced, its function and variable definitions live in the caller's shell during the call. Common helper names like `_show_help`, `_error`, or `__unset` could clobber the caller's pre-existing identifiers; worse, the cleanup trap's `unset -f` would then delete them outright on return. The `__<script>__` prefix makes accidental collisions essentially impossible.
+Source-only scripts use a `{ ... }` wrapper body instead of the standard `( ... )`, because a subshell-bodied function would isolate the caller's shell from its own work -- the whole point of being source-only is to operate on caller state. With a brace body, helpers, `local` vars, and traps live in the caller's shell during the call, which means they need explicit cleanup (see [Cleanup Trap](#cleanup-trap)).
+
+Source-only scripts also have a stricter naming rule than executable scripts: every inner function (including the wrapper) and every top-level variable is prefixed with `__<script>__` rather than a single leading `_`. The reason is namespace collision -- when a script is sourced into a brace-bodied wrapper, its function and variable definitions live in the caller's shell during the call. Common helper names like `_show_help`, `_error`, or `__unset` could clobber the caller's pre-existing identifiers; worse, the cleanup trap's `unset -f` would then delete them outright on return. The `__<script>__` prefix makes accidental collisions essentially impossible.
 
 ```bash
 __prompt__main() {
@@ -168,19 +170,30 @@ The path-based pre-check is deliberate: matching on the full path (`/dev/*`) rat
 
 ## Cleanup Trap
 
-Inner functions are cleaned up via a RETURN trap using the `__unset()` pattern. This ensures cleanup runs even on early returns:
+Source-only scripts use a `{ ... }` wrapper body, so any inner functions and `local` vars live in the caller's shell during the call. A RETURN trap calls an `__unset` helper to remove them when the wrapper returns, so the caller's namespace is left clean. (Executable scripts use a `( ... )` wrapper body and don't need this -- the subshell evaporates everything on return.)
 
 ```bash
-__unset() {
-    unset -f __unset _show_help _error _other_func
+__prompt__unset() {
+    unset -f __prompt__unset __prompt__show_help __prompt__error _other_func
 }
-trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
+trap '__prompt__unset || echo "'"$__prompt__name"' trap failed!" >&2; trap - RETURN' RETURN
 ```
 
-- `__unset` must unset itself plus all inner functions
-- The trap preserves any pre-existing RETURN trap (relevant when sourced)
-- `'"$SCRIPT_NAME"'` embeds the value at definition time via quote-exit-expand-reenter
+- `__<script>__unset` must unset itself plus all inner functions
+- `'"$__prompt__name"'` embeds the value at definition time via quote-exit-expand-reenter
 - Place after inner function definitions, before main logic
+- The trailing `trap - RETURN` is load-bearing: it empties the trap slot before the function returns, which keeps the caller's pre-existing RETURN trap intact. See below.
+
+### Why `trap - RETURN` at the end of the handler
+
+Bash's RETURN trap has an asymmetric scoping model:
+
+- **Reads are frame-local.** Inside a callee, `trap -p RETURN` returns empty even when the caller has a trap installed -- the caller's trap is held in the parent frame, invisible from the callee. So save-and-restore is impossible: there is nothing to read.
+- **Writes propagate on return.** When the callee returns, whatever text is in the RETURN slot at that moment becomes the trap for the parent frame, overwriting whatever the caller had set.
+
+The consequence: a callee that installs a RETURN trap and leaves it in place silently overwrites the caller's trap on return. The fix is not to save and restore (which is impossible without functrace), but to clear our own slot before returning. With the slot empty at the moment of return, the parent frame is left exactly as it was -- the caller's trap survives because bash had it stashed in the parent frame the whole time.
+
+The pattern: `__<script>__unset` does the work (clean up our helpers so they don't pollute the caller's namespace), and `trap - RETURN` is the politeness step that keeps us from clobbering the caller on the way out.
 
 ## Source/Execute Exit Handler
 
@@ -324,10 +337,10 @@ Single-quote interpolated values (`'$1'`, `'$value'`) so empty strings and white
 ### Helper presence
 
 - `_error` is required in every script.
-- `_warn`, `_info`, `_debug` are defined **only** when the script calls them. Do not define speculative helpers -- they become orphan code that `__unset` has to track and that future readers have to investigate. Bash errors loudly at the call site if a caller uses an undefined helper, so nothing is lost by omitting unused ones.
-- `__unset` lists exactly the helpers the script defines -- no more, no less.
+- `_warn`, `_info`, `_debug` are defined **only** when the script calls them. Do not define speculative helpers -- they become orphan code that future readers have to investigate. Bash errors loudly at the call site if a caller uses an undefined helper, so nothing is lost by omitting unused ones. (For source-only scripts, speculative helpers also bloat `__<script>__unset`'s `unset -f` list.)
+- In source-only scripts, `__<script>__unset` lists exactly the helpers the script defines -- no more, no less.
 
-**Helper placement:** define helpers inside the wrapper function, before the cleanup trap and before any logic that might call them. When dependency-checking is part of the flow (e.g. before arg parsing), place helpers first so dep-check error paths can use `_error`.
+**Helper placement:** define helpers inside the wrapper function, before the cleanup trap (source-only scripts) and before any logic that might call them. When dependency-checking is part of the flow (e.g. before arg parsing), place helpers first so dep-check error paths can use `_error`.
 
 ### Default helper block (plain)
 
@@ -352,7 +365,7 @@ _info()  { printf '%s[INF][%s] %s%s\n' "$(_color $'\033[2m')"  "$SCRIPT_NAME" "$
 _debug() { printf '%s[DBG][%s] %s%s\n' "$(_color $'\033[36m')" "$SCRIPT_NAME" "$*" "$(_color $'\033[0m')" >&2; }
 ```
 
-Palette: `[ERR]` red (`\033[31m`), `[WRN]` yellow (`\033[33m`), `[INF]` dim (`\033[2m`), `[DBG]` cyan (`\033[36m`). Palette is color-only -- no `\033[1m` (bold) or other weight changes. Mechanism: raw ANSI escapes, not `tput`. TTY guard uses `[ -t 2 ]` since helpers write to stderr. `NO_COLOR` respected per https://no-color.org/. `__unset` must include `_color`.
+Palette: `[ERR]` red (`\033[31m`), `[WRN]` yellow (`\033[33m`), `[INF]` dim (`\033[2m`), `[DBG]` cyan (`\033[36m`). Palette is color-only -- no `\033[1m` (bold) or other weight changes. Mechanism: raw ANSI escapes, not `tput`. TTY guard uses `[ -t 2 ]` since helpers write to stderr. `NO_COLOR` respected per https://no-color.org/. Source-only scripts must include `_color` in `__<script>__unset`.
 
 Default to the plain variant. Only reach for the colored variant when output disambiguation genuinely matters.
 
@@ -426,7 +439,7 @@ The call-site argument lists every short-option letter in the script that takes 
 
 Tokens starting with `-` followed by a digit (`-500G`, `-42`) pass through unchanged rather than expanding as clusters. This matches how `curl` and GNU tools treat negative-number arguments -- no short option name is a digit, so `-[digit]...` is safely reserved for negative-value passthrough.
 
-`_expand_short_opts` is listed in `__unset` alongside the other inner functions.
+In source-only scripts, `_expand_short_opts` is listed in `__<script>__unset` alongside the other inner functions.
 
 ### Long options with `=`
 
@@ -448,7 +461,7 @@ Long flag options (no value) have no `--foo=*)` arm. `--verbose=oops` falls thro
 
 ### Parse loop shape
 
-Canonical structure, inside the wrapper function, after the `__unset` trap and before main logic:
+Canonical structure, inside the wrapper function, after the helper definitions (and after the `__<script>__unset` trap, in source-only scripts) and before main logic:
 
 ```bash
 _expand_short_opts "nXHd" "$@"
