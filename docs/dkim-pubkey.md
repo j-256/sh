@@ -103,6 +103,8 @@ MIIBIjANBgkqhkiG9w0BAQ...
 
 DKIM records sometimes get corrupted in transit -- a stray space, a truncated line, or a copy/paste error in the DNS provider's editor. The base64 stage catches encoding-level damage; the openssl stage catches structurally invalid keys (right alphabet, wrong bytes). `openssl` is required only when `--validate` is used.
 
+When the base64 stage fails and the rejected key contains `\NNN` decimal escapes (RFC 1035 zone-file presentation format used by `dig` for control chars in TXT records), the script appends a hint identifying the embedded character -- typically `\010` (LF) from someone hitting Enter in the DNS provider's text editor. The hint surfaces a likely root cause that would otherwise require manual decoding of `\010` to spot.
+
 **Querying a specific DNS server:**
 
 By default the script uses the system resolver. Pass `-s <host>`, `--server <host>`, or the dig-style `@host` shorthand to override -- handy when you want to compare what different resolvers see for a record (caching divergence, propagation delays, regional differences):

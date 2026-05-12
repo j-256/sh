@@ -163,6 +163,28 @@ _dkim_pubkey() (
             echo "$pubkey"
             echo >&2
             _error "Validation failed: key is not valid base64 (alphabet/padding)"
+            # dig presents control characters in TXT records using RFC 1035 zone-file
+            # \DDD decimal escapes. If we see one, the literal DNS record contains a
+            # stray control character — almost always a copy/paste artifact in the
+            # provider's editor. Surface a hint so the user doesn't have to decode
+            # \010 themselves
+            local esc
+            esc="$(printf '%s' "$pubkey" | grep -oE '\\[0-9]{3}' | sort -u)"
+            if [ -n "$esc" ]; then
+                local seq
+                local name
+                while IFS= read -r seq; do
+                    case "$seq" in
+                        '\000') name="NUL" ;;
+                        '\008') name="BS"  ;;
+                        '\009') name="TAB" ;;
+                        '\010') name="LF"  ;;
+                        '\013') name="CR"  ;;
+                        *)      name="control char" ;;
+                    esac
+                    _info "Hint: record contains literal $name ($seq). Likely a stray $name in the DNS provider's editor"
+                done <<< "$esc"
+            fi
             return 5
         fi
 

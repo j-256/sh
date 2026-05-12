@@ -42,6 +42,10 @@ case "$query" in
         # Contains '@' — not in base64 alphabet, fails regex stage
         printf '%s\n' '"v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQE@AAOCAQ8AMIIBCgKCAQEA"'
         ;;
+    escape-lf._domainkey.*)
+        # Trailing dig-style \010 (LF) escape — common DNS-editor artifact
+        printf '%s\n' '"v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1234567890\010"'
+        ;;
     bad-key._domainkey.*)
         # Valid base64 but trivially short — passes regex, fails openssl-shim stage
         printf '%s\n' '"v=DKIM1; k=rsa; p=AAAA"'
@@ -214,6 +218,14 @@ test_validate_bad_base64() {
     local before_err
     before_err="$(get_stderr | grep -B1 '\[ERR\]' | head -1)"
     assert_eq "blank line precedes [ERR]" "$before_err" ""
+}
+
+test_validate_dig_escape_hint() {
+    run_script --validate "escape-lf" "example.com"
+    assert_rc "escape-lf exits 5" 5
+    assert_stderr_contains "regex-stage error" "Validation failed: key is not valid base64"
+    assert_stderr_contains "decoded LF hint" "literal LF (\\010)"
+    assert_stderr_contains "hint mentions DNS editor" "stray LF in the DNS provider's editor"
 }
 
 test_validate_bad_key_bytes() {
