@@ -9,7 +9,7 @@
 #   -t, --token   Bearer token for authorization (or set SFCC_TOKEN env var)
 #   -h, --help    Show help message
 
-_propfind_p12() {
+_propfind_p12() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="propfind-p12" ;; esac
@@ -80,11 +80,6 @@ _propfind_p12() {
             esac
         done
     }
-
-    __unset() {
-        unset -f __unset _show_help _error _expand_short_opts
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
     local token=""
     local positional=()
@@ -166,7 +161,7 @@ _propfind_p12() {
         -H "Authorization: Bearer $token" \
         -H 'Depth: 1' \
         --data-raw '<?xml version="1.0" encoding="utf-8" ?><D:propfind xmlns:D="DAV:"><D:allprop/></D:propfind>'
-}
+)
 
 _propfind_p12 "$@"
 __propfind_p12_rc=$?

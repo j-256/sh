@@ -10,7 +10,7 @@
 #   -v, --verbose  List each item as it is moved
 #   -h, --help     Display this help message
 
-_explode() {
+_explode() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="explode" ;; esac
@@ -68,11 +68,6 @@ _explode() {
             esac
         done
     }
-
-    __unset() {
-        unset -f __unset _show_help _error _expand_short_opts
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
     local force=false
     local dryrun=false
@@ -195,7 +190,7 @@ _explode() {
         _error "Failed to remove $dir ($num_remaining items remaining)"
         return 2
     fi
-}
+)
 
 _explode "$@"
 __explode_rc=$?

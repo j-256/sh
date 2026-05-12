@@ -13,7 +13,7 @@
 # Data snapshot: see httpcode.md "Updating the data" for the refresh process
 # (MDN scrape script + authoritative sources for non-MDN vendor codes)
 
-_httpcode() {
+_httpcode() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="httpcode" ;; esac
@@ -42,11 +42,6 @@ _httpcode() {
         echo "DEPENDENCIES"
         echo "  jq"
     }
-
-    __unset() {
-        unset -f __unset _show_help _error
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
     case "$1" in
         -h|--help)
@@ -92,7 +87,7 @@ EOF
     fi
 
     printf '%s\n' "$parsed"
-}
+)
 
 _httpcode "$@"
 __httpcode_rc=$?

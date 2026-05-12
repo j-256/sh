@@ -15,7 +15,7 @@
 #   -t, --trim num            Exclude the first and last num lines of the snippet
 #   -h, --help                Show this help message
 
-_snippet() {
+_snippet() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="snippet" ;; esac
@@ -106,11 +106,6 @@ _snippet() {
     }
 
     # Unset helper functions before returning
-    __unset() {
-        unset -f __unset _error _show_help _dropfirst _droplast _expand_short_opts
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
-
     # Just print help if no arguments are provided
     if [ $# -eq 0 ]; then
         _show_help
@@ -243,7 +238,7 @@ _snippet() {
     else
         sed -n "$sed_cmd" | _dropfirst "$trim_first" | _droplast "$trim_last"
     fi
-}
+)
 
 _snippet "$@"
 __snippet_rc=$?

@@ -11,7 +11,7 @@
 #   remote           Remote name (default: origin)
 #   -h, --help       Show help message
 
-_git_backup() {
+_git_backup() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="git-backup" ;; esac
@@ -95,11 +95,6 @@ _git_backup() {
     }
 
     # Clean up inner functions on return
-    __unset() {
-        unset -f __unset _show_help _failed _error _expand_short_opts
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
-
     # Parse args: collect flags, then positional
     local dry_run=0
     local positional=()
@@ -239,7 +234,7 @@ _git_backup() {
         _failed "git tag -d \"$backup_name\""
         return 1
     fi
-}
+)
 
 _git_backup "$@"
 __git_backup_rc=$?

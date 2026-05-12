@@ -10,7 +10,7 @@
 # Run periodically from host to achieve basic Dynamic DNS capabilities
 # Required API token permissions: Zone.Zone, Zone.DNS
 
-_cf_ddns() {
+_cf_ddns() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="cf-ddns" ;; esac
@@ -20,11 +20,6 @@ _cf_ddns() {
     local -r CURL_LOG_FILE="/tmp/curl.$$.log"
 
     # Clean up inner functions on return
-    __unset() {
-        unset -f __unset _show_help _color _info _warn _error _debug _exception _curl _get_zones _get_dns_records _delete_dns_record _create_dns_record _outgoing_ip _api_success
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
-
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
@@ -61,7 +56,6 @@ _cf_ddns() {
 
     _color() { [ -t 2 ] && [ -z "${NO_COLOR:-}" ] && printf '%s' "$1"; }
     _error() { printf '%s[ERR][%s] %s%s\n' "$(_color $'\033[31m')" "$SCRIPT_NAME" "$*" "$(_color $'\033[0m')" >&2; }
-    _warn()  { printf '%s[WRN][%s] %s%s\n' "$(_color $'\033[33m')" "$SCRIPT_NAME" "$*" "$(_color $'\033[0m')" >&2; }
     _info()  { printf '%s[INF][%s] %s%s\n' "$(_color $'\033[2m')"  "$SCRIPT_NAME" "$*" "$(_color $'\033[0m')" >&2; }
     _debug() { [ -z "$DDNS_DEBUG" ] && return 0; printf '%s[DBG][%s] %s%s\n' "$(_color $'\033[36m')" "$SCRIPT_NAME" "$*" "$(_color $'\033[0m')" >&2; }
 
@@ -231,7 +225,7 @@ _cf_ddns() {
     fi
     ###\### ###/###
 
-}
+)
 
 # Call main function, passing script arguments
 _cf_ddns "$@"

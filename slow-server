@@ -13,7 +13,7 @@
 # is the delay in milliseconds. Requests without a numeric path return 404
 # e.g. `curl http://localhost:8080/2500` responds after ~2.5 seconds
 
-_slow_server() {
+_slow_server() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="slow-server" ;; esac
@@ -46,10 +46,9 @@ _slow_server() {
         echo "  socat, sleep (must support fractional seconds)"
     }
 
-    # Function invoked by socat below on each request. Defined inside the wrapper
-    # so __unset can clean it up in the parent shell; exported for socat's
+    # Function invoked by socat below on each request. Exported for socat's
     # SYSTEM: subshell to see it
-    #shellcheck disable=SC2317 # "Command appears to be unreachable. Check usage (or ignore if invoked indirectly)."
+    # shellcheck disable=SC2317,SC2329 # invoked indirectly via socat SYSTEM:_slow_response
     _slow_response() {
         _is_number() {
             case "$1" in
@@ -81,11 +80,6 @@ _slow_server() {
         unset -f _is_number
     }
 
-    __unset() {
-        unset -f __unset _error _show_help _slow_response
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
-
     case "$1" in
         -h|--help) _show_help; return 0 ;;
     esac
@@ -104,10 +98,8 @@ _slow_server() {
     # Start simple server
     echo "Starting server at http://localhost:$port"
     socat "TCP-LISTEN:$port,fork,reuseaddr" "SYSTEM:_slow_response"
-    # The __unset RETURN trap handles cleanup of _slow_response in this shell
-    # Child sockets in flight may still have the exported function, but those
-    # processes die with the server
-}
+    # _slow_response and any exports die with the wrapper subshell on return
+)
 
 _slow_server "$@"
 __slow_server_rc=$?

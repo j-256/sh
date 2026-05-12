@@ -13,7 +13,7 @@
 # Restores backed-up files by moving (renaming) them from "file.ext.bak" ->
 # "file.ext", avoiding overwriting files by default
 
-_unbak() {
+_unbak() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="unbak" ;; esac
@@ -151,11 +151,6 @@ _unbak() {
     }
 
     # Clean up inner functions when returning
-    __unset() {
-        unset -f __unset _show_help _error _verbose _dry_run _restore _move_file _expand_short_opts
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
-
     _expand_short_opts "" "$@"
     set -- "${_EXPANDED[@]}"; unset _EXPANDED
 
@@ -203,7 +198,7 @@ _unbak() {
     for f in "${args[@]}"; do
         _restore "$f"
     done
-}
+)
 
 _unbak "$@"
 __unbak_rc=$?

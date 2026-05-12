@@ -7,7 +7,7 @@
 # Options:
 #   -h, --help     Show help message
 
-_swap() {
+_swap() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="swap" ;; esac
@@ -39,11 +39,6 @@ _swap() {
     }
 
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
-
-    __unset() {
-        unset -f __unset _show_help _error
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
     case "$1" in
         -h|--help)
@@ -104,7 +99,7 @@ _swap() {
 
     # 0 status code is implied, but we will be explicit
     return 0
-}
+)
 
 _swap "$@"
 __swap_rc=$?

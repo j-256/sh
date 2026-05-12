@@ -11,7 +11,7 @@
 #   catalog_id          Catalog ID (default: test-catalog)
 #   -h, --help          Show help message
 
-_gen_catalog() {
+_gen_catalog() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="gen-catalog" ;; esac
@@ -159,17 +159,12 @@ _gen_catalog() {
         done
     }
 
-    __unset() {
-        unset -f __unset _show_help _error main print_header print_footer print_all_in_order _print_base _print_variants
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
-
     case "$1" in
         -h|--help) _show_help; return 0 ;;
     esac
 
     main "$@"
-}
+)
 
 _gen_catalog "$@"
 __gen_catalog_rc=$?

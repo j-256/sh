@@ -20,7 +20,7 @@
 #   J_INSTANCE   Instance name            (e.g. <instance>)
 #   J_TARGET     Zone name substring      (e.g. <zone-name>)
 
-_find_zone_by_name() {
+_find_zone_by_name() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="find-zone-by-name" ;; esac
@@ -95,11 +95,6 @@ _find_zone_by_name() {
             esac
         done
     }
-
-    __unset() {
-        unset -f __unset _error _show_help _expand_short_opts
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
     # Initialize local variables with default values from environment variables
     local jwt="$J_JWT"
@@ -220,7 +215,7 @@ _find_zone_by_name() {
             return 1
         fi
     done
-}
+)
 
 _find_zone_by_name "$@"
 __find_zone_by_name_rc=$?

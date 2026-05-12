@@ -10,7 +10,7 @@
 #   <directory>   Path to a directory containing its own .git (nested repo)
 #   -h, --help    Show help message
 
-_git_add_nonsub() {
+_git_add_nonsub() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="git-add-nonsub" ;; esac
@@ -78,17 +78,12 @@ _git_add_nonsub() {
     # Emergency restore for INT/TERM/HUP: only acts if we moved .git and haven't
     # restored it. Silent on failure (signal handler context; stderr may be
     # truncated)
+    # shellcheck disable=SC2329 # invoked indirectly via the INT/TERM/HUP signal trap
     _emergency_restore() {
         if [ -n "$git_backup" ] && [ -d "$git_backup" ] && [ -n "$dir" ] && [ ! -d "$dir/.git" ]; then
             mv "$git_backup" "$dir/.git" 2>/dev/null
         fi
     }
-
-    # Clean up functions to avoid polluting global namespace (only relevant if sourced)
-    __unset() {
-        unset -f __unset _show_help _error _info _backup_git _restore_git _emergency_restore
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
     # Parse arguments
     if [ $# -eq 0 ]; then
@@ -166,7 +161,7 @@ _git_add_nonsub() {
         _error "Failed to back up .git. Exiting"
         return 1
     fi
-}
+)
 
 _git_add_nonsub "$@"
 __git_add_nonsub_rc=$?

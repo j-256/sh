@@ -8,7 +8,7 @@
 # Works on both Intel (/usr/local) and Apple Silicon (/opt/homebrew) Macs
 # The actual bash install path is resolved dynamically via `brew --prefix`
 
-_install_bash() {
+_install_bash() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="install-bash" ;; esac
@@ -44,11 +44,6 @@ _install_bash() {
     }
 
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
-
-    __unset() {
-        unset -f __unset _show_help _error
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
     case "$1" in
         -h|--help) _show_help; return 0 ;;
@@ -139,7 +134,7 @@ _install_bash() {
     else
         echo "$px Homebrew environment setup (\`brew shellenv\`) already present in ~/.bash_profile, skipping this step"
     fi
-}
+)
 
 _install_bash "$@"
 __install_bash_rc=$?

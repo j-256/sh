@@ -13,7 +13,7 @@
 #   -u, --utc        Use UTC timezone instead of local time
 #   -h, --help       Show help message
 
-_screenshot_rename() {
+_screenshot_rename() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="screenshot-rename" ;; esac
@@ -59,11 +59,6 @@ _screenshot_rename() {
         echo "DEPENDENCIES"
         echo "  fswatch, defaults (macOS)"
     }
-
-    __unset() {
-        unset -f __unset _show_help _error
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
     local use_utc=false
     local watch_dir=""
@@ -150,7 +145,7 @@ _screenshot_rename() {
                 ;;
         esac
     done
-}
+)
 
 _screenshot_rename "$@"
 __screenshot_rename_rc=$?

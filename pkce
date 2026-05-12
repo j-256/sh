@@ -12,7 +12,7 @@
 # Reference:
 #   https://datatracker.ietf.org/doc/html/rfc7636
 
-_pkce() {
+_pkce() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="pkce" ;; esac
@@ -85,11 +85,6 @@ _pkce() {
         done
     }
 
-    __unset() {
-        unset -f __unset _base64_to_base64url _show_help _error _expand_short_opts
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
-
     # Default to tab-separated output; -n|--newline switches to newline
     local delimiter='\t'
 
@@ -121,7 +116,7 @@ _pkce() {
 
     # Print code verifier and code challenge, separated by a tab or newline
     printf "%s$delimiter%s" "$code_verifier" "$code_challenge"
-}
+)
 
 _pkce "$@"
 __pkce_rc=$?

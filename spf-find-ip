@@ -14,7 +14,7 @@
 # currently support IP ranges -- the IP must appear as-is or with /32
 
 # TODO: Support IP ranges?
-_spf_find_ip() {
+_spf_find_ip() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="spf-find-ip" ;; esac
@@ -94,11 +94,6 @@ _spf_find_ip() {
         echo "    that appears in the record."
     }
 
-    __unset() {
-        unset -f __unset _show_help _error get_spf_record find_include_directive_recursive
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
-
     case "$1" in
         -h|--help) _show_help; return 0 ;;
     esac
@@ -129,7 +124,7 @@ _spf_find_ip() {
     else
         echo "No SPF record found for $domain" >&2
     fi
-}
+)
 
 _spf_find_ip "$@"
 __spf_find_ip_rc=$?

@@ -10,7 +10,7 @@
 #   private_key_file   Path to the RSA private key (PEM format)
 #   -h, --help         Show help message
 
-_dw_jwt() {
+_dw_jwt() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="dw-jwt" ;; esac
@@ -49,11 +49,6 @@ _dw_jwt() {
         echo "DEPENDENCIES"
         echo "  openssl"
     }
-
-    __unset() {
-        unset -f __unset _show_help _error
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
     case "$1" in
         -h|--help) _show_help; return 0 ;;
@@ -113,7 +108,7 @@ _dw_jwt() {
 
     # Create final JWT
     echo "$header_b64.$payload_b64.$signature"
-}
+)
 
 _dw_jwt "$@"
 __dw_jwt_rc=$?

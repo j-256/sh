@@ -8,7 +8,7 @@
 # Runs augmented subcommands (a/auth, sbx, list, etc.) via sfcc-ci and
 # falls through to sfcc-ci for anything unrecognized
 
-_s() {
+_s() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="s" ;; esac
@@ -57,11 +57,6 @@ _s() {
         echo "SEE ALSO"
         echo "  sfcc-ci --help"
     }
-
-    __unset() {
-        unset -f __unset _show_help
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
     case "$1" in
         -h|--help) _show_help; return 0 ;;
@@ -175,7 +170,7 @@ _s() {
             sfcc-ci "$option" "$@"
         ;;
     esac
-}
+)
 
 _s "$@"
 __s_rc=$?

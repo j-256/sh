@@ -16,7 +16,7 @@
 #   -q, --quiet          Suppress per-request output; only show summary
 #   -h, --help           Show this help message
 
-_curl_timing() {
+_curl_timing() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="curl-timing" ;; esac
@@ -218,11 +218,6 @@ _curl_timing() {
         done
     }
 
-    __unset() {
-        unset -f __unset _error _show_help _req _stats _colorize_url _expand_short_opts
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
-
     # --- defaults and parse arguments ---
     local num_requests=10
     local warmup=0
@@ -420,7 +415,7 @@ _curl_timing() {
         i=$((i + 1))
     done
     return 0
-}
+)
 
 _curl_timing "$@"
 __curl_timing_rc=$?

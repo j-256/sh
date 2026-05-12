@@ -10,7 +10,7 @@
 # B2C Commerce (Demandware) cartridges by Eclipse/UX Studio/Prophet Debugger.
 # Each .project file uses the subdirectory name as the project name.
 
-_dot_project() {
+_dot_project() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="dot-project" ;; esac
@@ -36,11 +36,6 @@ _dot_project() {
         echo "  0  Success (includes no-op cases: nonexistent dir, write errors"
         echo "     per-file logged to stderr but not propagated)"
     }
-
-    __unset() {
-        unset -f __unset _error _show_help
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
     case "${1-}" in
         -h|--help) _show_help; return 0 ;;
@@ -78,7 +73,7 @@ DOT_PROJECT_TEMPLATE
             fi
         fi
     done
-}
+)
 
 _dot_project "$@"
 __dot_project_rc=$?

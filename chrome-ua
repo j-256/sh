@@ -6,7 +6,7 @@
 #   chrome-ua --latest [--platform mac|win|linux]
 #   chrome-ua -h
 
-_chrome_ua() {
+_chrome_ua() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="chrome-ua" ;; esac
@@ -65,11 +65,6 @@ _chrome_ua() {
         echo "  defaults (macOS, for local mode), curl (for --latest or auto"
         echo "  network fallback), jq (for --latest or auto network fallback)"
     }
-
-    __unset() {
-        unset -f __unset _show_help _error _warn _ua_for _fetch_latest_major
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
     # Pinned fallback major version -- used when both local read and network
     # fetch fail (or when network is disabled via CHROME_UA_OFFLINE)
@@ -198,7 +193,7 @@ _chrome_ua() {
     _warn "Using pinned fallback major=$fallback_major (update periodically)"
     _ua_for "$platform" "$fallback_major"
     return 0
-}
+)
 
 _chrome_ua "$@"
 __chrome_ua_rc=$?

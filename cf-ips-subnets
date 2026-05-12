@@ -8,7 +8,7 @@
 #   ipcalc - https://github.com/kjokjo/ipcalc
 #   curl
 
-_cf_ips_subnets() {
+_cf_ips_subnets() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="cf-ips-subnets" ;; esac
@@ -39,11 +39,6 @@ _cf_ips_subnets() {
         echo "  curl"
         echo "  ipcalc - https://github.com/kjokjo/ipcalc"
     }
-
-    __unset() {
-        unset -f __unset _show_help _error
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
     case "$1" in
         -h|--help)
@@ -88,7 +83,7 @@ _cf_ips_subnets() {
         fi
         ipcalc -b "$i" "$new_cidr" | grep 'Network' | sed 's/Network: *// ; s/ *$// ; 1d'
     done
-}
+)
 
 _cf_ips_subnets "$@"
 __cf_ips_subnets_rc=$?

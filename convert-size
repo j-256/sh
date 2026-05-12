@@ -5,7 +5,7 @@
 #   convert-size <-t|--to system> [-u|--unit unit] <size>
 #   convert-size -h
 
-_convert_size() {
+_convert_size() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="convert-size" ;; esac
@@ -87,11 +87,6 @@ _convert_size() {
             esac
         done
     }
-
-    __unset() {
-        unset -f __unset _show_help _error _si_unit _binary_unit _expand_short_opts
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
     # -h handled before the dep guard so help works without bc installed
     case "$1" in
@@ -206,7 +201,7 @@ _convert_size() {
         | sed -E 's/(\.[0-9]*[1-9])0+$/\1/; s/\.0+$//; s/^\./0./')"
 
     echo "${converted_size}${input_unit}"
-}
+)
 
 _convert_size "$@"
 __convert_size_rc=$?

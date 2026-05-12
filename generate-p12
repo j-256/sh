@@ -10,7 +10,7 @@
 # as an argument. Requires a CA cert bundle downloaded from Salesforce Business
 # Manager (Global Preferences -> Keys & Certificates -> MFA Certificates)
 
-_generate_p12() {
+_generate_p12() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="generate-p12" ;; esac
@@ -58,11 +58,6 @@ _generate_p12() {
     # Install cleanup trap before any return path (including --help) so all
     # exits run __unset. Helpers below haven't been defined yet, but unset -f
     # is silent on missing names, so listing them all up-front is fine
-    __unset() {
-        unset -f __unset _show_help _color _prompt _echo _bold _error _file_exists
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
-
     case "$1" in
         -h|--help)
             _show_help
@@ -272,7 +267,7 @@ EOF
     ### DONE
     _bold "Finished successfully. Full path to p12:"
     _echo "$p12_filename"
-}
+)
 
 _generate_p12 "$@"
 __generate_p12_rc=$?

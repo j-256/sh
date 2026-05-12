@@ -9,7 +9,7 @@
 # DNS response to stderr, and extracts the base64 public key (the p= value)
 # to stdout
 
-_dkim_pubkey() {
+_dkim_pubkey() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="dkim-pubkey" ;; esac
@@ -42,11 +42,6 @@ _dkim_pubkey() {
         echo "DEPENDENCIES"
         echo "  dig"
     }
-
-    __unset() {
-        unset -f __unset _error _show_help
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
     case "$1" in
         -h|--help)
@@ -85,7 +80,7 @@ _dkim_pubkey() {
         return 4
     fi
     echo "$pubkey"
-}
+)
 
 _dkim_pubkey "$@"
 __dkim_pubkey_rc=$?

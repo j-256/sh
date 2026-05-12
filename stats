@@ -8,7 +8,7 @@
 #   command | stats [-n]
 #   stats -h
 
-_stats() {
+_stats() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="stats" ;; esac
@@ -37,11 +37,6 @@ _stats() {
         echo "DEPENDENCIES"
         echo "  bc, sort"
     }
-
-    __unset() {
-        unset -f __unset _error _show_help
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
     case "${1-}" in
         -h|--help) _show_help; return 0 ;;
@@ -106,7 +101,7 @@ _stats() {
     echo "Range: $range ($min to $max)"
     echo "Outliers: ${outliers[*]}"
     echo "          ${#outliers[@]} of ${#numbers[@]} ($percent_outliers)"
-}
+)
 
 _stats "$@"
 __stats_rc=$?

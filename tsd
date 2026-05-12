@@ -34,7 +34,7 @@
 #     $ tsd 1800 -m  # or `tsd -m 1800`
 #     1s 800ms
 
-_tsd() {
+_tsd() (
     # Microseconds (the 3 places following milliseconds) is abbreviated μs, as in the Greek letter mu
     # In this script we use `us` to get close enough, as ms is obviously taken by milliseconds
 
@@ -79,11 +79,6 @@ _tsd() {
 
     # Allow local timezone to be overridden, for testing
     local -r LOCALTIME="${TSD_LOCALTIME:-"/etc/localtime"}"
-
-    __unset() {
-        unset -f __unset _error _expand_short_opts
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
     _expand_short_opts "" "$@"
     set -- "${_EXPANDED[@]}"; unset _EXPANDED
@@ -342,7 +337,7 @@ _tsd() {
         echo "$duration"
     fi
     #endregion
-}
+)
 
 _tsd "$@"
 __tsd_rc=$?

@@ -13,7 +13,7 @@
 #   --stdout                Force output to stdout
 #   -h, --help              Show help message
 
-_progress() {
+_progress() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="progress" ;; esac
@@ -101,11 +101,6 @@ _progress() {
     # Install cleanup trap before any return path (including --help) so all
     # exits run __unset. Helpers below haven't been defined yet, but unset -f
     # is silent on missing names, so listing them all up-front is fine
-    __unset() {
-        unset -f __unset _error _show_help _select_out_fd _is_tty_fd _get_term_cols _print_on_fd _expand_short_opts
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
-
     _expand_short_opts "wpr" "$@"
     set -- "${_EXPANDED[@]}"; unset _EXPANDED
 
@@ -302,7 +297,7 @@ _progress() {
             _print_on_fd "$out_fd" "[%s%s] %3d%%\n" "$filled" "$empty" "$progress"
         fi
     fi
-}
+)
 
 _progress "$@"
 __progress_rc=$?

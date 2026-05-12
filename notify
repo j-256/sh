@@ -20,7 +20,7 @@
 #
 # macOS only. osascript is the backing mechanism for notifications
 
-_notify() {
+_notify() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="notify" ;; esac
@@ -118,19 +118,6 @@ _notify() {
             esac
         done
     }
-
-    __unset() {
-        unset -f _color
-        unset -f _error
-        unset -f _show_help
-        unset -f _list_sounds
-        unset -f _expand_short_opts
-        unset -f __unset
-    }
-
-    # shellcheck disable=2329 # "This function is never invoked. Check usage (or ignored if invoked indirectly)."
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
-
     if ! command -v osascript >/dev/null 2>&1; then
         _error "osascript not found (macOS only)"
         return 3
@@ -249,7 +236,7 @@ on run argv
     end if
 end run
 APPLESCRIPT
-}
+)
 
 _notify "$@"
 __notify_rc=$?

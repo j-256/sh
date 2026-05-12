@@ -9,7 +9,7 @@
 # then prints it with each component in a distinct color for readability
 # Query string keys and values are colored separately
 
-_colorize_url() {
+_colorize_url() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="colorize-url" ;; esac
@@ -56,10 +56,6 @@ _colorize_url() {
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
 
     # Clean up internal functions when finished
-    __unset() {
-        unset -f __unset _show_help _color _contains _error
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
     #\# Internal Functions #/#
 
     _show_help() {
@@ -205,7 +201,7 @@ _colorize_url() {
     # Finish colorizing and reassemble URL
     local colorized_url="$c_protocol${protocol}://$c_hostname${hostname}${path}${query}${c_hash}${hash}$c_reset"
     echo "$colorized_url"
-}
+)
 
 _colorize_url "$@"
 __colorize_url_rc=$?

@@ -11,7 +11,7 @@
 #   -e, --exclude  `tr` charset to exclude from the password           Default: (None)
 #   -h, --help     Show help message
 
-_genpw() {
+_genpw() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="genpw" ;; esac
@@ -274,11 +274,6 @@ _genpw() {
     }
 
     # Clean up functions to avoid polluting global namespace
-    __unset() {
-        unset -f __unset _show_help _error _warn _escape_sed _expand_range _expand_all_ranges _expand_brackets _expand_posix _validate_charset _expand_short_opts
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
-
     _expand_short_opts "lce" "$@"
     set -- "${_EXPANDED[@]}"; unset _EXPANDED
 
@@ -355,7 +350,7 @@ _genpw() {
 
     # Print the final result
     echo "$password"
-}
+)
 
 _genpw "$@"
 __genpw_rc=$?

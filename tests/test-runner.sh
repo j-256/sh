@@ -8,7 +8,7 @@
 #   -v          Verbose (pass through to test files)
 #   -h, --help  Show help message
 
-_test_runner() {
+_test_runner() (
     local SCRIPT_NAME
     SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
@@ -35,12 +35,6 @@ _test_runner() {
         echo "  -v          Pass -v (verbose) to each test file"
         echo "  -h, --help  Show this help message"
     }
-
-    __unset() {
-        unset -f __unset _show_help
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
-
     local verbose=""
     local names=()
     while [ $# -gt 0 ]; do
@@ -136,7 +130,7 @@ _test_runner() {
     [ "$fail" -ne 0 ] && return 1
     [ -n "$unmatched_names" ] && return 1
     return 0
-}
+)
 
 _test_runner "$@"
 __test_runner_rc=$?

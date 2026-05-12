@@ -10,7 +10,7 @@
 # (default: ~/.local/bin), making them executable. With no arguments, lists
 # the available scripts grouped by category
 
-_get() {
+_get() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     # When piped via `curl ... | bash`, BASH_SOURCE[0] is empty or "bash",
     # so basename returns "bash". Fall back to the canonical name
@@ -182,11 +182,6 @@ _get() {
     }
 
     # Clean up inner functions when returning
-    __unset() {
-        unset -f __unset _show_help _error _warn _info _fetch_catalog _format_listing _install_one
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
-
     if ! command -v curl >/dev/null 2>&1; then
         _error "curl is required"
         return 3
@@ -320,7 +315,7 @@ _get() {
         return 0
     fi
     return 0
-}
+)
 
 _get "$@"
 __get_rc=$?

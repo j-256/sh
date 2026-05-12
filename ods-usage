@@ -28,7 +28,7 @@
 #   https://admin.dx.commercecloud.salesforce.com/#/Realms/getRealmUsage
 #   https://admin.dx.commercecloud.salesforce.com/api/v1/realms/xxxx/usage?from=2020-01-01&to=2020-02-01&detailedReport=false
 
-_ods_usage() {
+_ods_usage() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="ods-usage" ;; esac
@@ -95,11 +95,6 @@ _ods_usage() {
         echo "  2  Usage error (invalid JSON, missing required fields, no input)"
         echo "  3  Dependency error (jq missing; pbpaste missing in clipboard mode)"
     }
-
-    __unset() {
-        unset -f __unset _show_help _error _terminal_cols _jq
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
 
     case "$1" in
         -h|--help) _show_help; return 0 ;;
@@ -189,7 +184,7 @@ _ods_usage() {
     echo "up:    $credits_used_up"
     echo "down:  $credits_used_down"
     echo "total: $credits_used_total"
-}
+)
 
 _ods_usage "$@"
 __ods_usage_rc=$?

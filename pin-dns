@@ -127,7 +127,7 @@
 #     3   Dependency error (e.g. curl missing; dig missing when TARGET is a hostname)
 #     4   Resolution error (dig returned no A/AAAA result)
 #
-_pin_dns() {
+_pin_dns() (
     local SCRIPT_PATH="${BASH_SOURCE[0]}"
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "$SCRIPT_PATH")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
@@ -807,38 +807,6 @@ EOF
         curl_args=("${new[@]}")
         return 0
     }
-
-    __unset() {
-        unset -f _color
-        unset -f _error
-        unset -f _warn
-        unset -f _info
-        unset -f _print_help
-        unset -f _cmd_exists
-        unset -f _is_ipv4
-        unset -f _is_ipv6
-        unset -f _is_ip
-        unset -f _looks_like_host
-        unset -f _host_for_compare
-        unset -f _is_http_url
-        unset -f _parse_http_url
-        unset -f _normalize_path_or_url
-        unset -f _curl_opt_consumes_next
-        unset -f _looks_like_pin_dns_option_token
-        unset -f _short_opts_contains_silent
-        unset -f _curl_args_has_silent_controls
-        unset -f _get_user_agent
-        unset -f _curl_args_has_user_agent
-        unset -f _resolve_target_to_ip
-        unset -f _extract_first_curl_disable_flag
-        unset -f _strip_curl_disable_flags
-        unset -f __unset
-    }
-
-    # Unset helper functions before returning, via trap
-    # shellcheck disable=2329 # "This function is never invoked. Check usage (or ignored if invoked indirectly)."
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
-
     local host=""
     local host_set_explicit=""
     local target=""
@@ -1354,7 +1322,7 @@ EOF
         return 3
     fi
     return "$curl_rc"
-}
+)
 
 _pin_dns "$@"
 __pin_dns_rc=$?

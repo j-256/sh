@@ -13,7 +13,7 @@
 # "file.ext.bak"->"file.ext.bak.bak", etc. which ensures the file with a single
 # ".bak" is always the most recent version
 
-_bak() {
+_bak() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="bak" ;; esac
@@ -116,11 +116,6 @@ _bak() {
     }
 
     # Clean up inner functions when returning
-    __unset() {
-        unset -f __unset _show_help _error _verbose _dry_run _backup _move_file _expand_short_opts
-    }
-    trap '__unset || echo "'"$SCRIPT_NAME"' trap failed!" >&2; trap - RETURN' RETURN
-
     _expand_short_opts "" "$@"
     set -- "${_EXPANDED[@]}"; unset _EXPANDED
 
@@ -170,7 +165,7 @@ _bak() {
     for f in "${args[@]}"; do
         _backup "$f"
     done
-}
+)
 
 _bak "$@"
 __bak_rc=$?
