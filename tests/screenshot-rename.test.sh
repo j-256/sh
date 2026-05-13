@@ -129,7 +129,7 @@ test_default_watch_dir_from_defaults_read() {
 test_default_watch_dir_tilde_expansion() {
     # defaults sometimes returns a tilde-prefixed path literally
     mkdir -p "$HOME/Shots"
-    # shellcheck disable=SC2088 # literal tilde is what `defaults` emits
+    # shellcheck disable=SC2088 # "Tilde does not expand in quotes. Use `$HOME`." -- literal tilde is what `defaults` emits
     printf '%s' '~/Shots' > "$TEST_DIR/screencapture_location"
     run_script
     assert_rc "tilde expanded exits 0" 0

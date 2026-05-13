@@ -132,7 +132,7 @@ unset _basename
 
 #region cURL - all timing fields
 curl_format="appconnect: %{time_appconnect}\nconnect: %{time_connect}\nnamelookup: %{time_namelookup}\npretransfer: %{time_pretransfer}\nredirect: %{time_redirect}\nstarttransfer: %{time_starttransfer}\ntotal: %{time_total}\n"
-# shellcheck disable=SC2154 # $url is a placeholder for the caller's URL
+# shellcheck disable=SC2154 # "var is referenced but not assigned." -- $url is a placeholder for the caller's URL
 curl -sfS -w "$curl_format" -o /dev/null "$url"
 #endregion
 
@@ -318,7 +318,7 @@ shell_func() (
 # @tsv outputs tab-separated values; IFS=$'\t' prevents splitting on spaces in values
 # name/version/count and $json are placeholders -- in real use the caller supplies
 # $json and consumes name/version/count afterwards
-# shellcheck disable=SC2034,SC2154
+# shellcheck disable=SC2034,SC2154 # "foo appears unused. Verify it or export it." / "var is referenced but not assigned."
 IFS=$'\t' read -r name version count \
     < <(jq -r '[
         (.name // ""),

@@ -3,7 +3,7 @@
 #
 # Source this at the top of every .test.sh file
 # See TESTING.md for full documentation
-# shellcheck disable=SC2016 # single-quoted inline bash scripts are intentional
+# shellcheck disable=SC2016 # "Expressions don't expand in single quotes, use double quotes for that." -- single-quoted inline bash scripts are intentional
 
 _VERBOSE=0
 _PASS=0

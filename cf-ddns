@@ -101,7 +101,7 @@ _cf_ddns() (
     _curl() {
         local method="${1:?"HTTP method is required"}" && shift
         local path="${1:?"API path is required"}" && shift
-        # shellcheck disable=SC2094 # both writes are append-only; nothing reads the file in this pipeline
+        # shellcheck disable=SC2094 # "Make sure not to read and write the same file in the same pipeline." -- both writes are append-only; nothing reads the file in this pipeline
         curl -v -sSf -X "$method" \
             --url "$API_BASE/${path#/}" \
             -H "Authorization: Bearer $api_token" \

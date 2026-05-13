@@ -109,7 +109,7 @@ __prompt__main() {
         printf "%s" "$__prompt__prompt_text"
         local __prompt__input
         IFS= read -r __prompt__input
-        # shellcheck disable=SC2034 # used via eval below
+        # shellcheck disable=SC2034 # "foo appears unused. Verify it or export it." -- used via eval below
         __prompt__input="${__prompt__input:-"$__prompt__default"}"
         eval "$__prompt__varname"'="$__prompt__input"'
         return 0
@@ -178,7 +178,7 @@ __prompt__main() {
     trap - INT
     trap - TERM
 
-    # shellcheck disable=SC2034 # used via eval below
+    # shellcheck disable=SC2034 # "foo appears unused. Verify it or export it." -- used via eval below
     __prompt__input="${__prompt__input:-"$__prompt__default"}"
     eval "$__prompt__varname"'="$__prompt__input"'
 }

@@ -242,11 +242,11 @@ _progress() (
         shift
         if [ "$fd" -eq 2 ]; then
             # Ignore ShellCheck: We are explicitly expecting a printf format string in the variable
-            # shellcheck disable=2059 # "Don't use variables in the printf format string. Use printf '..%s..' "$foo"."
+            # shellcheck disable=SC2059 # "Don't use variables in the printf format string. Use printf '..%s..' "$foo"."
             printf "$@" >&2
         else
             # Ignore ShellCheck: We are explicitly expecting a printf format string in the variable
-            # shellcheck disable=2059 # "Don't use variables in the printf format string. Use printf '..%s..' "$foo"."
+            # shellcheck disable=SC2059 # "Don't use variables in the printf format string. Use printf '..%s..' "$foo"."
             printf "$@"
         fi
     }

@@ -78,7 +78,7 @@ _git_add_nonsub() (
     # Emergency restore for INT/TERM/HUP: only acts if we moved .git and haven't
     # restored it. Silent on failure (signal handler context; stderr may be
     # truncated)
-    # shellcheck disable=SC2329 # invoked indirectly via the INT/TERM/HUP signal trap
+    # shellcheck disable=SC2329 # "This function is never invoked. Check usage (or ignored if invoked indirectly)." -- invoked indirectly via the INT/TERM/HUP signal trap
     _emergency_restore() {
         if [ -n "$git_backup" ] && [ -d "$git_backup" ] && [ -n "$dir" ] && [ ! -d "$dir/.git" ]; then
             mv "$git_backup" "$dir/.git" 2>/dev/null

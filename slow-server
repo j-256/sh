@@ -48,7 +48,7 @@ _slow_server() (
 
     # Function invoked by socat below on each request. Exported for socat's
     # SYSTEM: subshell to see it
-    # shellcheck disable=SC2317,SC2329 # invoked indirectly via socat SYSTEM:_slow_response
+    # shellcheck disable=SC2317,SC2329 # "Command appears to be unreachable. Check usage (or ignore if invoked indirectly)." / "This function is never invoked. Check usage (or ignored if invoked indirectly)." -- invoked indirectly via socat SYSTEM:_slow_response
     _slow_response() {
         _is_number() {
             case "$1" in
