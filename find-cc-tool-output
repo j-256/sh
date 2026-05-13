@@ -1,0 +1,340 @@
+#!/bin/bash
+# find-cc-tool-output - Recover full tool_result output from Claude Code transcripts
+#
+# Usage:
+#   find-cc-tool-output [options] <substring>
+#
+# Options:
+#   -s, --session <name|uuid>  Limit to one session (custom title or UUID)
+#   -d, --dir <path>           Limit to one project directory
+#   -a, --all                  Dump every match's full body
+#   -v, --verbose              Verbose progress output
+#   -h, --help                 Show help message
+
+_find_cc_tool_output() (
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="find-cc-tool-output" ;; esac
+
+    local PROJECTS_DIR; PROJECTS_DIR="$HOME/.claude/projects"
+    local SNIPPET_LEN=120
+
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+
+    _show_help() {
+        local s; [ -t 1 ] && s=$'\033[4m'
+        local r; [ -t 1 ] && r=$'\033[24m'
+        echo "NAME"
+        echo "  $SCRIPT_NAME - recover full tool_result output from Claude Code transcripts"
+        echo "SYNOPSIS"
+        echo "  $SCRIPT_NAME [${s}options${r}] <${s}substring${r}>"
+        echo "  $SCRIPT_NAME -h"
+        echo "DESCRIPTION"
+        echo "  Searches ~/.claude/projects/ JSONL transcripts for tool_result entries"
+        echo "  whose content contains <${s}substring${r}>. Useful for recovering full"
+        echo "  Bash/Read output from a previous session when the CLI's"
+        echo "  '+N lines (ctrl+o)' display cap can't be expanded."
+        echo
+        echo "  When exactly one match is found, prints the full tool_result body to"
+        echo "  stdout. When multiple match, lists them on stderr and exits 2 -- narrow"
+        echo "  with --session or --dir, or pass --all to dump every body."
+        echo "OPTIONS"
+        echo "  -s, --session ${s}name|uuid${r}"
+        echo "                       Limit to one session. Friendly names (set via"
+        echo "                       /rename) are resolved by latest customTitle event"
+        echo "  -d, --dir ${s}path${r}        Limit to one project directory. Accepts"
+        echo "                       absolute paths (encoded automatically) or the"
+        echo "                       already-encoded basename"
+        echo "  -a, --all            Dump every matching tool_result body, separated"
+        echo "                       by headers, instead of listing"
+        echo "  -v, --verbose        Verbose progress output"
+        echo "  -h, --help           Show this help message"
+        echo "DEPENDENCIES"
+        echo "  python3"
+        echo "EXIT STATUS"
+        echo "  0  Match found and printed (or all dumped)"
+        echo "  1  No matches"
+        echo "  2  Usage error, or multiple matches without --all"
+        echo "  3  Missing dependency"
+        echo "EXAMPLES"
+        echo "  # Recover output containing a unique string"
+        echo "  $SCRIPT_NAME 'PARENS ACRONYMS'"
+        echo
+        echo "  # Restrict to one renamed session"
+        echo "  $SCRIPT_NAME -s 'dsc-scrape audit' 'landings on disk'"
+        echo
+        echo "  # Restrict to one project directory"
+        echo "  $SCRIPT_NAME -d /x 'sips -Z'"
+        echo
+        echo "  # Dump every match's full body"
+        echo "  $SCRIPT_NAME --all 'curl -fSsiL'"
+        echo "CAVEATS"
+        echo "  Substring matching is performed on decoded JSON content, so quoted"
+        echo "  strings in the original output match literally. Substrings spanning"
+        echo "  raw newlines work; substrings containing literal backslashes may not."
+        echo
+        echo "  Encoded project basenames start with '-', which collides with the"
+        echo "  short-flag bundling syntax. Use the '=' form for those:"
+        echo "    $SCRIPT_NAME --dir=-Users-me--x foo  # works"
+        echo "    $SCRIPT_NAME --dir -Users-me--x foo  # parsed as bundled flags"
+        echo "  Absolute paths are encoded automatically and have no such issue."
+    }
+
+    _expand_short_opts() {
+        local value_opts="$1"; shift
+        _EXPANDED=()
+        local passthru=""
+        local arg
+        local rest
+        local c
+        for arg in "$@"; do
+            if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
+            case "$arg" in
+                --)          passthru=1; _EXPANDED+=("$arg") ;;
+                --*|-|"")    _EXPANDED+=("$arg") ;;
+                -[a-zA-Z]?*)
+                    rest="${arg#-}"
+                    while [ -n "$rest" ]; do
+                        c="${rest%"${rest#?}"}"; rest="${rest#?}"
+                        _EXPANDED+=("-$c")
+                        case "$value_opts" in *"$c"*)
+                            [ -n "$rest" ] && _EXPANDED+=("$rest")
+                            rest="" ;;
+                        esac
+                    done ;;
+                *)           _EXPANDED+=("$arg") ;;
+            esac
+        done
+    }
+
+    local session=""
+    local dir=""
+    local all_mode=0
+    local verbose=0
+    local args=()
+
+    _expand_short_opts "sd" "$@"
+    set -- "${_EXPANDED[@]}"; unset _EXPANDED
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -h|--help) _show_help; return 0 ;;
+            -v|--verbose) verbose=1; shift ;;
+            -a|--all) all_mode=1; shift ;;
+            -s|--session)
+                [ -n "${2-}" ] || { _error "--session requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                session="$2"; shift 2 ;;
+            --session=*)
+                session="${1#*=}"
+                [ -n "$session" ] || { _error "--session requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                shift ;;
+            -d|--dir)
+                [ -n "${2-}" ] || { _error "--dir requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                dir="$2"; shift 2 ;;
+            --dir=*)
+                dir="${1#*=}"
+                [ -n "$dir" ] || { _error "--dir requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                shift ;;
+            --) shift; while [ $# -gt 0 ]; do args+=("$1"); shift; done ;;
+            -*) _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+            *)  args+=("$1"); shift ;;
+        esac
+    done
+
+    if [ "${#args[@]}" -eq 0 ]; then
+        _error "Must provide a substring to search for. Run \`$SCRIPT_NAME -h\` for usage"
+        return 2
+    fi
+    if [ "${#args[@]}" -gt 1 ]; then
+        _error "Multiple substrings not allowed (got ${#args[@]}). Run \`$SCRIPT_NAME -h\` for usage"
+        return 2
+    fi
+    local substring; substring="${args[0]}"
+
+    if ! command -v python3 >/dev/null 2>&1; then
+        _error "python3 is required"
+        return 3
+    fi
+
+    if [ ! -d "$PROJECTS_DIR" ]; then
+        _error "$PROJECTS_DIR does not exist"
+        return 1
+    fi
+
+    PROJECTS_DIR="$PROJECTS_DIR" \
+    SUBSTRING="$substring" \
+    SESSION="$session" \
+    DIR_ARG="$dir" \
+    ALL_MODE="$all_mode" \
+    VERBOSE="$verbose" \
+    SNIPPET_LEN="$SNIPPET_LEN" \
+    SCRIPT_NAME="$SCRIPT_NAME" \
+    python3 <<'PY'
+import os, sys, json
+from pathlib import Path
+
+projects_dir = Path(os.environ["PROJECTS_DIR"])
+substring    = os.environ["SUBSTRING"]
+session      = os.environ.get("SESSION", "")
+dir_arg      = os.environ.get("DIR_ARG", "")
+all_mode     = os.environ.get("ALL_MODE") == "1"
+verbose      = os.environ.get("VERBOSE") == "1"
+snippet_len  = int(os.environ.get("SNIPPET_LEN", "120"))
+script_name  = os.environ.get("SCRIPT_NAME", "find-cc-tool-output")
+
+def err(msg):
+    print(f"[ERR][{script_name}] {msg}", file=sys.stderr)
+
+def info(msg):
+    if verbose:
+        print(f"[INF][{script_name}] {msg}", file=sys.stderr)
+
+def encode_path(p):
+    # CC encodes project dirs by replacing both `/` and `.` with `-`.
+    return p.replace("/", "-").replace(".", "-")
+
+# Resolve --dir (absolute path -> encoded; otherwise treat as already-encoded)
+dir_filter = ""
+if dir_arg:
+    dir_filter = encode_path(dir_arg) if dir_arg.startswith("/") else dir_arg
+    info(f"dir filter: '{dir_filter}'")
+    if not (projects_dir / dir_filter).is_dir():
+        err(f"Project directory not found: {projects_dir / dir_filter}")
+        sys.exit(1)
+
+# Build candidate file list
+if dir_filter:
+    candidate_dirs = [projects_dir / dir_filter]
+else:
+    candidate_dirs = sorted(p for p in projects_dir.iterdir() if p.is_dir())
+
+candidate_files = []
+for d in candidate_dirs:
+    candidate_files.extend(sorted(d.glob("*.jsonl")))
+
+info(f"scanning {len(candidate_files)} JSONL file(s)")
+
+# Resolve --session
+def looks_uuid(s):
+    if len(s) != 36:
+        return False
+    parts = s.split("-")
+    return len(parts) == 5 and [len(p) for p in parts] == [8, 4, 4, 4, 12]
+
+if session:
+    if looks_uuid(session):
+        candidate_files = [f for f in candidate_files if f.stem == session]
+        if not candidate_files:
+            err(f"Session UUID not found: {session}")
+            sys.exit(1)
+    else:
+        # Match files whose latest customTitle equals `session`
+        matching = []
+        for f in candidate_files:
+            latest = None
+            try:
+                with f.open("r", encoding="utf-8", errors="replace") as fh:
+                    for line in fh:
+                        try:
+                            obj = json.loads(line)
+                        except Exception:
+                            continue
+                        if obj.get("type") == "custom-title":
+                            latest = obj.get("customTitle")
+            except Exception:
+                continue
+            if latest == session:
+                matching.append(f)
+        if not matching:
+            err(f"No session named: {session}")
+            sys.exit(1)
+        candidate_files = matching
+    info(f"after session filter: {len(candidate_files)} file(s)")
+
+def extract_tool_result_text(obj):
+    """Return the tool_result body text, or None if this entry isn't a tool_result."""
+    msg = obj.get("message", {})
+    content = msg.get("content")
+    if not isinstance(content, list):
+        return None
+    parts = []
+    found = False
+    for c in content:
+        if not isinstance(c, dict) or c.get("type") != "tool_result":
+            continue
+        found = True
+        body = c.get("content")
+        if isinstance(body, str):
+            parts.append(body)
+        elif isinstance(body, list):
+            for b in body:
+                if isinstance(b, dict):
+                    parts.append(b.get("text", "") or "")
+    if not found:
+        return None
+    return "\n".join(parts)
+
+matches = []  # (file, line_no, custom_title, text)
+for f in candidate_files:
+    custom_title = None
+    try:
+        with f.open("r", encoding="utf-8", errors="replace") as fh:
+            for line_no, line in enumerate(fh, 1):
+                try:
+                    obj = json.loads(line)
+                except Exception:
+                    continue
+                if obj.get("type") == "custom-title":
+                    custom_title = obj.get("customTitle")
+                    continue
+                if obj.get("type") != "user":
+                    continue
+                text = extract_tool_result_text(obj)
+                if text is None:
+                    continue
+                if substring in text:
+                    matches.append((f, line_no, custom_title, text))
+    except Exception:
+        continue
+
+info(f"found {len(matches)} match(es)")
+
+if not matches:
+    err(f"No matches for: {substring}")
+    sys.exit(1)
+
+if len(matches) == 1 or all_mode:
+    multi = all_mode and len(matches) > 1
+    for i, (f, line_no, title, text) in enumerate(matches):
+        if multi:
+            label = title if title else "(no title)"
+            sep = "=" * 60
+            print(sep, file=sys.stderr)
+            print(f"[{i+1}/{len(matches)}] {label}  {f.parent.name}/{f.stem}  L{line_no}", file=sys.stderr)
+            print(sep, file=sys.stderr)
+        print(text)
+        if multi and i < len(matches) - 1:
+            print()
+    sys.exit(0)
+
+# Multi-match without --all: list and exit 2
+print(f"[INF][{script_name}] {len(matches)} matches (narrow with --session/--dir, or pass --all):", file=sys.stderr)
+for i, (f, line_no, title, text) in enumerate(matches):
+    label = title if title else "(no title)"
+    snippet = " ".join(text.split())
+    if len(snippet) > snippet_len:
+        snippet = snippet[:snippet_len] + "..."
+    print(f"  [{i+1}] {label}", file=sys.stderr)
+    print(f"      {f.parent.name}/{f.stem}  line {line_no}", file=sys.stderr)
+    print(f"      {snippet}", file=sys.stderr)
+sys.exit(2)
+PY
+)
+
+_find_cc_tool_output "$@"
+__find_cc_tool_output_rc=$?
+unset -f _find_cc_tool_output
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __find_cc_tool_output_rc; return $__find_cc_tool_output_rc"
+fi
+eval "unset __find_cc_tool_output_rc; exit $__find_cc_tool_output_rc"
