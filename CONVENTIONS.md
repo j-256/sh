@@ -233,6 +233,7 @@ This ensures:
 - Quote variables in `[ ]` tests: `[ "$var" -eq 0 ]`, not `[ $var -eq 0 ]`
 - Prefer `if ...; then ...; else ...; fi` to `A && B || C` (SC2015): the chained form silently runs `C` if `B` fails, not only when `A` fails. The two are equivalent only when `B` can't fail, which is usually not worth relying on -- `echo`/`true` are fine but user-defined functions and external commands aren't.
 - Prefer `cmd || :` over `cmd || true` for "ignore failure" patterns. `:` is the POSIX null utility -- intentional, minimal, and reads as "no-op" at a glance. `|| true` works but relies on reading `true` as a no-op keyword rather than a command; `|| :` makes the intent unambiguous.
+- Annotate `# shellcheck disable=SCxxxx` with the rule's title in quotes -- e.g. `# shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting."`. The title is whatever `shellcheck` itself prints for the flagged line (easily verified by running it), and inlining it saves the reader a wiki lookup. Additional rationale, when warranted, follows the title.
 
 ## Exit Codes
 
