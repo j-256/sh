@@ -78,7 +78,7 @@ _tsd() (
     local is_timestamp
 
     # Allow local timezone to be overridden, for testing
-    local -r LOCALTIME="${TSD_LOCALTIME:-"/etc/localtime"}"
+    local LOCALTIME="${TSD_LOCALTIME:-"/etc/localtime"}"
 
     _expand_short_opts "" "$@"
     set -- "${_EXPANDED[@]}"; unset _EXPANDED

@@ -14,10 +14,10 @@ _cf_ddns() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="cf-ddns" ;; esac
-    local -r API_VERSION="v4"
-    local -r API_BASE="https://api.cloudflare.com/client/$API_VERSION"
-    local -r A_RECORD_TTL=60
-    local -r CURL_LOG_FILE="/tmp/curl.$$.log"
+    local API_VERSION="v4"
+    local API_BASE="https://api.cloudflare.com/client/$API_VERSION"
+    local A_RECORD_TTL=60
+    local CURL_LOG_FILE="/tmp/curl.$$.log"
 
     # Clean up inner functions on return
     _show_help() {

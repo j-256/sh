@@ -88,7 +88,7 @@ _verify_p12() (
     local credential="${positional[1]}"
     local p12_pass="${positional[2]-}"
     local p12_arg4="${positional[3]-}"
-    local -r DEFAULT_P12_FILE="$USER-$hostname.p12"
+    local DEFAULT_P12_FILE="$USER-$hostname.p12"
 
     local auth_header
     case "$auth_mode" in

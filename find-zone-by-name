@@ -24,9 +24,9 @@ _find_zone_by_name() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="find-zone-by-name" ;; esac
-    local -r MAX_RESULTS_PER_REQUEST=50 # Limit determined by the API
-    local -r COUNT_HEADER_NAME="sfdc-pagination-result-count"
-    local -r TOTAL_HEADER_NAME="sfdc-pagination-total-count"
+    local MAX_RESULTS_PER_REQUEST=50 # Limit determined by the API
+    local COUNT_HEADER_NAME="sfdc-pagination-result-count"
+    local TOTAL_HEADER_NAME="sfdc-pagination-total-count"
 
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
 
@@ -172,7 +172,7 @@ _find_zone_by_name() (
     local hostname="$shortcode.api.commercecloud.salesforce.com"
     local baseUrl="https://$hostname$path"
 
-    local -r limit="$MAX_RESULTS_PER_REQUEST"
+    local limit="$MAX_RESULTS_PER_REQUEST"
     local offset=0
 
     local response
