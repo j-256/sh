@@ -219,6 +219,7 @@ This ensures:
 
 - **One variable per `local` statement**: `local a` then `local b`, never `local a b`
 - **Separate declare and assign for command substitution** (SC2155): `local var; var="$(cmd)"` on one line, not `local var="$(cmd)"`. Arithmetic `$((...))` is fine to inline since it can't fail.
+- **Configuration constants get UPPERCASE names**: top-of-function values that are set once at declaration and act as fixed inputs to the function -- URLs, base paths, magic numbers, default values, header names, TTLs -- use UPPERCASE identifiers. The casing is the signal: readers should treat UPPERCASE as "don't reassign." Do not add `local -r`. Bash's readonly flag forces a carve-out for command-substituted values, since SC2155 requires splitting declare and assign but `local -r foo` makes the second-line assign error -- and a rule with an "unless" clause is worse than a naming convention that applies uniformly. UPPERCASE alone has no carve-outs and works for string literals, parameter expansions, arithmetic, and command substitution alike.
 - **No `export` inside functions** unless the variable genuinely needs to be in the environment for child processes
 
 ## Style
