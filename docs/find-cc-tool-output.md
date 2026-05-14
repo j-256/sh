@@ -18,9 +18,32 @@ landings on disk: 19
     ...
 ```
 
-When exactly one tool_result contains the substring, its full body goes to stdout. When several do, the script lists them on stderr and exits 2 -- narrow with `--session` or `--dir`, or pass `--all` to dump every match.
+When all matches share the same body (the common case -- e.g. you ran the same command twice), the body is printed to stdout. When bodies differ, each unique body is listed on stderr with all its locations:
+
+```
+$ find-cc-tool-output 'PARENS ACRONYMS'
+[INF][find-cc-tool-output] 3 unique output(s) across 5 occurrence(s) (pick one with --match, narrow with --session/--dir, or pass --all):
+  [1] 1 occurrence(s):
+    -Users-me--x/abc123...  L34
+      "first variant snippet..."
+  [2] 2 occurrence(s):
+    -Users-me--x/def456...  L42
+    -Users-me--x-repo-foo/...  L408
+      "second variant snippet..."
+  [3] 1 occurrence(s):
+    -Users-me--x/abc123...  L260
+      "third variant snippet..."
+```
+
+Pick one with `--match N` (1-based), narrow with `--session`/`--dir`, or pass `--all` to dump every unique body.
 
 ## Common examples
+
+**Pick a specific output from the listing:**
+
+```bash
+find-cc-tool-output --match 2 'PARENS ACRONYMS'
+```
 
 **Narrow to a renamed session** (custom titles set with `/rename` are searchable by name):
 
@@ -40,7 +63,7 @@ find-cc-tool-output -d /x 'sips -Z'
 find-cc-tool-output -s 1d3bb58c-4011-4672-9c7d-2c95b2ff39f5 'landings on disk'
 ```
 
-**Dump every match's full body** (instead of listing):
+**Dump every unique body** (instead of listing):
 
 ```bash
 find-cc-tool-output --all 'curl -fSsiL'
@@ -54,9 +77,13 @@ The script walks every `*.jsonl` under `~/.claude/projects/`, parses each line, 
 {"type":"user","message":{"content":[{"type":"tool_result","content":[{"text":"..."}]}]}}
 ```
 
-The `text` (or, for older transcripts, the string-form `content`) is decoded and tested for the substring. Listings show the project directory, session UUID, line number, friendly title (if any), and a one-line snippet -- enough to identify the match before re-running with `--all` or a tighter filter.
+The `text` (or, for older transcripts, the string-form `content`) is decoded and tested for the substring. Matches are then deduplicated by exact body text -- if a command was run multiple times and produced byte-identical output, those occurrences collapse into one group whose locations all appear together.
 
 Friendly session names come from `custom-title` events recorded when you run `/rename`. The latest one wins, so if you've renamed a session multiple times, only the current title resolves.
+
+### Self-match filtering
+
+This script's own listing output starts with `[INF][find-cc-tool-output]`. When that listing is captured by a later tool call (you ran the script earlier in a session and now the transcript contains the listing), it would re-match on subsequent runs with the same substring. By default those are filtered out; pass `--include-meta` if you actually want them.
 
 ---
 
@@ -68,7 +95,9 @@ Friendly session names come from `custom-title` events recorded when you run `/r
 |---|---|
 | `-s, --session <name\|uuid>` | Limit to one session. Friendly names (set via `/rename`) are resolved by latest `customTitle` event |
 | `-d, --dir <path>` | Limit to one project directory. Accepts absolute paths (encoded automatically) or the already-encoded basename |
-| `-a, --all` | Dump every matching tool_result body, separated by headers, instead of listing |
+| `-m, --match <N>` | Print the Nth unique output from a multi-match listing (1-based). Mutex with `--all` |
+| `-a, --all` | Dump every unique body, separated by headers |
+| `--include-meta` | Don't filter out this script's own listing output |
 | `-v, --verbose` | Verbose progress output |
 | `-h, --help` | Show help message |
 
@@ -78,7 +107,7 @@ Friendly session names come from `custom-title` events recorded when you run `/r
 |---|---|
 | `0` | Match found and printed (or all dumped) |
 | `1` | No matches |
-| `2` | Usage error, or multiple matches without `--all` |
+| `2` | Usage error, or multiple unique outputs without `--match`/`--all` |
 | `3` | Missing dependency |
 
 ### Dependencies

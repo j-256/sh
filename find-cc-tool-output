@@ -7,7 +7,9 @@
 # Options:
 #   -s, --session <name|uuid>  Limit to one session (custom title or UUID)
 #   -d, --dir <path>           Limit to one project directory
-#   -a, --all                  Dump every match's full body
+#   -m, --match <N>            Print the Nth unique output from a multi-match listing
+#   -a, --all                  Dump every unique matching body
+#       --include-meta         Don't filter out this script's own listing output
 #   -v, --verbose              Verbose progress output
 #   -h, --help                 Show help message
 
@@ -35,9 +37,11 @@ _find_cc_tool_output() (
         echo "  Bash/Read output from a previous session when the CLI's"
         echo "  '+N lines (ctrl+o)' display cap can't be expanded."
         echo
-        echo "  When exactly one match is found, prints the full tool_result body to"
-        echo "  stdout. When multiple match, lists them on stderr and exits 2 -- narrow"
-        echo "  with --session or --dir, or pass --all to dump every body."
+        echo "  Matches are deduplicated by exact body text. When all matches share the"
+        echo "  same body, it's printed to stdout. When bodies differ, each unique body"
+        echo "  is listed on stderr with all its occurrences and the script exits 2 --"
+        echo "  pick one with -m/--match ${s}N${r}, narrow with --session or --dir, or pass"
+        echo "  --all to dump every unique body."
         echo "OPTIONS"
         echo "  -s, --session ${s}name|uuid${r}"
         echo "                       Limit to one session. Friendly names (set via"
@@ -45,8 +49,12 @@ _find_cc_tool_output() (
         echo "  -d, --dir ${s}path${r}        Limit to one project directory. Accepts"
         echo "                       absolute paths (encoded automatically) or the"
         echo "                       already-encoded basename"
-        echo "  -a, --all            Dump every matching tool_result body, separated"
-        echo "                       by headers, instead of listing"
+        echo "  -m, --match ${s}N${r}         Print the Nth unique output from the previous"
+        echo "                       listing (1-based). Mutex with --all"
+        echo "  -a, --all            Dump every unique body, separated by headers"
+        echo "      --include-meta   Don't filter out this script's own listing output"
+        echo "                       (which otherwise self-matches when captured by a"
+        echo "                       later tool call)"
         echo "  -v, --verbose        Verbose progress output"
         echo "  -h, --help           Show this help message"
         echo "DEPENDENCIES"
@@ -54,11 +62,14 @@ _find_cc_tool_output() (
         echo "EXIT STATUS"
         echo "  0  Match found and printed (or all dumped)"
         echo "  1  No matches"
-        echo "  2  Usage error, or multiple matches without --all"
+        echo "  2  Usage error, or multiple unique outputs without --match/--all"
         echo "  3  Missing dependency"
         echo "EXAMPLES"
         echo "  # Recover output containing a unique string"
         echo "  $SCRIPT_NAME 'PARENS ACRONYMS'"
+        echo
+        echo "  # When several unique outputs match, pick one from the listing"
+        echo "  $SCRIPT_NAME --match 2 'PARENS ACRONYMS'"
         echo
         echo "  # Restrict to one renamed session"
         echo "  $SCRIPT_NAME -s 'dsc-scrape audit' 'landings on disk'"
@@ -66,7 +77,7 @@ _find_cc_tool_output() (
         echo "  # Restrict to one project directory"
         echo "  $SCRIPT_NAME -d /x 'sips -Z'"
         echo
-        echo "  # Dump every match's full body"
+        echo "  # Dump every unique body"
         echo "  $SCRIPT_NAME --all 'curl -fSsiL'"
         echo "CAVEATS"
         echo "  Substring matching is performed on decoded JSON content, so quoted"
@@ -110,10 +121,12 @@ _find_cc_tool_output() (
     local session=""
     local dir=""
     local all_mode=0
+    local match_n=""
+    local include_meta=0
     local verbose=0
     local args=()
 
-    _expand_short_opts "sd" "$@"
+    _expand_short_opts "sdm" "$@"
     set -- "${_EXPANDED[@]}"; unset _EXPANDED
 
     while [ $# -gt 0 ]; do
@@ -121,6 +134,7 @@ _find_cc_tool_output() (
             -h|--help) _show_help; return 0 ;;
             -v|--verbose) verbose=1; shift ;;
             -a|--all) all_mode=1; shift ;;
+            --include-meta) include_meta=1; shift ;;
             -s|--session)
                 [ -n "${2-}" ] || { _error "--session requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 session="$2"; shift 2 ;;
@@ -134,6 +148,13 @@ _find_cc_tool_output() (
             --dir=*)
                 dir="${1#*=}"
                 [ -n "$dir" ] || { _error "--dir requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                shift ;;
+            -m|--match)
+                [ -n "${2-}" ] || { _error "--match requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                match_n="$2"; shift 2 ;;
+            --match=*)
+                match_n="${1#*=}"
+                [ -n "$match_n" ] || { _error "--match requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift ;;
             --) shift; while [ $# -gt 0 ]; do args+=("$1"); shift; done ;;
             -*) _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
@@ -151,6 +172,20 @@ _find_cc_tool_output() (
     fi
     local substring; substring="${args[0]}"
 
+    if [ -n "$match_n" ] && [ "$all_mode" -eq 1 ]; then
+        _error "--match and --all are mutually exclusive. Run \`$SCRIPT_NAME -h\` for usage"
+        return 2
+    fi
+    if [ -n "$match_n" ]; then
+        case "$match_n" in
+            ''|*[!0-9]*) _error "--match value must be a positive integer, got '$match_n'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+        esac
+        if [ "$match_n" -lt 1 ]; then
+            _error "--match value must be >= 1, got '$match_n'. Run \`$SCRIPT_NAME -h\` for usage"
+            return 2
+        fi
+    fi
+
     if ! command -v python3 >/dev/null 2>&1; then
         _error "python3 is required"
         return 3
@@ -166,6 +201,8 @@ _find_cc_tool_output() (
     SESSION="$session" \
     DIR_ARG="$dir" \
     ALL_MODE="$all_mode" \
+    MATCH_N="$match_n" \
+    INCLUDE_META="$include_meta" \
     VERBOSE="$verbose" \
     SNIPPET_LEN="$SNIPPET_LEN" \
     SCRIPT_NAME="$SCRIPT_NAME" \
@@ -178,9 +215,16 @@ substring    = os.environ["SUBSTRING"]
 session      = os.environ.get("SESSION", "")
 dir_arg      = os.environ.get("DIR_ARG", "")
 all_mode     = os.environ.get("ALL_MODE") == "1"
+match_n_raw  = os.environ.get("MATCH_N", "")
+match_n      = int(match_n_raw) if match_n_raw else 0
+include_meta = os.environ.get("INCLUDE_META") == "1"
 verbose      = os.environ.get("VERBOSE") == "1"
 snippet_len  = int(os.environ.get("SNIPPET_LEN", "120"))
 script_name  = os.environ.get("SCRIPT_NAME", "find-cc-tool-output")
+
+# tool_result text starting with this prefix is this script's own listing
+# captured by a later tool call -- skip unless --include-meta
+META_PREFIX = f"[INF][{script_name}]"
 
 def err(msg):
     print(f"[ERR][{script_name}] {msg}", file=sys.stderr)
@@ -190,7 +234,7 @@ def info(msg):
         print(f"[INF][{script_name}] {msg}", file=sys.stderr)
 
 def encode_path(p):
-    # CC encodes project dirs by replacing both `/` and `.` with `-`.
+    # CC encodes project dirs by replacing both `/` and `.` with `-`
     return p.replace("/", "-").replace(".", "-")
 
 # Resolve --dir (absolute path -> encoded; otherwise treat as already-encoded)
@@ -252,7 +296,7 @@ if session:
     info(f"after session filter: {len(candidate_files)} file(s)")
 
 def extract_tool_result_text(obj):
-    """Return the tool_result body text, or None if this entry isn't a tool_result."""
+    """Return the tool_result body text, or None if this entry isn't a tool_result"""
     msg = obj.get("message", {})
     content = msg.get("content")
     if not isinstance(content, list):
@@ -274,7 +318,9 @@ def extract_tool_result_text(obj):
         return None
     return "\n".join(parts)
 
-matches = []  # (file, line_no, custom_title, text)
+# (file, line_no, custom_title_at_line, text)
+matches = []
+meta_skipped = 0
 for f in candidate_files:
     custom_title = None
     try:
@@ -292,41 +338,92 @@ for f in candidate_files:
                 text = extract_tool_result_text(obj)
                 if text is None:
                     continue
-                if substring in text:
-                    matches.append((f, line_no, custom_title, text))
+                if substring not in text:
+                    continue
+                if not include_meta and text.startswith(META_PREFIX):
+                    meta_skipped += 1
+                    continue
+                matches.append((f, line_no, custom_title, text))
     except Exception:
         continue
 
-info(f"found {len(matches)} match(es)")
+info(f"found {len(matches)} match(es); skipped {meta_skipped} self-match(es)")
 
 if not matches:
     err(f"No matches for: {substring}")
+    if meta_skipped > 0:
+        err(f"({meta_skipped} self-match(es) hidden; pass --include-meta to include)")
     sys.exit(1)
 
-if len(matches) == 1 or all_mode:
-    multi = all_mode and len(matches) > 1
-    for i, (f, line_no, title, text) in enumerate(matches):
-        if multi:
-            label = title if title else "(no title)"
-            sep = "=" * 60
-            print(sep, file=sys.stderr)
-            print(f"[{i+1}/{len(matches)}] {label}  {f.parent.name}/{f.stem}  L{line_no}", file=sys.stderr)
-            print(sep, file=sys.stderr)
+# Group by exact body text. Preserve first-seen order so listing IDs are stable
+groups = {}        # text -> list of (file, line_no, custom_title)
+group_order = []   # text values in insertion order
+for f, line_no, title, text in matches:
+    if text not in groups:
+        groups[text] = []
+        group_order.append(text)
+    groups[text].append((f, line_no, title))
+
+n_groups = len(group_order)
+total_occurrences = len(matches)
+info(f"{n_groups} unique output(s) across {total_occurrences} occurrence(s)")
+
+def format_locations(locs):
+    """Return ['  proj/uuid  L42  (title)', ...] for each location"""
+    lines = []
+    for f, line_no, title in locs:
+        label = f"  {f.parent.name}/{f.stem}  L{line_no}"
+        if title:
+            label += f"  ({title})"
+        lines.append(label)
+    return lines
+
+# Single unique output -> print body, mention occurrence count if >1
+if n_groups == 1 and not all_mode and not match_n:
+    text = group_order[0]
+    if total_occurrences > 1:
+        info(f"1 unique output across {total_occurrences} occurrence(s); printing")
+    print(text)
+    sys.exit(0)
+
+# --match N: pick the Nth unique output
+if match_n:
+    if match_n > n_groups:
+        err(f"--match {match_n} out of range: only {n_groups} unique output(s) available")
+        sys.exit(2)
+    text = group_order[match_n - 1]
+    locs = groups[text]
+    info(f"--match {match_n}: {len(locs)} occurrence(s)")
+    print(text)
+    sys.exit(0)
+
+# --all: dump every unique body
+if all_mode:
+    for i, text in enumerate(group_order):
+        locs = groups[text]
+        sep = "=" * 60
+        print(sep, file=sys.stderr)
+        print(f"[{i+1}/{n_groups}] {len(locs)} occurrence(s):", file=sys.stderr)
+        for line in format_locations(locs):
+            print(line, file=sys.stderr)
+        print(sep, file=sys.stderr)
         print(text)
-        if multi and i < len(matches) - 1:
+        if i < n_groups - 1:
             print()
     sys.exit(0)
 
-# Multi-match without --all: list and exit 2
-print(f"[INF][{script_name}] {len(matches)} matches (narrow with --session/--dir, or pass --all):", file=sys.stderr)
-for i, (f, line_no, title, text) in enumerate(matches):
-    label = title if title else "(no title)"
+# Multi-group without --match/--all: list groups and exit 2
+hint = "pick one with --match, narrow with --session/--dir, or pass --all"
+print(f"[INF][{script_name}] {n_groups} unique output(s) across {total_occurrences} occurrence(s) ({hint}):", file=sys.stderr)
+for i, text in enumerate(group_order):
+    locs = groups[text]
     snippet = " ".join(text.split())
     if len(snippet) > snippet_len:
         snippet = snippet[:snippet_len] + "..."
-    print(f"  [{i+1}] {label}", file=sys.stderr)
-    print(f"      {f.parent.name}/{f.stem}  line {line_no}", file=sys.stderr)
-    print(f"      {snippet}", file=sys.stderr)
+    print(f"  [{i+1}] {len(locs)} occurrence(s):", file=sys.stderr)
+    for line in format_locations(locs):
+        print(f"    {line}", file=sys.stderr)
+    print(f"      \"{snippet}\"", file=sys.stderr)
 sys.exit(2)
 PY
 )

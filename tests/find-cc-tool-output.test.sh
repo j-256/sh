@@ -83,7 +83,9 @@ test_help_exits_zero() {
     assert_stdout_contains "help has substring arg" "substring"
     assert_stdout_contains "help has --session" "--session"
     assert_stdout_contains "help has --dir" "--dir"
+    assert_stdout_contains "help has --match" "--match"
     assert_stdout_contains "help has --all" "--all"
+    assert_stdout_contains "help has --include-meta" "--include-meta"
 }
 
 test_missing_substring_exits_2() {
@@ -119,18 +121,97 @@ test_multi_match_lists_and_exits_2() {
     setup_fixture
     run_script "ALPHA-MARKER"
     assert_rc "multi-match exits 2" 2
-    assert_stderr_contains "multi-match summary" "2 matches"
-    assert_stderr_contains "lists session-two title" "session-two"
+    assert_stderr_contains "lists unique-output count" "2 unique output(s)"
+    assert_stderr_contains "lists occurrence count" "2 occurrence(s)"
     # Listing output must NOT print the full bodies on stdout
     assert_stdout_not_contains "no body on stdout" "ALPHA-MARKER full payload"
 }
 
-test_all_dumps_every_match() {
+test_dedup_single_unique_body_prints() {
+    # Two identical tool_results with the same body across two sessions should
+    # collapse to one unique output and print it without --all/--match
+    local proj="$TEST_DIR/home/.claude/projects/-dedup-test"
+    local body=$'identical body\nWIDGET-FOUND here\nmore'
+    make_jsonl "$proj/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.jsonl" \
+        "$(tool_result "$body")"
+    make_jsonl "$proj/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb.jsonl" \
+        "$(tool_result "$body")"
+    run_script "WIDGET-FOUND"
+    assert_rc "dedup-to-one exits 0" 0
+    assert_stdout_contains "prints body" "WIDGET-FOUND here"
+}
+
+test_all_dumps_unique_bodies() {
     setup_fixture
     run_script --all "ALPHA-MARKER"
     assert_rc "--all exits 0" 0
-    assert_stdout_contains "dumps first body" "ALPHA-MARKER full payload"
-    assert_stdout_contains "dumps second body" "ALPHA-MARKER second hit"
+    assert_stdout_contains "dumps first unique body" "ALPHA-MARKER full payload"
+    assert_stdout_contains "dumps second unique body" "ALPHA-MARKER second hit"
+}
+
+test_match_picks_nth_unique_output() {
+    setup_fixture
+    run_script --match 1 "ALPHA-MARKER"
+    assert_rc "--match 1 exits 0" 0
+    assert_stdout_contains "match 1 prints first body" "ALPHA-MARKER full payload"
+    assert_stdout_not_contains "match 1 doesn't print other body" "ALPHA-MARKER second hit"
+
+    run_script --match 2 "ALPHA-MARKER"
+    assert_rc "--match 2 exits 0" 0
+    assert_stdout_contains "match 2 prints second body" "ALPHA-MARKER second hit"
+    assert_stdout_not_contains "match 2 doesn't print other body" "ALPHA-MARKER full payload"
+}
+
+test_match_out_of_range_exits_2() {
+    setup_fixture
+    run_script --match 99 "ALPHA-MARKER"
+    assert_rc "--match out-of-range exits 2" 2
+    assert_stderr_contains "out-of-range error" "out of range"
+}
+
+test_match_invalid_value_exits_2() {
+    setup_fixture
+    run_script --match abc "ALPHA-MARKER"
+    assert_rc "--match abc exits 2" 2
+    assert_stderr_contains "invalid value error" "must be a positive integer"
+}
+
+test_match_zero_exits_2() {
+    setup_fixture
+    run_script --match 0 "ALPHA-MARKER"
+    assert_rc "--match 0 exits 2" 2
+    assert_stderr_contains "zero value error" "must be >= 1"
+}
+
+test_match_and_all_mutex_exits_2() {
+    setup_fixture
+    run_script --match 1 --all "ALPHA-MARKER"
+    assert_rc "--match+--all exits 2" 2
+    assert_stderr_contains "mutex error" "mutually exclusive"
+}
+
+test_meta_output_filtered_by_default() {
+    # tool_result text starting with [INF][find-cc-tool-output] is the script's
+    # own listing output captured by a later tool call. Filter by default
+    local proj="$TEST_DIR/home/.claude/projects/-meta-test"
+    make_jsonl "$proj/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.jsonl" \
+        "$(tool_result $'[INF][find-cc-tool-output] 2 unique output(s):\n  [1] METAMARKER stuff')" \
+        "$(tool_result 'real body containing METAMARKER text')"
+    run_script "METAMARKER"
+    assert_rc "meta filtered, only one match exits 0" 0
+    assert_stdout_contains "prints real body" "real body containing METAMARKER"
+    assert_stdout_not_contains "skips meta listing" "[INF]"
+}
+
+test_include_meta_keeps_self_match() {
+    local proj="$TEST_DIR/home/.claude/projects/-meta-test"
+    make_jsonl "$proj/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.jsonl" \
+        "$(tool_result $'[INF][find-cc-tool-output] 2 unique output(s):\n  [1] METAMARKER stuff')" \
+        "$(tool_result 'real body containing METAMARKER text')"
+    run_script --include-meta "METAMARKER"
+    # With meta included, two unique outputs -> exit 2, listing both
+    assert_rc "include-meta -> multi-match exits 2" 2
+    assert_stderr_contains "lists 2 outputs" "2 unique output(s)"
 }
 
 test_session_friendly_name_filters() {
