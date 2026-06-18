@@ -55,37 +55,37 @@ test_help_output() {
 
 test_missing_jwt() {
     run_script -s "kv7kzm78" -r "xxxx" -i "stg" -n "example.com"
-    assert_rc "missing jwt" 1
-    assert_stderr_contains "missing jwt error" "jwt: -j"
+    assert_rc "missing jwt" 2
+    assert_stderr_contains "missing jwt error" "jwt is required"
 }
 
 test_missing_shortcode() {
     run_script -j "eyJ.test.token" -r "xxxx" -i "stg" -n "example.com"
-    assert_rc "missing shortcode" 1
-    assert_stderr_contains "missing shortcode error" "shortcode: -s"
+    assert_rc "missing shortcode" 2
+    assert_stderr_contains "missing shortcode error" "shortcode is required"
 }
 
 test_missing_realm() {
     run_script -j "eyJ.test.token" -s "kv7kzm78" -i "stg" -n "example.com"
-    assert_rc "missing realm" 1
-    assert_stderr_contains "missing realm error" "realm ID: -r"
+    assert_rc "missing realm" 2
+    assert_stderr_contains "missing realm error" "realm is required"
 }
 
 test_missing_instance() {
     run_script -j "eyJ.test.token" -s "kv7kzm78" -r "xxxx" -n "example.com"
-    assert_rc "missing instance" 1
-    assert_stderr_contains "missing instance error" "instance name: -i"
+    assert_rc "missing instance" 2
+    assert_stderr_contains "missing instance error" "instance is required"
 }
 
 test_missing_name() {
     run_script -j "eyJ.test.token" -s "kv7kzm78" -r "xxxx" -i "stg"
-    assert_rc "missing name" 1
-    assert_stderr_contains "missing name error" "zone name: -n"
+    assert_rc "missing name" 2
+    assert_stderr_contains "missing name error" "target is required"
 }
 
 test_invalid_option() {
     run_script --invalid
-    assert_rc "invalid option" 1
+    assert_rc "invalid option" 2
     assert_stderr_contains "invalid option error" "Unknown argument"
 }
 

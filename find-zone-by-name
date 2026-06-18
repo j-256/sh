@@ -64,6 +64,7 @@ _find_zone_by_name() (
         echo "EXIT STATUS"
         echo "  0   Zone found and printed"
         echo "  1   No matching zone found, or API request failed"
+        echo "  2   Usage error (missing/empty option value, missing required parameter, unknown flag)"
     }
 
     _expand_short_opts() {
@@ -110,59 +111,67 @@ _find_zone_by_name() (
     while [ $# -gt 0 ]; do
         case "$1" in
             -j|--jwt|--token)
-                [ -n "${2-}" ] || { _error "-j|--jwt requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 1; }
+                [ -n "${2-}" ] || { _error "-j|--jwt requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 jwt="$2"; shift 2 ;;
             --jwt=*|--token=*)
                 jwt="${1#*=}"
-                [ -n "$jwt" ] || { _error "-j|--jwt requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 1; }
+                [ -n "$jwt" ] || { _error "-j|--jwt requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift ;;
             -s|--shortcode)
-                [ -n "${2-}" ] || { _error "-s|--shortcode requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 1; }
+                [ -n "${2-}" ] || { _error "-s|--shortcode requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shortcode="$2"; shift 2 ;;
             --shortcode=*)
                 shortcode="${1#*=}"
-                [ -n "$shortcode" ] || { _error "-s|--shortcode requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 1; }
+                [ -n "$shortcode" ] || { _error "-s|--shortcode requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift ;;
             -r|--realm)
-                [ -n "${2-}" ] || { _error "-r|--realm requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 1; }
+                [ -n "${2-}" ] || { _error "-r|--realm requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 realm="$2"; shift 2 ;;
             --realm=*)
                 realm="${1#*=}"
-                [ -n "$realm" ] || { _error "-r|--realm requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 1; }
+                [ -n "$realm" ] || { _error "-r|--realm requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift ;;
             -i|--instance)
-                [ -n "${2-}" ] || { _error "-i|--instance requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 1; }
+                [ -n "${2-}" ] || { _error "-i|--instance requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 instance="$2"; shift 2 ;;
             --instance=*)
                 instance="${1#*=}"
-                [ -n "$instance" ] || { _error "-i|--instance requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 1; }
+                [ -n "$instance" ] || { _error "-i|--instance requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift ;;
             -n|--name|-t|--target)
-                [ -n "${2-}" ] || { _error "-n|--name requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 1; }
+                [ -n "${2-}" ] || { _error "-n|--name requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 target="$2"; shift 2 ;;
             --name=*|--target=*)
                 target="${1#*=}"
-                [ -n "$target" ] || { _error "-n|--name requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 1; }
+                [ -n "$target" ] || { _error "-n|--name requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift ;;
             -h|--help)
                 _show_help
                 return 0 ;;
-            *) _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 1 ;;
+            *) _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
         esac
     done
 
-    # Check each parameter and assign to missingParam if empty
-    local missingParam=''
-    [ "$jwt" ] || missingParam='jwt: -j ([A-Za-z0-9]+\.[A-Za-z0-9]+\.[A-Za-z0-9]+)'
-    [ "$shortcode" ] || missingParam='shortcode: -s ([a-z0-9]{8})'
-    [ "$realm" ] || missingParam='realm ID: -r ([a-z]{4})'
-    [ "$instance" ] || missingParam='instance name: -i (prd|dev|stg|s01-s99|001-999)'
-    [ "$target" ] || missingParam='zone name: -n (.*)'
-
-    # Check if any parameter is missing
-    if [ "$missingParam" ]; then
-        _error "Missing required option: $missingParam. Run \`$SCRIPT_NAME -h\` for usage"
-        return 1
+    # Each parameter is required (via flag or its J_* default); missing any is a usage error
+    if [ -z "$jwt" ]; then
+        _error "jwt is required (use -j or J_JWT). Run \`$SCRIPT_NAME -h\` for usage"
+        return 2
+    fi
+    if [ -z "$shortcode" ]; then
+        _error "shortcode is required (use -s or J_SHORTCODE). Run \`$SCRIPT_NAME -h\` for usage"
+        return 2
+    fi
+    if [ -z "$realm" ]; then
+        _error "realm is required (use -r or J_REALM). Run \`$SCRIPT_NAME -h\` for usage"
+        return 2
+    fi
+    if [ -z "$instance" ]; then
+        _error "instance is required (use -i or J_INSTANCE). Run \`$SCRIPT_NAME -h\` for usage"
+        return 2
+    fi
+    if [ -z "$target" ]; then
+        _error "target is required (use -n or J_TARGET). Run \`$SCRIPT_NAME -h\` for usage"
+        return 2
     fi
 
     # Derive other variables

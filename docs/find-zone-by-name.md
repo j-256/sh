@@ -87,7 +87,8 @@ All options except `-h`/`--help` are required unless the corresponding environme
 | Code | Meaning |
 |---|---|
 | `0` | Zone found and returned |
-| `1` | Missing required parameter, invalid option, no matching zone found, or API request failed |
+| `1` | Runtime failure (no matching zone found, or API request failed) |
+| `2` | Usage error (missing/empty option value, missing required parameter, unknown flag) |
 
 ### Dependencies
 
