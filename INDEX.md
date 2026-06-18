@@ -2,7 +2,7 @@
 
 A mixed catalog of small shell utilities for everyday development, infrastructure, and command-line work.
 
-**Jump to:** [Shell scripting](#shell-scripting) · [Text & data](#text--data) · [Web & HTTP](#web--http) · [DNS & networking](#dns--networking) · [File operations](#file-operations) · [Security & auth](#security--auth) · [Git](#git) · [macOS](#macos) · [Salesforce B2C Commerce](#salesforce-b2c-commerce) · [Meta](#meta)
+**Jump to:** [Shell scripting](#shell-scripting) · [Text & data](#text--data) · [Web & HTTP](#web--http) · [DNS & networking](#dns--networking) · [File operations](#file-operations) · [Security & auth](#security--auth) · [Development](#development) · [macOS](#macos) · [Salesforce B2C Commerce](#salesforce-b2c-commerce) · [Meta](#meta)
 
 Each row's primary link opens the doc; the `script` link opens the raw script.
 
@@ -10,7 +10,8 @@ Each row's primary link opens the doc; the `script` link opens the raw script.
 
 | Tool | Description |
 |------|-------------|
-| [`prompt`](docs/prompt.md?html) · [script](prompt) | Sourced interactive prompt with default value, placeholder, and Ctrl-C safety |
+| [`dbg`](docs/dbg.md?html) · [script](dbg) | Sourced variable inspector: print scalars, arrays, and array elements as name=value pairs to stderr |
+| [`prompt`](docs/prompt.md?html) · [script](prompt) | Sourced interactive prompt with default value and placeholder |
 | [`progress`](docs/progress.md?html) · [script](progress) | Single-line progress bar with percentage completion |
 
 ## Text & data
@@ -62,12 +63,13 @@ Each row's primary link opens the doc; the `script` link opens the raw script.
 | [`pkce`](docs/pkce.md?html) · [script](pkce) | Generate a PKCE code verifier and its SHA256 challenge for OAuth2 authorization flows |
 | [`client-credentials`](docs/client-credentials.md?html) · [script](client-credentials) | Fetch an OAuth2 access token via the `client_credentials` grant (defaults tuned for SFCC, works against any token URL) |
 
-## Git
+## Development
 
 | Tool | Description |
 |------|-------------|
 | [`git-backup`](docs/git-backup.md?html) · [script](git-backup) | Push tracked + untracked changes to a timestamped remote branch, then restore local state |
 | [`git-add-nonsub`](docs/git-add-nonsub.md?html) · [script](git-add-nonsub) | Stage a git repository inside another git repository without treating it as a submodule |
+| [`find-cc-tool-output`](docs/find-cc-tool-output.md?html) · [script](find-cc-tool-output) | Recover full, untruncated tool output from Claude Code session transcripts |
 
 ## macOS
 
