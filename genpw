@@ -51,8 +51,8 @@ _genpw() (
         echo "EXIT STATUS"
         echo "  0  Success"
         echo "  2  Usage error (missing flag value, unknown option)"
-        echo "  5  Empty charset after applying exclusions"
-        echo "  6  Invalid charset (malformed bracket expression or POSIX class)"
+        echo "  4  Empty charset after applying exclusions"
+        echo "  5  Invalid charset (malformed bracket expression or POSIX class)"
     }
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
     _warn()  { echo "[WRN][$SCRIPT_NAME] $*" >&2; }
@@ -181,7 +181,7 @@ _genpw() (
                     done
                     if [ "$k" -ge "$n" ]; then
                         _error "Invalid charset '$input': unclosed POSIX class starting at position $j"
-                        return 6
+                        return 5
                     fi
                     continue
                 fi
@@ -194,7 +194,7 @@ _genpw() (
             done
             if [ "$close" -lt 0 ]; then
                 _error "Invalid charset '$input': unclosed bracket expression starting at position $i"
-                return 6
+                return 5
             fi
             # Expand POSIX classes, then ranges, inside the bracket contents
             inner_expanded="$(_expand_posix "$inner")"
@@ -225,7 +225,7 @@ _genpw() (
         case "$stripped" in
             *\[:*)
                 _error "Invalid charset '$input': unclosed or unrecognized bracket expression (expected [:alnum:], [:alpha:], [:digit:], [:lower:], [:upper:], or [:punct:])"
-                return 6
+                return 5
                 ;;
         esac
         return 0
@@ -338,7 +338,7 @@ _genpw() (
     charset="$(_expand_posix "$(_expand_all_ranges "$expanded_charset")" | tr -d "$(_expand_posix "$(_expand_all_ranges "$expanded_exclude")")")"
 
     # Exit early if charset is empty after applying exclusions
-    [ "$charset" ] || { _error "Charset is empty after exclusions"; return 5; }
+    [ "$charset" ] || { _error "Charset is empty after exclusions"; return 4; }
 
     # Generate the password in a loop to ensure the length is exactly right
     local password=""

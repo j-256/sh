@@ -95,7 +95,7 @@ genpw -c '[[:lower:][:digit:]]' 12   # same as [:lower:][:digit:]
 genpw -c '[A-Za-z0-9_]' 12           # identifier-safe chars
 ```
 
-Unclosed brackets produce a clear error (exit 6).
+Unclosed brackets produce a clear error (exit 5).
 
 **Default charset:** `[:alnum:][:punct:]` (all printable ASCII except space).
 
@@ -134,8 +134,8 @@ Positional argument: If a single number is provided without flags, it's treated 
 |---|---|
 | 0 | Success |
 | 2 | Usage error (unknown flag, missing value) |
-| 5 | Charset is empty after exclusions |
-| 6 | Invalid charset (unclosed bracket, unrecognized POSIX class) |
+| 4 | Charset is empty after exclusions |
+| 5 | Invalid charset (unclosed bracket, unrecognized POSIX class) |
 
 ### Dependencies
 

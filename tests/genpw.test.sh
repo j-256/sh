@@ -83,7 +83,7 @@ test_unknown_option() {
 test_empty_charset_after_exclusions() {
     # Exclude all alphanumeric and punctuation
     run_script --charset "abc" --exclude "abc"
-    assert_rc "empty charset" 5
+    assert_rc "empty charset" 4
     assert_stderr_contains "error message" "[ERR][genpw] Charset is empty after exclusions"
 }
 
@@ -340,20 +340,20 @@ test_mixed_posix_and_literal() {
 
 test_invalid_posix_class_rejected() {
     run_script -l 12 -c "[:foobar:]"
-    assert_rc "invalid posix class rejected" 6
+    assert_rc "invalid posix class rejected" 5
     assert_stderr_contains "error names invalid class" "[:foobar:]"
     assert_stderr_contains "error suggests valid classes" "[:alnum:]"
 }
 
 test_unclosed_posix_class_rejected() {
     run_script -l 12 -c "[:lower:"
-    assert_rc "unclosed posix class rejected" 6
+    assert_rc "unclosed posix class rejected" 5
     assert_stderr_contains "error message present" "Invalid charset"
 }
 
 test_bare_posix_opener_rejected() {
     run_script -l 12 -c "[:"
-    assert_rc "bare posix opener rejected" 6
+    assert_rc "bare posix opener rejected" 5
     assert_stderr_contains "error message present" "Invalid charset"
 }
 
@@ -413,7 +413,7 @@ test_bracket_nested_posix_class() {
 
 test_unclosed_bracket_rejected() {
     run_script -l 12 -c '[0-9'
-    assert_rc "unclosed bracket rejected" 6
+    assert_rc "unclosed bracket rejected" 5
     assert_stderr_contains "error mentions unclosed" "unclosed"
 }
 
