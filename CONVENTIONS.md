@@ -499,7 +499,7 @@ Every long option is either a flag (no value) or requires a value -- never optio
 
 ### Value-optional options
 
-The Scope rule bans value-optional options by default because the shared preprocessor and the `--foo)`/`--foo=*)` arm pattern can't know per-option whether `$2` should be consumed -- they have to pick one rule and apply it uniformly. A script may opt in when (a) the value shape is narrow enough to be unambiguous against anything else that could follow (a narrow regex, a closed enum), and (b) the combined form is genuinely more ergonomic than a split `--watch --interval=5m`. See `client-credentials` (closed enum `-E|--env input|output|all`) for a working example.
+The Scope rule bans value-optional options by default because the shared preprocessor and the `--foo)`/`--foo=*)` arm pattern can't know per-option whether `$2` should be consumed -- they have to pick one rule and apply it uniformly. A script may opt in when (a) the value shape is narrow enough to be unambiguous against anything else that could follow (a narrow regex, a closed enum), and (b) the combined form is genuinely more ergonomic than a split `--watch --interval=5m`. The `-w|--watch [interval]` recipe below is the worked example.
 
 Recipe:
 
