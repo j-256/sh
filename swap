@@ -27,15 +27,15 @@ _swap() (
         echo "  Directories are not supported. On partial failure,"
         echo "  attempts to restore the original state (see EXIT STATUS)."
         echo "EXIT STATUS"
-        echo "  0  Success"
-        echo "  1  Not enough arguments"
-        echo "  2  First file does not exist"
-        echo "  3  First file is a directory"
-        echo "  4  Second file does not exist"
-        echo "  5  Second file is a directory"
-        echo "  6  Failed to move first file to temp (no restore needed: files untouched)"
-        echo "  7  Failed to move second file to first (restore attempted: temp -> first)"
-        echo "  8  Failed to move temp to second (no restore attempted: second already moved)"
+        echo "  0   Success"
+        echo "  2   Not enough arguments (usage error)"
+        echo "  4   First file does not exist"
+        echo "  5   First file is a directory"
+        echo "  6   Second file does not exist"
+        echo "  7   Second file is a directory"
+        echo "  8   Failed to move first file to temp (no restore needed: files untouched)"
+        echo "  9   Failed to move second file to first (restore attempted: temp -> first)"
+        echo "  10  Failed to move temp to second (no restore attempted: second already moved)"
     }
 
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
@@ -49,7 +49,7 @@ _swap() (
 
     if [ $# -lt 2 ]; then
         _error "Must provide two files to swap (received $#). Run \`$SCRIPT_NAME -h\` for usage"
-        return 1
+        return 2
     fi
     local file1="$1"
     local file2="$2"
@@ -57,19 +57,19 @@ _swap() (
     # Validate first file
     if [ ! -e "$file1" ]; then
         _error "File '$file1' does not exist"
-        return 2
+        return 4
     elif [ -d "$file1" ]; then
         _error "'$file1' is a directory"
-        return 3
+        return 5
     fi
 
     # Validate second file
     if [ ! -e "$file2" ]; then
         _error "File '$file2' does not exist"
-        return 4
+        return 6
     elif [ -d "$file2" ]; then
         _error "'$file2' is a directory"
-        return 5
+        return 7
     fi
 
     # Create a unique temporary filename for swapping
@@ -82,7 +82,7 @@ _swap() (
     # Perform the swap using `mv`. Return distinct codes for each failure point
     if ! mv "$file1" "$temp_file"; then # file1 -> temp
         _error "Failed to move '$file1' to temporary file '$temp_file'"
-        return 6
+        return 8
     fi
     if ! mv "$file2" "$file1"; then # file2 -> file1
         _error "Failed to move '$file2' to '$file1'"
@@ -90,11 +90,11 @@ _swap() (
         if ! mv "$temp_file" "$file1"; then
             _error "Failed to restore '$temp_file' to '$file1'"
         fi
-        return 7
+        return 9
     fi
     if ! mv "$temp_file" "$file2"; then # temp -> file2
         _error "Failed to move temporary file to '$file2'"
-        return 8
+        return 10
     fi
 
     # 0 status code is implied, but we will be explicit

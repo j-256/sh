@@ -58,14 +58,14 @@ swap app.js app.js.backup
 | Code | Meaning |
 |---|---|
 | 0 | Success |
-| 1 | Not enough arguments |
-| 2 | First file does not exist |
-| 3 | First file is a directory |
-| 4 | Second file does not exist |
-| 5 | Second file is a directory |
-| 6 | Failed to move first file to temp |
-| 7 | Failed to move second file to first location |
-| 8 | Failed to move temp to second location |
+| 2 | Not enough arguments (usage error) |
+| 4 | First file does not exist |
+| 5 | First file is a directory |
+| 6 | Second file does not exist |
+| 7 | Second file is a directory |
+| 8 | Failed to move first file to temp |
+| 9 | Failed to move second file to first location |
+| 10 | Failed to move temp to second location |
 
 ### Dependencies
 
@@ -76,4 +76,4 @@ None (uses only bash built-ins and `mv`).
 - Both files must exist; swap does not create missing files
 - Directories are not supported
 - Uses `/tmp/temp-swap-<basename>` as the temporary location (adds PID and random suffix if that path already exists)
-- On failure during the swap sequence (exit codes 6-8), attempts to restore the original file locations
+- On failure during the swap sequence (exit codes 8-10), attempts to restore the original file locations
