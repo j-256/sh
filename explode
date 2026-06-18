@@ -34,8 +34,9 @@ _explode() (
         echo "  -h, --help     Display this help message"
         echo "EXIT STATUS"
         echo "  0   Success (or help/dry-run completed)"
-        echo "  1   Usage error, collision without --force, or a move failed"
-        echo "  2   Directory removal failed (items remain after attempted moves)"
+        echo "  1   Runtime failure (a move failed, or directory removal failed)"
+        echo "  2   Usage error, or precondition not met (bad args, missing"
+        echo "      directory, collision without --force)"
     }
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
 
@@ -102,12 +103,12 @@ _explode() (
                 ;;
             -*)
                 _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"
-                return 1
+                return 2
                 ;;
             *)
                 if [ -n "$dir" ]; then
                     _error "Multiple directories specified. Run \`$SCRIPT_NAME -h\` for usage"
-                    return 1
+                    return 2
                 fi
                 dir="$1"
                 shift
@@ -117,15 +118,15 @@ _explode() (
 
     if [ -z "$dir" ]; then
         _error "No directory specified. Run \`$SCRIPT_NAME -h\` for usage"
-        return 1
+        return 2
     fi
     if [ ! -e "$dir" ]; then
         _error "$dir does not exist"
-        return 1
+        return 2
     fi
     if [ ! -d "$dir" ]; then
         _error "$dir is not a directory"
-        return 1
+        return 2
     fi
 
     local dest; dest="$(dirname "$dir")"
@@ -147,7 +148,7 @@ _explode() (
         for c in "${collisions[@]}"; do
             echo "  $c" >&2
         done
-        return 1
+        return 2
     fi
 
     if $dryrun; then
@@ -188,7 +189,7 @@ _explode() (
         local num_remaining
         num_remaining="$(find "$dir" -mindepth 1 -maxdepth 1 -print0 | tr -cd '\0' | wc -c | tr -d ' ')"
         _error "Failed to remove $dir ($num_remaining items remaining)"
-        return 2
+        return 1
     fi
 )
 

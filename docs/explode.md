@@ -4,7 +4,7 @@
 
 Move a directory's contents up one level, then remove the now-empty directory. The classic use case: you unzip `package-v1.2.3.zip` and it extracts to a single top-level folder `package-v1.2.3/` wrapping all the files you actually wanted at the current level.
 
-By default, `explode` aborts without changes if any item would collide with an existing file at the destination. Use `--force` to overwrite or `--dryrun` to preview what would happen.
+By default, `explode` aborts without changes if any item would collide with an existing file at the destination. Use `--force` to overwrite or `--dry-run` to preview what would happen.
 
 ## Quick start
 
@@ -62,7 +62,7 @@ $ explode -f package-v1.2.3
 | Flag | Description |
 |---|---|
 | `-f, --force` | Overwrite existing files at the destination |
-| `-n, --dryrun` | Show what would happen without making changes |
+| `-n, --dry-run` | Show what would happen without making changes |
 | `-v, --verbose` | List each item as it is moved |
 | `-h, --help` | Show help |
 
@@ -70,9 +70,9 @@ $ explode -f package-v1.2.3
 
 | Code | Meaning |
 |---|---|
-| 0 | Success (or help/dryrun completed) |
-| 1 | Error: collision without `--force`, missing directory argument, directory doesn't exist, not a directory, unknown option, or move operation failed |
-| 2 | Error: directory removal failed (items remain in directory after attempted moves) |
+| 0 | Success (or help/dry-run completed) |
+| 1 | Runtime failure: a move failed, or directory removal failed (items remain after attempted moves) |
+| 2 | Usage error or precondition not met: bad/unknown/duplicate args, missing directory argument, directory doesn't exist, not a directory, or collision without `--force` |
 
 ### Dependencies
 
