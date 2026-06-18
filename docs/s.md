@@ -142,7 +142,7 @@ s sbx:create        # same as sandbox:create
 | `token:exp`, `token:expiry`, `token:expiration`, `jwt:exp`, `jwt:expiry`, `jwt:expiration` | Show token expiration time and current time (both UTC) |
 | `start <instance>` | Start a sandbox synchronously (waits for completion) |
 | `stop <instance>` | Stop a sandbox synchronously (waits for completion) |
-| `restart`, `reboot` | Restart a sandbox (stop, then start, both synchronous) |
+| `restart <instance>`, `reboot <instance>` | Stop then start a sandbox synchronously (skips start if stop fails) |
 | `env`, `environment` | Print all SFCC environment variables and their current values |
 | _(anything else)_ | Pass through to `sfcc-ci` (e.g. `s code:deploy archive.zip` → `sfcc-ci code:deploy archive.zip`) |
 
@@ -168,7 +168,12 @@ See `sfcc-ci --help` for full details.
 
 ### Exit codes
 
-Pass-through from `sfcc-ci` (or `jq`, for subcommands that parse JSON). `start`/`stop`/`restart` invoke sfcc-ci with `FORCE_COLOR=0` so chalk skips terminal coloring entirely, which removes the need for a `| cat` pipeline to reset color.
+| Code | Meaning |
+|---|---|
+| `3` | Dependency error (`sfcc-ci` or `jq` not installed) |
+| `*` | Pass-through from `sfcc-ci` (or `jq`, for subcommands that parse JSON) |
+
+`start`/`stop`/`restart` invoke sfcc-ci with `FORCE_COLOR=0` so chalk skips terminal coloring entirely, which removes the need for a `| cat` pipeline to reset color.
 
 ### Dependencies
 

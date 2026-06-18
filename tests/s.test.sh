@@ -175,6 +175,44 @@ test_no_args_shows_help() {
     assert_stdout_contains "no args shows help" "sfcc-ci help"
 }
 
+# Run with PATH restricted to a minimal bin that has the startup tools (and
+# bash, for the shebang) plus all deps EXCEPT $1, so that one dep is truly
+# absent -- see TESTING.md "Real commands shadowed by shims". System tools
+# come from their real path; sfcc-ci/jq come from $SHIM_DIR so the test does
+# not depend on whether they are installed on the host
+run_without_dep() {
+    local missing="$1"; shift
+    local nobin="$TEST_DIR/nobin"
+    rm -rf "$nobin"; mkdir -p "$nobin"
+    local t
+    for t in bash basename sed printf cat; do
+        [ "$t" = "$missing" ] && continue
+        local src
+        src="$(command -v "$t")"
+        [ -n "$src" ] && ln -s "$src" "$nobin/$t"
+    done
+    # The shimmed deps (already written to $SHIM_DIR by write_shims)
+    for t in sfcc-ci jq; do
+        [ "$t" = "$missing" ] && continue
+        [ -e "$SHIM_DIR/$t" ] && ln -s "$SHIM_DIR/$t" "$nobin/$t"
+    done
+    env TEST_DIR="$TEST_DIR" PATH="$nobin" \
+        /bin/bash "$UNDER_TEST" "$@" >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
+    printf '%s\n' "$?" > "$TEST_DIR/rc"
+}
+
+test_missing_sfcc_ci() {
+    run_without_dep sfcc-ci a
+    assert_rc "sfcc-ci missing exits 3" 3
+    assert_stderr_contains "names the missing dep" "sfcc-ci is required"
+}
+
+test_missing_jq() {
+    run_without_dep jq a
+    assert_rc "jq missing exits 3" 3
+    assert_stderr_contains "names the missing dep" "jq is required"
+}
+
 test_auth_command() {
     run_script auth
     assert_rc "auth exits 0" 0

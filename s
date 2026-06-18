@@ -51,6 +51,7 @@ _s() (
         echo "  SFCC_SANDBOX_API_HOST, SFCC_SCAPI_*, DEBUG, etc.). Run \`$SCRIPT_NAME env\`"
         echo "  to see all recognized variables and their current values."
         echo "EXIT STATUS"
+        echo "  3  Dependency error (sfcc-ci or jq not installed)"
         echo "  *  Pass-through from sfcc-ci (or jq, for subcommands that parse JSON)"
         echo "DEPENDENCIES"
         echo "  sfcc-ci, jq"
@@ -58,11 +59,22 @@ _s() (
         echo "  sfcc-ci --help"
     }
 
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+
     case "$1" in
         -h|--help) _show_help; return 0 ;;
     esac
 
-    local option="$1" && shift
+    if ! command -v sfcc-ci >/dev/null 2>&1; then
+        _error "sfcc-ci is required"
+        return 3
+    fi
+    if ! command -v jq >/dev/null 2>&1; then
+        _error "jq is required"
+        return 3
+    fi
+
+    local option="$1"; shift
     case "$option" in
         # Authenticate with client credentials using dw.json or environment variables
         # Prints expiration time in user's time zone after authenticating
@@ -139,8 +151,13 @@ _s() (
         # Restart an instance synchronously (--sync), waiting for both start and stop
         'restart'|'reboot')
             local instance="${1/_/-}" # zzzz_001 -> zzzz-001
-            FORCE_COLOR=0 sfcc-ci sandbox:stop -s "$instance" --sync \
-                && FORCE_COLOR=0 sfcc-ci sandbox:start -s "$instance" --sync
+            # Don't start if the stop failed -- a failed stop leaves the box running
+            FORCE_COLOR=0 sfcc-ci sandbox:stop -s "$instance" --sync
+            local stop_rc=$?
+            if [ "$stop_rc" -ne 0 ]; then
+                return "$stop_rc"
+            fi
+            FORCE_COLOR=0 sfcc-ci sandbox:start -s "$instance" --sync
         ;;
         # Print all relevant environment variables and their values
         'env'|'environment')
