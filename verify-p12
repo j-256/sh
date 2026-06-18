@@ -55,7 +55,7 @@ _verify_p12() (
         echo "  - Credentials (token or user:pass, and .p12 password if used) must be valid"
         echo "EXIT STATUS"
         echo "  0   curl succeeded (check HTTP status line -- 401/403 still exit 0)"
-        echo "  1   Argument / usage error"
+        echo "  2   Usage error (missing required argument)"
         echo "  *   curl exit code on network or TLS failure"
         echo ""
         echo "  Common curl codes: 35 = TLS handshake, 51 = server cert, 58 = .p12 /"
@@ -79,9 +79,13 @@ _verify_p12() (
         esac
     done
 
+    if [ "${#positional[@]}" -lt 1 ]; then
+        _error "hostname is required. Run \`$SCRIPT_NAME -h\` for usage"
+        return 2
+    fi
     if [ "${#positional[@]}" -lt 2 ]; then
-        _error "Expected 2 arguments, received ${#positional[@]}. Run \`$SCRIPT_NAME -h\` for usage"
-        return 1
+        _error "credential is required (token, or user:pass with --basic). Run \`$SCRIPT_NAME -h\` for usage"
+        return 2
     fi
 
     local hostname="${positional[0]}"

@@ -107,8 +107,8 @@ The first two positional arguments (hostname and credential) are required. The t
 | Code | Meaning |
 |---|---|
 | 0 | Request succeeded (curl returned success); check output for HTTP status line |
-| 1 | Argument / usage error |
-| Non-zero | curl error (network issue, SSL failure, missing file, etc.) |
+| 2 | Usage error (missing required argument) |
+| * | curl exit code on network or TLS failure (e.g. 35, 51, 58, 60) |
 
 A *successful* curl invocation (exit 0) doesn't guarantee `200 OK` — you might get `401 Unauthorized` or `403 Forbidden` in the output. Check the HTTP status line to confirm access.
 

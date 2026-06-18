@@ -86,15 +86,15 @@ test_help_short_flag() {
 
 test_missing_args() {
     run_script
-    assert_rc "no args exits 1" 1
-    assert_stderr_contains "error message" "[ERR][verify-p12] Expected 2 arguments, received 0"
+    assert_rc "no args exits 2" 2
+    assert_stderr_contains "error message" "[ERR][verify-p12] hostname is required"
     assert_stderr_contains "points at help" "Run \`verify-p12 -h\`"
 }
 
 test_one_arg() {
     run_script "example.com"
-    assert_rc "one arg exits 1" 1
-    assert_stderr_contains "error message" "[ERR][verify-p12] Expected 2 arguments, received 1"
+    assert_rc "one arg exits 2" 2
+    assert_stderr_contains "error message" "[ERR][verify-p12] credential is required"
 }
 
 # --- test cases: Bearer auth (default) ---
@@ -185,8 +185,8 @@ test_basic_auth_special_chars_in_password() {
 
 test_basic_auth_missing_creds() {
     run_script --basic "example.com"
-    assert_rc "basic without creds exits 1" 1
-    assert_stderr_contains "error message" "Expected 2 arguments, received 1"
+    assert_rc "basic without creds exits 2" 2
+    assert_stderr_contains "error message" "credential is required"
 }
 
 test_basic_auth_empty_p12_password_skips_mtls() {
