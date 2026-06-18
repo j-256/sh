@@ -109,11 +109,11 @@ See "Environment variables" above.
 | Code | Meaning |
 |---|---|
 | 0 | Success |
-| 1 | Invalid endpoint type, missing required parameter, or request failure |
+| 1 | Runtime failure (token request failed) |
+| 2 | Usage error (unknown flag, invalid endpoint, missing required parameter) |
 
 ### Dependencies
 
 - `curl` — for HTTP requests
 - `jq` — for parsing JSON responses
-- `base64` — for Basic auth header encoding
-- `date` — for calculating expiration timestamps
+- `base64` – for Basic auth header encoding

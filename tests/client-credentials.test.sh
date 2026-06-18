@@ -58,14 +58,6 @@ printf 'base64:%s' "$input"
 exit 0
 SHIM
     chmod +x "$SHIM_DIR/base64"
-
-    # date shim: return fixed timestamp
-    cat > "$SHIM_DIR/date" <<'SHIM'
-#!/bin/bash
-printf '1609459200\n'
-exit 0
-SHIM
-    chmod +x "$SHIM_DIR/date"
 }
 
 # --- test cases ---
@@ -80,7 +72,6 @@ test_help_output() {
     assert_stdout_contains "help lists curl" "curl"
     assert_stdout_contains "help lists jq" "jq"
     assert_stdout_contains "help lists base64" "base64"
-    assert_stdout_contains "help lists date" "date"
     assert_stdout_contains "help mentions SLAS" "SLAS"
 }
 
@@ -105,7 +96,7 @@ test_missing_client_secret() {
 
 test_invalid_argument() {
     run_script --invalid-flag
-    assert_rc "invalid arg exits 1" 1
+    assert_rc "invalid arg exits 2" 2
     assert_stderr_contains "invalid arg error" "Unknown argument '--invalid-flag'"
 }
 
@@ -151,8 +142,8 @@ test_slas_missing_org_id() {
 
 test_invalid_endpoint() {
     run_script --endpoint invalid --client-id "client123" --client-secret "secret456"
-    assert_rc "invalid endpoint exits 1" 1
-    assert_stderr_contains "invalid endpoint error" "Invalid endpoint type: 'invalid'"
+    assert_rc "invalid endpoint exits 2" 2
+    assert_stderr_contains "invalid endpoint error" "Invalid --endpoint 'invalid' (valid: am|slas)"
 }
 
 test_default_endpoint_am() {
@@ -225,13 +216,6 @@ test_base64_not_found() {
     rm "$SHIM_DIR/base64"
     PATH="$SHIM_DIR" run_script --endpoint am --client-id "client123" --client-secret "secret456"
     assert_rc "base64 not found exits 127" 127
-}
-
-test_date_not_found() {
-    rm "$SHIM_DIR/date"
-    PATH="$SHIM_DIR" run_script --endpoint am --client-id "client123" --client-secret "secret456"
-    # date is used in $((...)) arithmetic, so command not found causes exit 127
-    assert_rc "date missing exits 127" 127
 }
 
 test_scopes_empty_string() {
