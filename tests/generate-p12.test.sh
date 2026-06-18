@@ -97,6 +97,27 @@ test_help_output() {
     assert_stdout_contains "help has DEPENDENCIES" "DEPENDENCIES"
 }
 
+test_openssl_missing() {
+    # Build a minimal bin with the startup tools the script needs (basename,
+    # sed) but deliberately NOT openssl, then run with only that on PATH so
+    # the real openssl can't be found -- see TESTING.md "Real commands
+    # shadowed by shims". A plain openssl shim can't simulate absence because
+    # `command -v` would still find it
+    local nobin="$TEST_DIR/nobin"
+    mkdir -p "$nobin"
+    local t
+    for t in basename sed printf cat; do
+        ln -s "$(command -v "$t")" "$nobin/$t" 2>/dev/null
+    done
+    env TEST_DIR="$TEST_DIR" PATH="$nobin" \
+        /bin/bash "$UNDER_TEST" < /dev/null >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
+    printf '%s\n' "$?" > "$TEST_DIR/rc"
+    assert_rc "openssl missing exits 3" 3
+    # Guards the bug where _error read stdin instead of its args, printing an
+    # empty message on the non-interactive dependency-check path
+    assert_stderr_contains "openssl missing names the dep" "openssl is required"
+}
+
 test_missing_directory() {
     run_script "/nonexistent/path/to/nowhere" < /dev/null
     assert_rc "missing dir fails" 2

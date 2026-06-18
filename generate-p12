@@ -55,24 +55,6 @@ _generate_p12() (
         echo "  openssl"
     }
 
-    # Install cleanup trap before any return path (including --help) so all
-    # exits run __unset. Helpers below haven't been defined yet, but unset -f
-    # is silent on missing names, so listing them all up-front is fine
-    case "$1" in
-        -h|--help)
-            _show_help
-            return 0
-            ;;
-    esac
-
-    if ! command -v openssl >/dev/null 2>&1; then
-        _error "openssl is required"
-        return 3
-    fi
-
-    # Example hostname: "cert.staging.customer.realm.demandware.net"
-    # However, any BM hostname or as little as "customer.realm" or "customer-realm" may be provided
-
     # Text formatting control characters for later use - by convention wrapped in {} when used below, for legibility
     local teal=$'\033[36m'
     local default_color="$teal"
@@ -110,14 +92,7 @@ _generate_p12() (
             red_on=$'\033[31m'
             reset=$'\033[0m'
         fi
-        if [ -t 0 ]; then
-            local arg
-            for arg in "$@"; do
-                printf '%s[ERR][%s] %s%s\n' "$red_on" "$SCRIPT_NAME" "$arg" "$reset" >&2
-            done
-        else
-            printf '%s[ERR][%s] %s%s\n' "$red_on" "$SCRIPT_NAME" "$(cat)" "$reset" >&2
-        fi
+        printf '%s[ERR][%s] %s%s\n' "$red_on" "$SCRIPT_NAME" "$*" "$reset" >&2
     }
     # Checks if file(s) exist and prints an error message if not
     _file_exists() {
@@ -131,6 +106,24 @@ _generate_p12() (
         done
         return $any_missing
     }
+
+    # Helpers (incl. _error) are defined above so the --help and dependency
+    # checks below can use them. This is an executable subshell-body script,
+    # so no cleanup trap is needed -- the subshell discards everything on return
+    case "$1" in
+        -h|--help)
+            _show_help
+            return 0
+            ;;
+    esac
+
+    if ! command -v openssl >/dev/null 2>&1; then
+        _error "openssl is required"
+        return 3
+    fi
+
+    # Example hostname: "cert.staging.customer.realm.demandware.net"
+    # However, any BM hostname or as little as "customer.realm" or "customer-realm" may be provided
 
     local wd="${1:-"$PWD"}"
     # Resolve to absolute path (the cd runs in a subshell via command substitution)
