@@ -1,6 +1,6 @@
 # sh
 
-A mixed collection of small shell utilities I've written over the years to make my own life easier. Some are broadly useful; plenty are niche to my own workflow. Every script has a test and a doc.
+A mixed collection of small shell utilities I've written over the years to make my own life easier. Some are broadly useful; plenty are niche to my own workflow. Every script has a doc, and every bash script has a test.
 
 - Browse the catalog: [INDEX.md](INDEX.md) — rendered at <https://toolio.sh>
 - Rendered docs: `https://toolio.sh/<script>.md.html` (e.g. [tsd](https://toolio.sh/tsd.md.html))
