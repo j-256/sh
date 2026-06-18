@@ -246,9 +246,9 @@ Usage `--help` should document exactly the codes the script uses, with short des
 | `1` | Runtime failure (network, filesystem, external command failed) |
 | `2` | Usage error (missing arg, unknown flag, bad flag value, precondition not met) |
 | `3` | Dependency error (required tool not installed) |
-| `4`+ | Script-specific (document in `--help` EXIT STATUS section) |
+| `4`+ | Script-specific; an error or a non-error result such as "no match" (document in `--help` EXIT STATUS section) |
 
-Reserve `2` strictly for usage/precondition issues so callers can distinguish "the user invoked me wrong" from "something went wrong while running". Reserve `3` for missing external tools. Scripts with domain-specific failures (e.g. `genpw`'s `5` for empty charset, `6` for invalid charset) extend with `4`+.
+Reserve `2` strictly for usage/precondition issues so callers can distinguish "the user invoked me wrong" from "something went wrong while running". Reserve `3` for missing external tools. Codes `4` and up are the script's own to define, documented in its `--help` EXIT STATUS section. They need not signal errors: a script whose job is to answer a question may return a nonzero code for a negative-but-correct result, the way `grep` and `diff` return `1` for "no match" and "files differ". `genpw` uses `5` for an empty charset and `6` for an invalid one; a predicate script might use `4` for the negative answer. Because the meaning of `4`+ is per-script, a caller reads it from that script's `--help`, not from this table.
 
 Early-exit validation pattern:
 
