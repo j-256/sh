@@ -28,19 +28,59 @@ _stats() (
         echo "  average, range (min to max), and outliers (1.5 * IQR method). Input may"
         echo "  be newline-, space-, or tab-delimited (or any mix)."
         echo "OPTIONS"
-        echo "  -n             Print the dataset before statistics"
+        echo "  -n, --print    Print the dataset before statistics"
         echo "  -h, --help     Show this help message"
         echo "EXIT STATUS"
         echo "  0  Success"
-        echo "  2  Usage error (non-integer input)"
+        echo "  2  Usage error (non-integer input, unknown option)"
         echo "  3  Dependency error (bc missing)"
         echo "DEPENDENCIES"
-        echo "  bc, sort"
+        echo "  bc"
     }
 
-    case "${1-}" in
-        -h|--help) _show_help; return 0 ;;
-    esac
+    _expand_short_opts() {
+        # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
+        # $2..$N = "$@"
+        # Populates _EXPANDED; caller does: set -- "${_EXPANDED[@]}"; unset _EXPANDED
+        local value_opts="$1"; shift
+        _EXPANDED=()
+        local passthru=""
+        local arg
+        local rest
+        local c
+        for arg in "$@"; do
+            if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
+            case "$arg" in
+                --)          passthru=1; _EXPANDED+=("$arg") ;;
+                --*|-|"")    _EXPANDED+=("$arg") ;;
+                -[a-zA-Z]?*)
+                    rest="${arg#-}"
+                    while [ -n "$rest" ]; do
+                        c="${rest%"${rest#?}"}"; rest="${rest#?}"
+                        _EXPANDED+=("-$c")
+                        case "$value_opts" in *"$c"*)
+                            [ -n "$rest" ] && _EXPANDED+=("$rest")
+                            rest="" ;;
+                        esac
+                    done ;;
+                *)        _EXPANDED+=("$arg") ;;
+            esac
+        done
+    }
+
+    local print_data=0
+
+    _expand_short_opts "" "$@"
+    set -- "${_EXPANDED[@]}"; unset _EXPANDED
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -h|--help) _show_help; return 0 ;;
+            -n|--print) print_data=1; shift ;;
+            -*) _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+            *)  _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+        esac
+    done
 
     if ! command -v bc >/dev/null 2>&1; then
         _error "bc is required"
@@ -56,14 +96,12 @@ _stats() (
 
     # Check for any non-digits (which would most likely be a decimal point) - allow spaces as the numbers are concatenated with spaces
     grep -q '[^0-9 ]' <<<"${numbers[*]}" && { _error "Integers only"; return 2; }
-    # If -n is provided, list the dataset first
-    [ "$1" = "-n" ] && printf '%s, ' "${numbers[@]}" | sed 's/, $/\n/'
+    # If --print is provided, list the dataset first
+    [ "$print_data" -eq 1 ] && printf '%s, ' "${numbers[@]}" | sed 's/, $/\n/'
 
     # Sort the numbers in ascending order (for outlier calculation, but it gets us min and max too)
     local -a sorted
     while IFS= read -r line || [ -n "$line" ]; do sorted+=("$line"); done < <(printf '%s\n' "${numbers[@]}" | sort -n)
-    #mapfile -t sorted <<< "$(printf '%s\n' "${numbers[@]}" | sort -n)"
-    #sorted=($(printf '%s\n' "${numbers[@]}" | sort -n))
 
     # Find outliers via Interquartile Range (IQR)
     # Calculate quartiles

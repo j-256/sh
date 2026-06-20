@@ -68,6 +68,7 @@ Total: 5050
 Average: 50
 Range: 99 (1 to 100)
 Outliers:
+          0 of 100 (0.0%)
 ```
 
 ## How outlier detection works
