@@ -40,6 +40,8 @@ case "$qtype:$name" in
     TXT:dia-b.example)        printf '%s\n' '"v=spf1 include:dia-c.example -all"' ;;
     TXT:dia-c.example)        printf '%s\n' '"v=spf1 ip4:192.0.2.0/24 -all"' ;;
     TXT:ptrtest.example)      printf '%s\n' '"v=spf1 ptr:mail.ptrtest.example ptr -all"' ;;
+    TXT:qual.example)
+        printf '%s\n' '"v=spf1 -ip4:192.0.2.5 ~all"' ;;
     TXT:exists.example)
         printf '%s\n' '"v=spf1 exists:%{i}._spf.exists.example -all"' ;;
     # bare a / mx on the apex
@@ -256,6 +258,35 @@ test_ip4_slash31_outside() {
 test_ip4_slash1_inside() {
     run_script __ip4 200.0.0.1 128.0.0.0/1
     assert_rc "inside /1" 0
+}
+
+# --- find (Task 5) ---
+
+test_find_ipv4_match_exit0() {
+    run_script find example.com 198.51.100.42
+    assert_rc "covered exits 0" 0
+    assert_stdout_contains "names source" "example.com"
+}
+test_find_ipv4_nested_match() {
+    run_script find example.com 203.0.113.5
+    assert_rc "nested covered exits 0" 0
+    assert_stdout_contains "names nested source" "_spf.example.net"
+}
+test_find_ipv4_no_match_exit4() {
+    run_script find example.com 192.0.2.1
+    assert_rc "not found exits 4" 4
+    assert_stdout_contains "says not found" "not found"
+}
+test_find_surfaces_reject_qualifier() {
+    # qual.example: -ip4 reject covering the query IP
+    run_script find qual.example 192.0.2.5
+    assert_rc "listed-but-reject still exits 0 (membership)" 0
+    assert_stdout_contains "shows minus qualifier" "qualifier: -"
+}
+test_find_missing_ip_is_usage_error() {
+    run_script find example.com
+    assert_rc "missing ip exits 2" 2
+    assert_stderr_contains "asks for ip" "ip"
 }
 
 # --- run ---

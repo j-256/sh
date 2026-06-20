@@ -241,7 +241,51 @@ _spf() (
 
     # --- command stubs (implemented in later tasks) ---
 
-    _cmd_find()  { return 0; }
+    _cmd_find() {
+        local input; input=""
+        local ip; ip=""
+        local arg
+        for arg in "$@"; do
+            case "$arg" in
+                -*) ;;   # global opts already consumed; ignore strays
+                *)  if [ -z "$input" ]; then input="$arg"; else ip="$arg"; fi ;;
+            esac
+        done
+        if [ -z "$input" ]; then
+            _error "Must provide a domain or record. Run \`$SCRIPT_NAME -h\` for usage"
+            return 2
+        fi
+        if [ -z "$ip" ]; then
+            _error "ip is required. Run \`$SCRIPT_NAME -h\` for usage"
+            return 2
+        fi
+
+        local ir; ir="$(_resolve "$input")" || return 1
+
+        # Walk rows in order; first containing CIDR wins. (IPv4 query path.)
+        local depth
+        local src
+        local qual
+        local mech
+        local val
+        local cost
+        # shellcheck disable=SC2034 # cost is read from the IR to keep field alignment but not used in this consumer
+        while IFS=$'\t' read -r depth src qual mech val cost; do
+            case "$mech" in
+                ip4)
+                    if _ip4_in_cidr "$ip" "$val"; then
+                        printf '%s %s (qualifier: %s)\n' "$ip is listed/covered by" "$src" "$qual"
+                        printf '  matched: %s:%s\n' "$mech" "$val"
+                        return 0
+                    fi ;;
+            esac
+        done <<EOF
+$ir
+EOF
+
+        printf '%s\n' "$ip not found in $input's SPF record"
+        return 4
+    }
     _cmd_check() { return 0; }
     _cmd_tree()  { return 0; }
 
