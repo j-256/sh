@@ -4,7 +4,7 @@ Standards for test files in this repository.
 
 ## Principles
 
-- Every script gets a `<name>.test.sh` in the `tests/` directory (alongside `test-helpers.sh` and `test-runner.sh`)
+- Every script gets a `<name>.test.sh` in the `tests/` directory (alongside `test-helpers.sh` and `test-runner.sh`). The exceptions are cross-cutting **meta-tests**, named `meta-*.test.sh` -- see [Meta-tests](#meta-tests)
 - Tests are self-contained, network-free, and runnable with bash 3.2+
 - No external dependencies beyond bash builtins and standard POSIX tools (mktemp, cat, mkdir, chmod, etc.)
 - All external commands the script-under-test calls (curl, dig, jq, etc.) are shimmed
@@ -219,6 +219,24 @@ An aggregate runner that finds and runs all test files. Lives in `tests/` alongs
 - Accepts an optional pattern to filter which tests to run (e.g. `test-runner.sh pin-dns`)
 - Prints a final summary: which files passed, which failed
 - Exits 0 if all passed, 1 if any failed
+
+## Meta-tests
+
+Most test files target one script: `<name>.test.sh` exercises `../<name>`, and defines `UNDER_TEST` to point at it. A **meta-test** is different -- it validates a convention across the *whole* script fleet rather than any single script. Meta-tests are named with a `meta-` prefix so the distinction is visible at a glance (in `ls`) and checkable programmatically (by the `meta-*` glob):
+
+| File | Asserts |
+| --- | --- |
+| `meta-cleanup-on-source.test.sh` | Sourcing any script with `--help` leaks no functions or variables into the caller's shell |
+| `meta-curl-pipe.test.sh` | Every script works when piped or process-substituted (`curl \| bash`, `bash <(...)`, `. <(...)`) |
+| `meta-coverage.test.sh` | The script↔test bijection holds: every bash script has a test, and every non-`meta-` test has a matching script |
+
+Conventions for a meta-test:
+
+- **Name it `meta-<topic>.test.sh`.** This is the signal. `meta-coverage.test.sh` keys off the prefix to exempt meta-tests from its "every test has a script" check -- a meta-test without the prefix would be flagged as an orphan (a test for a script that doesn't exist).
+- **No `UNDER_TEST`.** There is no single script under test. Walk `"$REPO_DIR"/*` (or `tests/*.test.sh`) instead.
+- **Reuse the `_is_bash_script` filter** when iterating the repo, so node scripts (`render-md`) and non-script `.sh`/`.md`/`.json` files are excluded consistently. `meta-cleanup-on-source.test.sh` and `meta-coverage.test.sh` carry identical copies.
+
+Meta-tests are discovered and run exactly like any other file: `test-runner.sh` globs `*.test.sh`, and `run_tests` finds the `test_*` functions inside. Run one in isolation with `test-runner.sh meta-coverage`.
 
 ## What to Test
 
