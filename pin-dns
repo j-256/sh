@@ -248,6 +248,10 @@ ENVIRONMENT
         Optional override for the Chrome app path used to determine version.
         Default: /Applications/Google Chrome.app
 
+DEPENDENCIES
+    curl
+    dig (required only when TARGET is a hostname that must be resolved)
+
 EXIT STATUS
     0   Success
     2   Usage / argument error
@@ -736,7 +740,7 @@ EOF
         fi
 
         if ! _cmd_exists dig; then
-            _error "dig is required to resolve TARGET hostnames, but was not found in PATH"
+            _error "dig is required"
             return 3
         fi
 
@@ -827,7 +831,7 @@ EOF
     local -a curl_args=()
 
     if ! _cmd_exists curl; then
-        _error "curl not found in PATH"
+        _error "curl is required"
         return 3
     fi
 
@@ -926,7 +930,7 @@ EOF
                 local opt="$arg"
                 i=$((i + 1))
                 if [ "$i" -ge "${#pre_args[@]}" ]; then
-                    _error "Missing value for $opt. Run \`$SCRIPT_NAME -h\` for usage"
+                    _error "$opt requires a value. Run \`$SCRIPT_NAME -h\` for usage"
                     return 2
                 fi
                 local val="${pre_args[$i]}"
