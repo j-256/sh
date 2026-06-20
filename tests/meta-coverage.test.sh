@@ -1,10 +1,11 @@
 #!/bin/bash
-# meta-coverage.test.sh - Verify the script<->test bijection holds
+# meta-coverage.test.sh - Verify the tests/ directory is well-formed
 #
 # Cross-cutting meta-test (meta-*.test.sh): validates a convention across the
 # whole script fleet rather than a single script. See TESTING.md.
 #
-# Two directions, so neither a new script nor a new test can slip in unpaired:
+# Checks the script<->test bijection in both directions, so neither a new
+# script nor a new test can slip in unpaired:
 #   1. Every bash script in the repo has a tests/<name>.test.sh
 #   2. Every non-meta tests/<name>.test.sh has a matching bash script
 #
@@ -12,6 +13,11 @@
 # and intentionally has no eponymous script. That exemption is the whole reason
 # these files are named meta-* rather than masquerading as tests for scripts
 # called "coverage", "cleanup-on-source", or "curl-pipe".
+#
+# Also checks the executable-bit convention: test files are execute-only and
+# carry +x; test-runner.sh (the entry point) is +x; test-helpers.sh (sourced,
+# never run) is -x. This mirrors the repo-wide rule that -x marks a source-only
+# file (dbg, prompt).
 # shellcheck source-path=SCRIPTDIR disable=SC2329
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -64,6 +70,38 @@ test_every_test_has_a_script() {
             _fail "$name.test.sh: no matching bash script (../$name) -- rename to meta-$name.test.sh if cross-cutting"
         fi
     done
+}
+
+test_test_files_are_executable() {
+    # Test files are execute-only (run via test-runner.sh or `bash <file>`) and
+    # must not be sourced -- run_tests refuses a sourced file. They carry +x so
+    # the bit does not falsely signal "source me" the way -x does elsewhere
+    local test_file
+    for test_file in "$SCRIPT_DIR"/*.test.sh; do
+        [ -f "$test_file" ] || continue
+        local name
+        name="$(basename "$test_file")"
+        if [ -x "$test_file" ]; then
+            _ok "$name: executable"
+        else
+            _fail "$name: not executable -- run: chmod +x tests/$name"
+        fi
+    done
+}
+
+test_infra_perms_match_role() {
+    # The two non-test infra files encode the repo's +x=execute / -x=source rule:
+    # test-runner.sh is the entry point (+x); test-helpers.sh is sourced (-x)
+    if [ -x "$SCRIPT_DIR/test-runner.sh" ]; then
+        _ok "test-runner.sh: executable (entry point)"
+    else
+        _fail "test-runner.sh: not executable -- run: chmod +x tests/test-runner.sh"
+    fi
+    if [ -x "$SCRIPT_DIR/test-helpers.sh" ]; then
+        _fail "test-helpers.sh: executable -- it is sourced, not run; run: chmod -x tests/test-helpers.sh"
+    else
+        _ok "test-helpers.sh: not executable (sourced)"
+    fi
 }
 
 # --- run ---
