@@ -8,6 +8,25 @@ source "$SCRIPT_DIR/test-helpers.sh"
 
 UNDER_TEST="$SCRIPT_DIR/../spf"
 
+# Run the script with NO python3 reachable, while still providing the coreutils
+# the resolver needs. macOS ships /usr/bin/python3, so simply removing the shim
+# and using the normal PATH would NOT simulate absence (command -v would find the
+# system python3). We build a clean bin dir of symlinks to the real coreutils,
+# drop the python3 shim, and point PATH at only (shim dir + that clean dir).
+run_script_no_python3() {
+    /bin/rm -f "$SHIM_DIR/python3"
+    local nopy="$TEST_DIR/nopy"
+    mkdir -p "$nopy"
+    local t
+    local real
+    for t in sed grep head basename awk sort cat tr cut dirname; do
+        real="$(PATH=/usr/bin:/bin command -v "$t" 2>/dev/null)" && ln -sf "$real" "$nopy/$t"
+    done
+    env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR:$nopy" \
+        /bin/bash "$UNDER_TEST" "$@" >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
+    printf '%s\n' "$?" > "$TEST_DIR/rc"
+}
+
 # --- shims ---
 # The dig shim answers TXT (SPF records), A, and AAAA queries from canned
 # fixtures keyed by the queried name. Later tasks extend the case arms.
@@ -52,6 +71,17 @@ esac
 exit 0
 SHIM
     chmod +x "$SHIM_DIR/dig"
+
+    cat > "$SHIM_DIR/python3" <<'SHIM'
+#!/bin/bash
+ip="${@: -2:1}"; cidr="${@: -1}"
+printf 'python3 %s\n' "$ip $cidr" >> "$TEST_DIR/python3.log"
+case "$ip:$cidr" in
+    "2001:db8::9:2001:db8::/32") exit 0 ;;
+    *) exit 4 ;;
+esac
+SHIM
+    chmod +x "$SHIM_DIR/python3"
 }
 
 # --- test cases ---
@@ -287,6 +317,23 @@ test_find_missing_ip_is_usage_error() {
     run_script find example.com
     assert_rc "missing ip exits 2" 2
     assert_stderr_contains "asks for ip" "ip"
+}
+
+# --- find (Task 6: IPv6) ---
+
+test_find_ipv6_match_via_python3() {
+    run_script find example.com 2001:db8::9
+    assert_rc "ipv6 covered exits 0" 0
+    assert_contains "used python3" "$(cat "$TEST_DIR/python3.log" 2>/dev/null)" "2001:db8::/32"
+}
+test_find_ipv6_no_python3_degrades() {
+    run_script_no_python3 find example.com 2001:db8::9
+    assert_stderr_contains "warns about python3" "python3 not found"
+    assert_rc "degraded literal: not an exact string in record so exit 4" 4
+}
+test_find_ipv6_literal_match_without_python3() {
+    run_script_no_python3 find example.com 2001:db8::/32
+    assert_rc "literal equal exits 0" 0
 }
 
 # --- run ---

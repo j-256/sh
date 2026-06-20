@@ -203,7 +203,7 @@ _spf() (
         _resolve_rec "$root" "$rootsrc" 0 "$rootsrc"
     }
 
-    # --- IPv4 CIDR helpers ---
+    # --- IPv4 and IPv6 CIDR helpers ---
 
     _ip4_to_int() {
         local IFS=.
@@ -239,6 +239,22 @@ _spf() (
         [ $(( ipi & mask )) -eq $(( neti & mask )) ]
     }
 
+    _ip6_in_cidr() {
+        local ip; ip="$1"
+        local cidr; cidr="$2"
+        command -v python3 >/dev/null 2>&1 || return 2
+        python3 -c 'import ipaddress,sys
+try:
+    sys.exit(0 if ipaddress.ip_address(sys.argv[1]) in ipaddress.ip_network(sys.argv[2], strict=False) else 4)
+except ValueError:
+    sys.exit(2)' "$ip" "$cidr"
+    }
+
+    _find_hit() {
+        printf '%s is listed/covered by %s (qualifier: %s)\n' "$1" "$2" "$3"
+        printf '  matched: %s:%s\n' "$4" "$5"
+    }
+
     # --- command stubs (implemented in later tasks) ---
 
     _cmd_find() {
@@ -262,21 +278,30 @@ _spf() (
 
         local ir; ir="$(_resolve "$input")" || return 1
 
-        # Walk rows in order; first containing CIDR wins. (IPv4 query path.)
+        local family; case "$ip" in *:*) family=6 ;; *) family=4 ;; esac
+        local warned_py; warned_py=""
+
+        # Walk rows in order; first containing CIDR wins.
         local depth
         local src
         local qual
         local mech
         local val
         local cost
+        local rc
         # shellcheck disable=SC2034 # cost is read from the IR to keep field alignment but not used in this consumer
         while IFS=$'\t' read -r depth src qual mech val cost; do
             case "$mech" in
                 ip4)
-                    if _ip4_in_cidr "$ip" "$val"; then
-                        printf '%s %s (qualifier: %s)\n' "$ip is listed/covered by" "$src" "$qual"
-                        printf '  matched: %s:%s\n' "$mech" "$val"
-                        return 0
+                    [ "$family" = 4 ] || continue
+                    if _ip4_in_cidr "$ip" "$val"; then _find_hit "$ip" "$src" "$qual" "$mech" "$val"; return 0; fi ;;
+                ip6)
+                    [ "$family" = 6 ] || continue
+                    _ip6_in_cidr "$ip" "$val"; rc=$?
+                    if [ "$rc" -eq 0 ]; then _find_hit "$ip" "$src" "$qual" "$mech" "$val"; return 0
+                    elif [ "$rc" -eq 2 ]; then
+                        [ "$warned_py" ] || { _warn "python3 not found; IPv6 matching is literal-only"; warned_py=1; }
+                        [ "$ip" = "$val" ] && { _find_hit "$ip" "$src" "$qual" "$mech" "$val"; return 0; }
                     fi ;;
             esac
         done <<EOF
