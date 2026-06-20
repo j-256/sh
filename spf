@@ -383,13 +383,13 @@ EOF
         if printf '%s\n' "$ir" | awk -F'\t' '$4=="all" && $3=="+"' | grep -q .; then
             printf '  PROBLEM: +all authorizes the entire internet\n'; problems=1
         fi
-        # multiple all: more than one all in a SINGLE record (field 2 = source domain).
-        # A tree-wide count is wrong: every well-formed included record ends in its
-        # own all, so the smell is two alls published by the same domain
-        local max_all; max_all="$(printf '%s\n' "$ir" | awk -F'\t' '$4=="all"{c[$2]++} END{m=0; for(k in c) if(c[k]>m) m=c[k]; print m+0}')"
-        if [ "$max_all" -gt 1 ]; then
-            printf '  PROBLEM: multiple all mechanisms in one record\n'; problems=1
-        fi
+        # multiple all -- ROOT record only (depth 0). Counting tree-wide or
+        # per-source false-flags a clean diamond: a single-all record reached
+        # via two parents emits two identical all rows, and the frozen IR can't
+        # tell that from a genuine two-all record. Depth 0 is walked once, so
+        # it's unambiguous -- it's the record actually being checked.
+        local root_alln; root_alln="$(printf '%s\n' "$ir" | awk -F'\t' '$1=="0" && $4=="all"' | grep -c .)"
+        [ "$root_alln" -gt 1 ] && { printf '  PROBLEM: multiple all mechanisms in the record\n'; problems=1; }
         # ptr present: deprecated by RFC 7208 (SHOULD NOT be used)
         if printf '%s\n' "$ir" | awk -F'\t' '$4=="ptr"' | grep -q .; then
             printf '  WARNING: ptr is deprecated (RFC 7208 SHOULD NOT)\n'; problems=1

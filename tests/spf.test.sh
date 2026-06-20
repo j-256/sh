@@ -404,6 +404,22 @@ test_check_raw_record_skips_record_count() {
     assert_rc "raw clean exits 0" 0
     assert_stdout_contains "notes record-count N/A" "raw-record"
 }
+test_check_diamond_not_multiple_all() {
+    # dia-root includes dia-a + dia-b, both include dia-c (one -all each).
+    # dia-c is walked twice (diamond), so its single all appears twice in the
+    # IR with the same source -- this must NOT be flagged as multiple-all.
+    run_script check dia-root.example
+    assert_rc "clean diamond exits 0" 0
+    assert_stdout_not_contains "diamond not flagged multiple-all" "multiple all"
+}
+test_check_multiple_all_in_one_record() {
+    # Two all tokens in the SAME (root) record is the real smell. Raw record
+    # so no fixture needed; ~all and -all are both 'all' rows, neither is +all
+    # (isolates the multiple-all flag from the +all flag).
+    run_script check 'v=spf1 ip4:1.2.3.0/24 ~all -all'
+    assert_rc "two alls in one record exits 4" 4
+    assert_stdout_contains "flags multiple all" "multiple all"
+}
 
 # --- run ---
 run_tests "$@"
