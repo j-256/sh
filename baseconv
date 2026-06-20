@@ -4,6 +4,9 @@
 # Usage:
 #   baseconv <from> <to> <number>
 #   baseconv -h
+#
+# Options:
+#   -h, --help  Show this help message
 
 _baseconv() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
