@@ -98,6 +98,7 @@ $ git push origin :refs/tags/backup-2026-04-21-1830.42
 |---|---|
 | `repo_directory` | Path to the git repository (e.g., `.` for current directory) |
 | `remote` | Remote name to push to (default: `origin`) |
+| `-n, --dry-run` | Print the commands that would run; make no changes |
 | `-h, --help` | Show help message |
 
 ### Exit codes
@@ -105,7 +106,8 @@ $ git push origin :refs/tags/backup-2026-04-21-1830.42
 | Code | Meaning |
 |---|---|
 | `0` | Success |
-| `1` | Error during backup process (stash, checkout, push, etc.) |
+| `1` | Runtime failure (a git command failed) |
+| `2` | Usage / precondition error (bad args, no directory, remote not configured) |
 
 ### Dependencies
 

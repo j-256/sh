@@ -94,7 +94,6 @@ _git_backup() (
         done
     }
 
-    # Clean up inner functions on return
     # Parse args: collect flags, then positional
     local dry_run=0
     local positional=()
@@ -108,7 +107,7 @@ _git_backup() (
             -n|--dry-run) dry_run=1; shift ;;
             --) shift; while [ $# -gt 0 ]; do positional+=("$1"); shift; done ;;
             -*)
-                _error "Unknown option: $1. Run \`$SCRIPT_NAME -h\` for usage"
+                _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"
                 return 2
                 ;;
             *) positional+=("$1"); shift ;;
@@ -116,7 +115,7 @@ _git_backup() (
     done
 
     if [ "${#positional[@]}" -eq 0 ]; then
-        _error "No directory provided. Run \`$SCRIPT_NAME -h\` for usage"
+        _error "Must provide a directory. Run \`$SCRIPT_NAME -h\` for usage"
         return 2
     fi
 

@@ -113,7 +113,7 @@ test_help_output() {
 test_missing_directory() {
     run_script
     assert_rc "missing dir" 2
-    assert_stderr_contains "error message" "[ERR][git-backup] No directory provided"
+    assert_stderr_contains "error message" "[ERR][git-backup] Must provide a directory"
 }
 
 test_basic_backup_flow() {
