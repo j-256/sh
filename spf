@@ -85,6 +85,122 @@ _spf() (
         done
     }
 
+    # --- resolver engine ---
+
+    _dig_txt() {
+        local name; name="$1"
+        local tcp; [ "$USE_TCP" ] && tcp="+tcp"
+        # join character-strings, drop quotes, keep only the v=spf1 record
+        # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- $tcp expands to +tcp or empty; the split is intentional
+        dig @"$SERVER" $tcp +short TXT "$name" 2>/dev/null \
+          | sed 's/" "//g; s/"//g' \
+          | grep -i '^v=spf1' \
+          | head -n1
+    }
+
+    _spf_input() {
+        local a; a="$1"
+        case "$a" in
+            "v=spf1"*) printf '%s\n' "$a" ;;
+            -)         local line; IFS= read -r line; printf '%s\n' "$line" ;;
+            *)         _dig_txt "$a" ;;
+        esac
+    }
+
+    # Print one IR row.
+    _ir_row() { printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5" "$6"; }
+
+    # _emit_host_ips <token> <mech> <src> <depth> <qual>
+    _emit_host_ips() {
+        local token; token="$1"
+        local mech; mech="$2"
+        local src; src="$3"
+        local depth; depth="$4"
+        local qual; qual="$5"
+        local host
+        case "$token" in
+            "$mech")      host="$src" ;;        # bare a / mx -> the current domain
+            "$mech":*)    host="${token#"$mech":}"; host="${host%%/*}" ;;
+            "$mech"/*)    host="$src" ;;         # a/24 dual-cidr on current domain
+        esac
+        # cost row for the mechanism itself (1 lookup)
+        _ir_row "$depth" "$src" "$qual" "$mech" "$host" 1
+        local tcp; [ "$USE_TCP" ] && tcp="+tcp"
+        local ip
+        # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- $tcp expands to +tcp or empty; splitting dig short output on whitespace is intended
+        for ip in $(dig @"$SERVER" $tcp +short A "$host" 2>/dev/null); do
+            _ir_row "$depth" "$src" "$qual" ip4 "$ip" 0
+        done
+        # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- $tcp expands to +tcp or empty; splitting dig short output on whitespace is intended
+        for ip in $(dig @"$SERVER" $tcp +short AAAA "$host" 2>/dev/null); do
+            _ir_row "$depth" "$src" "$qual" ip6 "$ip" 0
+        done
+    }
+
+    # _resolve_rec <record-string> <source_domain> <depth> <ancestor-path>
+    _resolve_rec() {
+        local record; record="$1"
+        local src; src="$2"
+        local depth; depth="$3"
+        local ancestors; ancestors="$4"
+        [ "$QUIET" ] || printf '[INF][%s] %s: %s\n' "$SCRIPT_NAME" "$src" "$record" >&2
+
+        local token
+        local qual
+        local target
+        # strip leading "v=spf1" by splitting the record on spaces (intentional word-split)
+        # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- splitting an SPF record on whitespace is intended
+        set -- $record
+        shift   # drop v=spf1
+        for token in "$@"; do
+            # split qualifier
+            qual="+"
+            case "$token" in [+~?-]*) qual="${token%%[!+~?-]*}"; token="${token#?}" ;; esac
+            case "$token" in
+                ip4:*)      _ir_row "$depth" "$src" "$qual" ip4 "${token#ip4:}" 0 ;;
+                ip6:*)      _ir_row "$depth" "$src" "$qual" ip6 "${token#ip6:}" 0 ;;
+                all)        _ir_row "$depth" "$src" "$qual" all "" 0 ;;
+                include:*)  target="${token#include:}"
+                            _ir_row "$depth" "$src" "$qual" include "$target" 1
+                            _walk_into "$target" "$depth" "$ancestors" ;;
+                redirect=*) target="${token#redirect=}"
+                            _ir_row "$depth" "$src" "$qual" redirect "$target" 1
+                            _walk_into "$target" "$depth" "$ancestors" ;;
+                a|a:*|a/*)      _emit_host_ips "$token" a  "$src" "$depth" "$qual" ;;
+                mx|mx:*|mx/*)   _emit_host_ips "$token" mx "$src" "$depth" "$qual" ;;
+                exists:*)   _ir_row "$depth" "$src" "$qual" exists "${token#exists:}" 1 ;;
+                ptr|ptr:*)  _ir_row "$depth" "$src" "$qual" ptr "${token#ptr}" 1 ;;
+                v=spf1)     ;;   # already shifted, but be safe
+                *)          ;;   # unknown token: ignore (verify's job, not ours)
+            esac
+        done
+    }
+
+    # follow include/redirect with cycle + cap guards
+    _walk_into() {
+        local target; target="$1"
+        local parent_depth; parent_depth="$2"
+        local ancestors; ancestors="$3"
+        case " $ancestors " in *" $target "*) return 0 ;; esac   # cycle: skip
+        if [ "$parent_depth" -ge 20 ]; then return 0; fi          # depth cap
+        local sub; sub="$(_dig_txt "$target")"
+        [ "$sub" ] || { [ "$QUIET" ] || printf '[WRN][%s] no SPF record for %s\n' "$SCRIPT_NAME" "$target" >&2; return 0; }
+        _resolve_rec "$sub" "$target" "$((parent_depth + 1))" "$ancestors $target"
+    }
+
+    _resolve() {
+        local arg; arg="$1"
+        local anchor; anchor="${2:-$DOMAIN_ANCHOR}"
+        local root; root="$(_spf_input "$arg")"
+        if [ -z "$root" ]; then
+            _error "No SPF record found for $arg"
+            return 1
+        fi
+        local rootsrc; rootsrc="$arg"
+        case "$arg" in "v=spf1"*|-) rootsrc="${anchor:-<record>}" ;; esac
+        _resolve_rec "$root" "$rootsrc" 0 "$rootsrc"
+    }
+
     # --- command stubs (implemented in later tasks) ---
 
     _cmd_find()    { return 0; }
@@ -125,9 +241,6 @@ _spf() (
             *) args+=("$1"); shift ;;
         esac
     done
-    # SERVER, DOMAIN_ANCHOR, USE_TCP, QUIET are consumed by the resolver added in a later task
-    : "$SERVER" "$DOMAIN_ANCHOR" "$USE_TCP" "$QUIET"
-
     local verb; verb="${args[0]}"
     if [ -z "$verb" ]; then
         _error "Must provide a verb (find|flatten|check|tree). Run \`$SCRIPT_NAME -h\` for usage"
@@ -139,6 +252,8 @@ _spf() (
         flatten) _cmd_flatten "${rest[@]}" ;;
         check)   _cmd_check   "${rest[@]}" ;;
         tree)    _cmd_tree    "${rest[@]}" ;;
+        # __ir: test-only -- dumps the raw IR for the test harness
+        __ir)    _resolve     "${rest[@]}" ;;
         *) _error "Unknown argument '$verb'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
     esac
 )
