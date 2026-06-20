@@ -42,6 +42,8 @@ render-md README.md -o -
 
 | Flag | Description |
 |---|---|
+| `file` | Markdown file to render (default: stdin) |
+| `-x, --xss` | Enable XSS filtering (matches gh-proxy sanitization) |
 | `-o FILE` | Write HTML to FILE instead of opening in browser |
 | `-o -` | Write HTML to stdout |
 | `-h, --help` | Show help |
