@@ -88,7 +88,7 @@ Executing `prompt` directly produces an error:
 
 ```
 $ prompt VAR "Enter something: "
-This script must be sourced to work correctly.
+[ERR][prompt] Must be sourced, not executed. Run `prompt -h` for usage
 ```
 
 This is by design. The script needs to set a variable in *your* shell, which is impossible from a subprocess. Always invoke it via sourcing:
@@ -168,6 +168,10 @@ Arguments are positional, in this order:
 |---|---|
 | 0 | Success (user provided input or default was used) |
 | 2 | Usage error (script was executed rather than sourced) |
+
+### Dependencies
+
+- `stty` – used to put the terminal in raw mode for the inline placeholder and backspace handling. When stdin is not a terminal (piped or redirected input), raw mode is skipped and a plain `read` is used instead, so `stty` is not required in that path.
 
 ### Warnings
 
