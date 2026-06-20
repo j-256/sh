@@ -10,6 +10,7 @@ Standards for test files in this repository.
 - All external commands the script-under-test calls (curl, dig, jq, etc.) are shimmed
 - Each test case gets a fresh temp directory for isolation
 - Test files do NOT follow CONVENTIONS.md -- they use a simpler structure
+- Test files are **execute-only**: run them with `test-runner.sh` or `bash <file>`, never source them. `run_tests` ends in `exit`, so sourcing a test into an interactive shell would close it -- the helper guards against this (see [Permissions](#permissions))
 
 ## File Structure
 
@@ -219,6 +220,18 @@ An aggregate runner that finds and runs all test files. Lives in `tests/` alongs
 - Accepts an optional pattern to filter which tests to run (e.g. `test-runner.sh pin-dns`)
 - Prints a final summary: which files passed, which failed
 - Exits 0 if all passed, 1 if any failed
+
+## Permissions
+
+The executable bit follows the repo-wide rule that `+x` means "execute this" and `-x` means "source this, or it is not runnable as-is" (e.g. the source-only `dbg` and `prompt` scripts are `-x` and refuse execution). In `tests/`:
+
+| File | Bit | Why |
+| --- | --- | --- |
+| `<name>.test.sh`, `meta-*.test.sh` | `+x` | Execute-only -- run via `test-runner.sh` or `bash <file>` |
+| `test-runner.sh` | `+x` | The entry point you invoke |
+| `test-helpers.sh` | `-x` | Sourced by every test, never run on its own |
+
+Two backstops keep this from drifting: sourcing a test triggers a refuse-and-`return` guard in `run_tests` (a sourced file's `${BASH_SOURCE[1]}` differs from `$0`), and `meta-coverage.test.sh` asserts every file above carries the right bit.
 
 ## Meta-tests
 
