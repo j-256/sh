@@ -5,6 +5,9 @@
 #   cf-ddns <api_token> <domain>
 #   cf-ddns -h
 #
+# Options:
+#   -h, --help   Show help message
+#
 # Updates Cloudflare DNS to use the current machine's outbound IP address;
 # deletes all existing A records for the domain and creates a new one
 # Run periodically from host to achieve basic Dynamic DNS capabilities
@@ -181,22 +184,22 @@ _cf_ddns() (
     # Get zone ID from domain name
     local zone_id
     if ! zone_id="$(_get_zones | jq -r '.result[] | select(.name=="'"$domain"'") | .id' 2>"/tmp/get_zones.$$.err")"; then
-        _exception "Unexpected error while retrieving zone ID for domain \"$domain\"" "/tmp/get_zones.$$.err"
+        _exception "Unexpected error while retrieving zone ID for domain '$domain'" "/tmp/get_zones.$$.err"
         return 1
     fi
     if [ -z "$zone_id" ]; then
-        _error "No zone found for domain \"$domain\""
+        _error "No zone found for domain '$domain'"
         return 1
     fi
 
     # Get all A records for zone
     local a_records
     if ! a_records="$(_get_dns_records "$zone_id" | jq -r '.result[] | select(.type=="A") | "\(.content)=\(.id)"' 2>"/tmp/get_dns_records.$$.err")"; then
-        _exception "Unexpected error while retrieving DNS records from zone \"$zone_id\" ($domain)" "/tmp/get_dns_records.$$.err"
+        _exception "Unexpected error while retrieving DNS records from zone '$zone_id' ($domain)" "/tmp/get_dns_records.$$.err"
         return 1
     fi
     if [ -z "$a_records" ]; then
-        _info "No existing A records in zone \"$zone_id\" ($domain)"
+        _info "No existing A records in zone '$zone_id' ($domain)"
     fi
 
     # Delete all found A records - this is why we are not using PUT

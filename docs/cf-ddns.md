@@ -112,6 +112,6 @@ The delete-all-then-create approach ensures a clean state even if multiple A rec
 
 - **TTL:** Hardcoded to 60 seconds (`A_RECORD_TTL=60`) for fast propagation during IP changes.
 - **API version:** Uses Cloudflare API v4 (`https://api.cloudflare.com/client/v4`).
-- **Logging:** Colored output via raw ANSI escapes, guarded by TTY check and `NO_COLOR`. All diagnostic levels (`[INF]`, `[WRN]`, `[ERR]`, `[DBG]`) write to stderr in the shape `[LVL][cf-ddns] message`.
+- **Logging:** Colored output via raw ANSI escapes, guarded by TTY check and `NO_COLOR`. All diagnostic levels (`[INF]`, `[ERR]`, `[DBG]`) write to stderr in the shape `[LVL][cf-ddns] message`.
 - **Curl logs:** When `DDNS_DEBUG` is set, full curl stderr/stdout is logged to `/tmp/curl.$$.log` (where `$$` is the process ID).
 - **TCP DNS queries:** Uses `dig +tcp` to avoid issues on networks that block UDP DNS traffic.

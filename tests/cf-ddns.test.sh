@@ -234,7 +234,7 @@ SHIM
 
     run_script "token123" "notfound.com"
     assert_rc "zone not found" 1
-    assert_stderr_contains "zone error" "No zone found for domain \"notfound.com\""
+    assert_stderr_contains "zone error" "No zone found for domain 'notfound.com'"
 }
 
 test_zone_retrieval_jq_error() {
