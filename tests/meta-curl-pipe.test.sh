@@ -1,5 +1,8 @@
 #!/bin/bash
-# curl-pipe.test.sh - Verify every script works when piped or process-substituted
+# meta-curl-pipe.test.sh - Verify every script works when piped or process-substituted
+#
+# Cross-cutting meta-test (meta-*.test.sh): validates a convention across the
+# whole script fleet rather than a single script. See TESTING.md.
 #
 # Three "no real filename" invocation shapes are covered:
 #

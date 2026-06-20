@@ -1,6 +1,9 @@
 #!/bin/bash
-# cleanup-on-source.test.sh - Verify scripts don't leak functions or variables
-# when sourced
+# meta-cleanup-on-source.test.sh - Verify scripts don't leak functions or
+# variables when sourced
+#
+# Cross-cutting meta-test (meta-*.test.sh): validates a convention across the
+# whole script fleet rather than a single script. See TESTING.md.
 # shellcheck source-path=SCRIPTDIR disable=SC2329,SC2016
 #
 # Every script in /repo/sh is designed to be either executed or sourced --
