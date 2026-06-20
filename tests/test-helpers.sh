@@ -100,10 +100,31 @@ assert_file_exists() {
     fi
 }
 
+# --- hang guard ---
+
+# A script under test that blocks on unfed input or spin-loops would otherwise
+# hang the whole suite -- run_tests has no per-test timeout, so one stuck script
+# never reports and the run never ends. When `timeout` (GNU coreutils; installed
+# as `gtimeout` by Homebrew on macOS) is available, each run_script* invocation
+# is bounded: a stuck script is killed and the test fails (rc 124) instead of
+# hanging. Override the bound with TEST_TIMEOUT (seconds). When neither binary is
+# present, runs are UNBOUNDED -- we warn once so the hang-the-suite failure mode
+# is known rather than mysterious.
+_TEST_TIMEOUT="${TEST_TIMEOUT:-30}"
+if command -v timeout >/dev/null 2>&1; then
+    _TIMEOUT="timeout $_TEST_TIMEOUT"
+elif command -v gtimeout >/dev/null 2>&1; then
+    _TIMEOUT="gtimeout $_TEST_TIMEOUT"
+else
+    _TIMEOUT=""
+    echo "[WRN][test-helpers] 'timeout' not found (try: brew install coreutils); a hanging script under test will hang the whole suite" >&2
+fi
+
 # --- script runner ---
 
 run_script() {
-    env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR:$PATH" \
+    # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- $_TIMEOUT is "timeout N" or empty; the split is intentional
+    $_TIMEOUT env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR:$PATH" \
         /bin/bash "$UNDER_TEST" "$@" >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
 }
@@ -113,7 +134,8 @@ run_script() {
 # subshell so the script's sourced-vs-executed check (typically $0 != bash)
 # passes. stdout/stderr/rc captured the same way as run_script
 run_script_sourced() {
-    env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR:$PATH" \
+    # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- $_TIMEOUT is "timeout N" or empty; the split is intentional
+    $_TIMEOUT env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR:$PATH" \
         /bin/bash -c 'script="$1"; shift; . "$script" "$@"' bash "$UNDER_TEST" "$@" \
         >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
@@ -125,7 +147,8 @@ run_script_sourced() {
 # Usage: run_script_sourced_capture "VAR1 VAR2 ..." [args...]
 run_script_sourced_capture() {
     local vars="$1"; shift
-    env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR:$PATH" VARS="$vars" \
+    # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- $_TIMEOUT is "timeout N" or empty; the split is intentional
+    $_TIMEOUT env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR:$PATH" VARS="$vars" \
         /bin/bash -c '
             script="$1"; shift
             . "$script" "$@"
