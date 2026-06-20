@@ -63,14 +63,17 @@ The inner repository remains intact and functional after the operation completes
 
 | Flag | Description |
 |---|---|
-| `-h, --help` | Display help message |
+| `directory` | Path to a directory containing its own `.git` subdirectory |
+| `-h, --help` | Show help message |
 
 ### Exit codes
 
 | Code | Meaning |
 |---|---|
 | 0 | Success |
-| 1 | Error (missing directory argument, directory doesn't exist, no `.git` found, backup/restore failed, or `git add` failed) |
+| 1 | Runtime failure (backup, restore, or `git add` failed) |
+| 2 | Usage / precondition error (no directory, directory doesn't exist, no `.git` found, not inside a git repo) |
+| 130 | Interrupted (SIGINT/SIGTERM/SIGHUP); emergency restore attempted |
 
 ### Dependencies
 

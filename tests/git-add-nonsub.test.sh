@@ -75,14 +75,14 @@ test_no_directory_specified() {
 test_unknown_option() {
     run_script --unknown
     assert_rc "unknown option exits 2" 2
-    assert_stderr_contains "error message" "Unknown option: --unknown"
+    assert_stderr_contains "error message" "Unknown argument '--unknown'"
 }
 
 test_multiple_directories() {
     mkdir -p "$TEST_DIR/dir1" "$TEST_DIR/dir2"
     run_script "$TEST_DIR/dir1" "$TEST_DIR/dir2"
     assert_rc "multiple dirs exits 2" 2
-    assert_stderr_contains "error message" "Unexpected argument"
+    assert_stderr_contains "error message" "Unknown argument"
 }
 
 test_directory_does_not_exist() {
