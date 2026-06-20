@@ -179,5 +179,44 @@ test_flatten_raw_record_via_stdin() {
     assert_stdout_contains "emits ip from stdin" "198.51.100.0/24"
 }
 
+# --- __ip4 / _ip4_in_cidr tests ---
+
+test_ip4_inside_24() {
+    run_script __ip4 198.51.100.42 198.51.100.0/24
+    assert_rc "inside /24" 0
+}
+test_ip4_outside_24() {
+    run_script __ip4 198.51.101.1 198.51.100.0/24
+    assert_rc "outside /24" 1
+}
+test_ip4_network_address() {
+    run_script __ip4 198.51.100.0 198.51.100.0/24
+    assert_rc "network addr inside" 0
+}
+test_ip4_broadcast_address() {
+    run_script __ip4 198.51.100.255 198.51.100.0/24
+    assert_rc "broadcast inside" 0
+}
+test_ip4_slash32_exact() {
+    run_script __ip4 203.0.113.7 203.0.113.7/32
+    assert_rc "exact /32" 0
+}
+test_ip4_slash32_off_by_one() {
+    run_script __ip4 203.0.113.8 203.0.113.7/32
+    assert_rc "off by one /32" 1
+}
+test_ip4_bare_ip_is_slash32() {
+    run_script __ip4 203.0.113.7 203.0.113.7
+    assert_rc "bare ip exact" 0
+}
+test_ip4_slash0_matches_everything() {
+    run_script __ip4 8.8.8.8 0.0.0.0/0
+    assert_rc "/0 matches all" 0
+}
+test_ip4_malformed_prefix() {
+    run_script __ip4 1.2.3.4 1.2.3.0/33
+    assert_rc "prefix>32 rejected" 2
+}
+
 # --- run ---
 run_tests "$@"

@@ -203,6 +203,42 @@ _spf() (
         _resolve_rec "$root" "$rootsrc" 0 "$rootsrc"
     }
 
+    # --- IPv4 CIDR helpers ---
+
+    _ip4_to_int() {
+        local IFS=.
+        # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- intentional split of dotted-quad on '.'
+        set -- $1
+        [ $# -eq 4 ] || return 2
+        local o
+        for o in "$@"; do
+            case "$o" in ''|*[!0-9]*) return 2 ;; esac
+            [ "$o" -le 255 ] || return 2
+        done
+        printf '%s\n' "$(( ($1 << 24) | ($2 << 16) | ($3 << 8) | $4 ))"
+    }
+
+    _ip4_in_cidr() {
+        local ip; ip="$1"
+        local cidr; cidr="$2"
+        local net; net="${cidr%/*}"
+        local prefix
+        case "$cidr" in */*) prefix="${cidr#*/}" ;; *) prefix=32 ;; esac
+        case "$prefix" in ''|*[!0-9]*) return 2 ;; esac
+        [ "$prefix" -le 32 ] || return 2
+
+        local ipi; ipi="$(_ip4_to_int "$ip")" || return 2
+        local neti; neti="$(_ip4_to_int "$net")" || return 2
+
+        local mask
+        if [ "$prefix" -eq 0 ]; then
+            mask=0
+        else
+            mask=$(( (0xFFFFFFFF << (32 - prefix)) & 0xFFFFFFFF ))
+        fi
+        [ $(( ipi & mask )) -eq $(( neti & mask )) ]
+    }
+
     # --- command stubs (implemented in later tasks) ---
 
     _cmd_find()  { return 0; }
@@ -320,6 +356,8 @@ _spf() (
         tree)    _cmd_tree    "${rest[@]}" ;;
         # __ir: test-only -- dumps the raw IR for the test harness
         __ir)    _resolve     "${rest[@]}" ;;
+        # __ip4: test-only -- exercises _ip4_in_cidr directly
+        __ip4)   _ip4_in_cidr "${rest[@]}"; return $? ;;
         *) _error "Unknown argument '$verb'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
     esac
 )
