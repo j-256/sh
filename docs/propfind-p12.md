@@ -9,7 +9,7 @@ Useful after generating a fresh `.p12` with `generate-p12`, or when troubleshoot
 ## Quick start
 
 ```
-$ propfind-p12 dev01-web-example.demandware.net eyJhbGc... version1 cert-password
+$ propfind-p12 -t eyJhbGc... dev01-web-example.demandware.net version1 cert-password
 <?xml version="1.0" encoding="utf-8"?>
 <D:multistatus xmlns:D="DAV:">
   <D:response>
@@ -39,19 +39,26 @@ You'll see XML listing cartridges at the root of your code version if the certif
 generate-p12 dev01-web-example.demandware.net cert-password
 
 # Validate it works against WebDAV
-propfind-p12 dev01-web-example.demandware.net "$BEARER_TOKEN" version1 cert-password
+propfind-p12 -t "$BEARER_TOKEN" dev01-web-example.demandware.net version1 cert-password
 ```
 
-**Debug why WebDAV uploads are failing** — if PROPFIND returns XML instead of certificate errors, the problem is elsewhere (permissions, token expiry, wrong path):
+**Debug why WebDAV uploads are failing** – if PROPFIND returns XML instead of certificate errors, the problem is elsewhere (permissions, token expiry, wrong path):
 
 ```bash
-propfind-p12 staging-na01-example.demandware.net "$TOKEN" active cert-password
+propfind-p12 -t "$TOKEN" staging-na01-example.demandware.net active cert-password
+```
+
+**Use the `SFCC_TOKEN` env var** instead of passing `-t` every time:
+
+```bash
+export SFCC_TOKEN="$TOKEN"
+propfind-p12 staging-na01-example.demandware.net active cert-password
 ```
 
 **Verify a new CA cert** — if your SFCC instance's CA certificate rotated and you downloaded `hostname_01.crt`, PROPFIND will immediately tell you if curl trusts it:
 
 ```bash
-propfind-p12 prod05-web-example.demandware.net "$TOKEN" current cert-password
+propfind-p12 -t "$TOKEN" prod05-web-example.demandware.net current cert-password
 # Fails with SSL error if CA cert is wrong or expired
 ```
 
@@ -80,21 +87,29 @@ If `verify-p12` passes but `propfind-p12` fails, the CA cert is likely the issue
 | Flag | Description |
 |---|---|
 | `hostname` | Instance hostname (e.g. `dev01-web-example.demandware.net`) |
-| `token` | Bearer token for authorization |
 | `code_version` | Code version path segment (e.g. `version1`, `active`, `staging`) |
 | `p12_password` | Password for the `.p12` certificate |
-| `-h, --help` | Display help |
+| `-t, --token TOKEN` | Bearer token for authorization (or set `$SFCC_TOKEN`) |
+| `-h, --help` | Show help |
 
-All four positional arguments are required (help flag is the only exception).
+The three positional arguments (`hostname`, `code_version`, `p12_password`) are required. The Bearer token is required too, supplied via `-t/--token` or the `$SFCC_TOKEN` environment variable.
+
+### Environment variables
+
+| Variable | Description |
+|---|---|
+| `SFCC_TOKEN` | Fallback source for the Bearer token when `-t/--token` is not given |
 
 ### Exit codes
 
 | Code | Meaning |
 |---|---|
 | 0 | PROPFIND succeeded; mTLS and auth are working |
-| Non-zero | curl error (certificate not found, SSL handshake failure, auth failure, network error, etc.) |
+| 2 | Usage / argument error (missing required argument) |
+| 4 | Required `.p12` or CA cert file not found |
+| * | curl exit code (SSL handshake failure, auth failure, network error, etc.) |
 
-The script returns curl's exit code directly. Common values:
+For any non-zero code other than 2 and 4, the script returns curl's exit code directly. Common values:
 
 - `35` — SSL/TLS handshake failure (wrong CA cert, expired cert, or SFCC rejecting the client cert)
 - `51` — Server certificate verification failed (CA cert is wrong or missing)
