@@ -217,6 +217,46 @@ test_ip4_malformed_prefix() {
     run_script __ip4 1.2.3.4 1.2.3.0/33
     assert_rc "prefix>32 rejected" 2
 }
+test_ip4_octet_over_255_rejected() {
+    run_script __ip4 256.0.0.1 0.0.0.0/0
+    assert_rc "octet>255 rejected" 2
+}
+test_ip4_inside_16() {
+    run_script __ip4 1.2.3.4 1.2.0.0/16
+    assert_rc "inside /16" 0
+}
+test_ip4_outside_16() {
+    run_script __ip4 1.3.0.0 1.2.0.0/16
+    assert_rc "outside /16" 1
+}
+test_ip4_empty_prefix_rejected() {
+    run_script __ip4 1.2.3.0 "1.2.3.0/"
+    assert_rc "empty prefix rejected" 2
+}
+test_ip4_nonnumeric_prefix_rejected() {
+    run_script __ip4 1.2.3.0 1.2.3.0/ab
+    assert_rc "non-numeric prefix rejected" 2
+}
+test_ip4_short_ip_rejected() {
+    run_script __ip4 1.2.3 1.2.3.0/24
+    assert_rc "3-octet ip rejected" 2
+}
+test_ip4_long_ip_rejected() {
+    run_script __ip4 1.2.3.4.5 1.2.3.0/24
+    assert_rc "5-octet ip rejected" 2
+}
+test_ip4_slash31_inside() {
+    run_script __ip4 192.0.2.0 192.0.2.0/31
+    assert_rc "inside /31" 0
+}
+test_ip4_slash31_outside() {
+    run_script __ip4 192.0.2.2 192.0.2.0/31
+    assert_rc "outside /31" 1
+}
+test_ip4_slash1_inside() {
+    run_script __ip4 200.0.0.1 128.0.0.0/1
+    assert_rc "inside /1" 0
+}
 
 # --- run ---
 run_tests "$@"
