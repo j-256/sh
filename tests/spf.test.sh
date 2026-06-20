@@ -71,6 +71,17 @@ case "$qtype:$name" in
     TXT:hosted.example)       printf '%s\n' '"v=spf1 a mx -all"' ;;
     A:hosted.example)         printf '%s\n' '198.51.100.20' ;;
     A:mailhost.hosted.example) printf '%s\n' '198.51.100.30' ;;
+    # check: >10 lookups (11 includes at the root, each leaf needs no lookup)
+    TXT:toomany.example)
+        printf '%s\n' '"v=spf1 include:l1.ex include:l2.ex include:l3.ex include:l4.ex include:l5.ex include:l6.ex include:l7.ex include:l8.ex include:l9.ex include:l10.ex include:l11.ex -all"' ;;
+    TXT:l1.ex|TXT:l2.ex|TXT:l3.ex|TXT:l4.ex|TXT:l5.ex|TXT:l6.ex|TXT:l7.ex|TXT:l8.ex|TXT:l9.ex|TXT:l10.ex|TXT:l11.ex)
+        printf '%s\n' '"v=spf1 -all"' ;;
+    # check: syntax smells
+    TXT:plusall.example)  printf '%s\n' '"v=spf1 +all"' ;;
+    TXT:ptr.example)      printf '%s\n' '"v=spf1 ptr -all"' ;;
+    # check: 3 void lookups (each include target has no record)
+    TXT:void.example)     printf '%s\n' '"v=spf1 include:v1.void include:v2.void include:v3.void -all"' ;;
+    TXT:v1.void|TXT:v2.void|TXT:v3.void)  ;;   # no record -> each is a void lookup
 esac
 exit 0
 SHIM
@@ -355,6 +366,43 @@ test_find_exists_unsupported_macro_skipped() {
     run_script find sender.example 198.51.100.7
     assert_stderr_contains "notes skip" "cannot statically evaluate"
     assert_rc "skipped, falls through to not-found" 4
+}
+
+# --- check (Task 8) ---
+
+test_check_clean_record() {            # example.com: 1 include + ip4 + ip6 -> 1 lookup, clean
+    run_script check example.com
+    assert_rc "clean exits 0" 0
+    assert_stdout_contains "reports lookup count" "lookup"
+}
+test_check_over_10_lookups() {
+    run_script check toomany.example
+    assert_rc "over limit exits 4" 4
+    assert_stdout_contains "flags limit" "10"
+}
+test_check_flags_plus_all() {
+    run_script check plusall.example
+    assert_rc "plus all exits 4" 4
+    assert_stdout_contains "warns +all" "+all"
+}
+test_check_flags_ptr() {
+    run_script check ptr.example
+    assert_rc "ptr exits 4" 4
+    assert_stdout_contains "warns ptr" "ptr"
+}
+test_check_flags_excess_void_lookups() {
+    run_script check void.example
+    assert_rc "excess void exits 4" 4
+    assert_stdout_contains "flags void" "Void"
+}
+test_check_no_record_runtime_error() {
+    run_script check nospf.example
+    assert_rc "no record exits 1" 1
+}
+test_check_raw_record_skips_record_count() {
+    run_script check 'v=spf1 ip4:198.51.100.0/24 -all'
+    assert_rc "raw clean exits 0" 0
+    assert_stdout_contains "notes record-count N/A" "raw-record"
 }
 
 # --- run ---

@@ -186,7 +186,12 @@ _spf() (
         case " $ancestors " in *" $target "*) return 0 ;; esac   # cycle: skip
         if [ "$parent_depth" -ge 20 ]; then return 0; fi          # depth cap
         local sub; sub="$(_dig_txt "$target")"
-        [ "$sub" ] || { [ "$QUIET" ] || printf '[WRN][%s] no SPF record for %s\n' "$SCRIPT_NAME" "$target" >&2; return 0; }
+        [ "$sub" ] || {
+            [ "$QUIET" ] || printf '[WRN][%s] no SPF record for %s\n' "$SCRIPT_NAME" "$target" >&2
+            # void lookup: a queried name returned no SPF record. check counts these
+            _ir_row "$((parent_depth + 1))" "$target" "+" void "$target" 0
+            return 0
+        }
         _resolve_rec "$sub" "$target" "$((parent_depth + 1))" "$ancestors $target"
     }
 
@@ -349,7 +354,70 @@ EOF
         printf '%s\n' "$ip not found in $input's SPF record"
         return 4
     }
-    _cmd_check() { return 0; }
+    _cmd_check() {
+        local input; input="$1"
+        if [ -z "$input" ]; then
+            _error "Must provide a domain or record. Run \`$SCRIPT_NAME -h\` for usage"
+            return 2
+        fi
+        local raw; raw=""; case "$input" in "v=spf1"*|-) raw=1 ;; esac
+
+        local ir; ir="$(_resolve "$input")" || return 1
+        local problems; problems=0
+
+        # lookup count: sum of field 6 (lookup_cost) across the resolved tree
+        local lookups; lookups="$(printf '%s\n' "$ir" | awk -F'\t' '{s+=$6} END{print s+0}')"
+        printf 'DNS lookups: %s/10\n' "$lookups"
+        if [ "$lookups" -gt 10 ]; then
+            printf '  PROBLEM: exceeds RFC 7208 limit of 10\n'; problems=1
+        fi
+
+        # void lookups: count rows whose mechanism is the resolver's void sentinel
+        local voids; voids="$(printf '%s\n' "$ir" | awk -F'\t' '$4=="void"' | grep -c .)"
+        printf 'Void lookups: %s/2\n' "$voids"
+        if [ "$voids" -gt 2 ]; then
+            printf '  PROBLEM: exceeds void-lookup limit of 2\n'; problems=1
+        fi
+
+        # +all: any all mechanism with a pass qualifier authorizes the whole internet
+        if printf '%s\n' "$ir" | awk -F'\t' '$4=="all" && $3=="+"' | grep -q .; then
+            printf '  PROBLEM: +all authorizes the entire internet\n'; problems=1
+        fi
+        # multiple all: more than one all in a SINGLE record (field 2 = source domain).
+        # A tree-wide count is wrong: every well-formed included record ends in its
+        # own all, so the smell is two alls published by the same domain
+        local max_all; max_all="$(printf '%s\n' "$ir" | awk -F'\t' '$4=="all"{c[$2]++} END{m=0; for(k in c) if(c[k]>m) m=c[k]; print m+0}')"
+        if [ "$max_all" -gt 1 ]; then
+            printf '  PROBLEM: multiple all mechanisms in one record\n'; problems=1
+        fi
+        # ptr present: deprecated by RFC 7208 (SHOULD NOT be used)
+        if printf '%s\n' "$ir" | awk -F'\t' '$4=="ptr"' | grep -q .; then
+            printf '  WARNING: ptr is deprecated (RFC 7208 SHOULD NOT)\n'; problems=1
+        fi
+
+        # record count: domain mode only. In raw-record mode exactly one record was
+        # supplied, so the 0/>1 published-record lint is not applicable
+        if [ "$raw" ]; then
+            printf 'Record count: N/A (raw-record input)\n'
+        else
+            # Re-query TXT ourselves (the resolver's count is lost in a subshell) and
+            # count v=spf1 records. 0 records can't reach here: _resolve already
+            # failed above. >1 is a permerror per RFC 7208
+            local tcp; [ "$USE_TCP" ] && tcp="+tcp"
+            local rec_count
+            # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- $tcp expands to +tcp or empty; the split is intentional
+            rec_count="$(dig @"$SERVER" $tcp +short TXT "$input" 2>/dev/null | sed 's/" "//g; s/"//g' | grep -ic '^v=spf1')"
+            printf 'Published SPF records: %s\n' "$rec_count"
+            if [ "$rec_count" -gt 1 ]; then
+                printf '  PROBLEM: multiple published SPF records (RFC 7208 permerror)\n'; problems=1
+            fi
+        fi
+
+        if [ "$problems" -eq 0 ]; then
+            printf 'OK: no problems found\n'; return 0
+        fi
+        return 4
+    }
     _cmd_tree()  { return 0; }
 
     _chunk_record() {
