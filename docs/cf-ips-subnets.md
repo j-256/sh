@@ -75,7 +75,15 @@ This logic ensures you get the fewest number of subnet entries while staying wit
 
 | Flag | Description |
 |---|---|
-| `-h, --help` | Display help |
+| `-h, --help` | Show help |
+
+### Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | Success |
+| 1 | Runtime failure (empty fetch response, or CIDR range > /24 encountered) |
+| 3 | Dependency error (`curl` or `ipcalc` not found) |
 
 ### Dependencies
 
@@ -85,14 +93,6 @@ This logic ensures you get the fewest number of subnet entries while staying wit
 | `ipcalc` | Subnet calculation | Requires [github.com/kjokjo/ipcalc](https://github.com/kjokjo/ipcalc) |
 
 The script checks for `ipcalc` at startup and exits with an error if it's not available.
-
-### Exit codes
-
-| Code | Meaning |
-|---|---|
-| 0 | Success |
-| 1 | Runtime failure (empty fetch response, or CIDR range > /24 encountered) |
-| 3 | Dependency error (`curl` or `ipcalc` not found) |
 
 ### Behavior
 

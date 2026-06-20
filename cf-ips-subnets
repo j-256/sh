@@ -4,6 +4,9 @@
 # Usage:
 #   cf-ips-subnets
 #
+# Options:
+#   -h, --help  Show help message
+#
 # Dependencies:
 #   ipcalc - https://github.com/kjokjo/ipcalc
 #   curl
@@ -16,7 +19,7 @@ _cf_ips_subnets() (
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
 
     _show_help() {
-        # No user-facing placeholders, so $s/$r are unused here
+        # $s/$r underline the -h placeholder in the SYNOPSIS line below
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
         echo "NAME"
