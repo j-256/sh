@@ -255,6 +255,34 @@ except ValueError:
         printf '  matched: %s:%s\n' "$4" "$5"
     }
 
+    # Expand IP/domain-derivable macros. Returns 1 if an unsupported macro appears.
+    _expand_macro() {
+        local s; s="$1"
+        local qip; qip="$2"
+        local dom; dom="$3"
+        # shellcheck disable=SC1083 # "This { is literal." -- the { is intentional in the glob; case pattern matches literal %{s/l/o/h/p
+        case "$s" in *%{[slohp]*) return 1 ;; esac   # sender/HELO/ptr macros: unsupported
+
+        local i_exp
+        local ir_exp
+        local v_exp
+        case "$qip" in
+            *:*) i_exp="$qip"; v_exp="ip6"; ir_exp="$qip" ;;   # v6 nibble form omitted; v4 is the common case
+            *)   i_exp="$qip"; v_exp="in-addr"
+                 local IFS=.
+                 # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- splitting a dotted-quad for the %{ir} reverse transform
+                 set -- $qip; ir_exp="$4.$3.$2.$1" ;;
+        esac
+        s="${s//%{ir\}/$ir_exp}"
+        s="${s//%{i\}/$i_exp}"
+        s="${s//%{d\}/$dom}"
+        s="${s//%{v\}/$v_exp}"
+        s="${s//%%/%}"
+        s="${s//%_/ }"
+        s="${s//%-/%20}"
+        printf '%s\n' "$s"
+    }
+
     # --- command stubs (implemented in later tasks) ---
 
     _cmd_find() {
@@ -302,6 +330,16 @@ except ValueError:
                     elif [ "$rc" -eq 2 ]; then
                         [ "$warned_py" ] || { _warn "python3 not found; IPv6 matching is literal-only"; warned_py=1; }
                         [ "$ip" = "$val" ] && { _find_hit "$ip" "$src" "$qual" "$mech" "$val"; return 0; }
+                    fi ;;
+                exists)
+                    local name; if name="$(_expand_macro "$val" "$ip" "$src")"; then
+                        local tcp; [ "$USE_TCP" ] && tcp="+tcp"
+                        # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- optional +tcp flag; split is intentional
+                        if [ -n "$(dig @"$SERVER" $tcp +short A "$name" 2>/dev/null)" ]; then
+                            _find_hit "$ip" "$src" "$qual" exists "$val"; return 0
+                        fi
+                    else
+                        _warn "cannot statically evaluate exists ($val)"
                     fi ;;
             esac
         done <<EOF

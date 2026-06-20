@@ -63,6 +63,10 @@ case "$qtype:$name" in
         printf '%s\n' '"v=spf1 -ip4:192.0.2.5 ~all"' ;;
     TXT:exists.example)
         printf '%s\n' '"v=spf1 exists:%{i}._spf.exists.example -all"' ;;
+    A:7.100.51.198._spf.exists.example)   printf '%s\n' '127.0.0.2' ;;   # %{ir} reverse of 198.51.100.7
+    A:198.51.100.7._spf.exists.example)   printf '%s\n' '127.0.0.2' ;;   # %{i} non-reversed
+    TXT:sender.example)
+        printf '%s\n' '"v=spf1 exists:%{s}._spf.sender.example -all"' ;;
     # bare a / mx on the apex
     TXT:hosted.example)       printf '%s\n' '"v=spf1 a mx -all"' ;;
     A:hosted.example)         printf '%s\n' '198.51.100.20' ;;
@@ -334,6 +338,23 @@ test_find_ipv6_no_python3_degrades() {
 test_find_ipv6_literal_match_without_python3() {
     run_script_no_python3 find example.com 2001:db8::/32
     assert_rc "literal equal exits 0" 0
+}
+
+# --- find (Task 7: exists macro) ---
+
+test_find_exists_macro_match() {
+    run_script find exists.example 198.51.100.7
+    assert_rc "exists match exits 0" 0
+    assert_stdout_contains "credits exists" "exists"
+}
+test_find_exists_macro_no_match() {
+    run_script find exists.example 198.51.100.200
+    assert_rc "exists no-match exits 4" 4
+}
+test_find_exists_unsupported_macro_skipped() {
+    run_script find sender.example 198.51.100.7
+    assert_stderr_contains "notes skip" "cannot statically evaluate"
+    assert_rc "skipped, falls through to not-found" 4
 }
 
 # --- run ---
