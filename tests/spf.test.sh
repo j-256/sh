@@ -27,6 +27,26 @@ run_script_no_python3() {
     printf '%s\n' "$?" > "$TEST_DIR/rc"
 }
 
+# Run the script with NO dig reachable, to simulate a host missing the BIND
+# utilities. Same clean-coreutils-symlink technique as run_script_no_python3, but
+# we ALSO drop the dig shim and build the clean dir WITHOUT a dig symlink, so
+# `command -v dig` fails on PATH (shim dir + that clean dir). The coreutils are
+# still linked for robustness, though the early exit-3 dig check never reaches
+# them.
+run_script_no_dig() {
+    /bin/rm -f "$SHIM_DIR/dig"
+    local nodig="$TEST_DIR/nodig"
+    mkdir -p "$nodig"
+    local t
+    local real
+    for t in sed grep head basename awk sort cat tr cut dirname; do
+        real="$(PATH=/usr/bin:/bin command -v "$t" 2>/dev/null)" && ln -sf "$real" "$nodig/$t"
+    done
+    env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR:$nodig" \
+        /bin/bash "$UNDER_TEST" "$@" >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
+    printf '%s\n' "$?" > "$TEST_DIR/rc"
+}
+
 # --- shims ---
 # The dig shim answers TXT (SPF records), A, and AAAA queries from canned
 # fixtures keyed by the queried name. Later tasks extend the case arms.
@@ -121,6 +141,12 @@ test_unknown_verb_is_usage_error() {
     run_script bogus example.com
     assert_rc "unknown verb exits 2" 2
     assert_stderr_contains "echoes the bad verb" "bogus"
+}
+
+test_dig_missing_exits_3() {
+    run_script_no_dig check example.com
+    assert_rc "dig missing exits 3" 3
+    assert_stderr_contains "says dig required" "dig is required"
 }
 
 test_ir_root_and_include() {
@@ -445,6 +471,15 @@ test_tree_skips_void_rows() {
     run_script tree void.example
     assert_rc "tree exits 0" 0
     assert_stdout_not_contains "no void leaf" "void:"
+}
+test_tree_bare_ptr_no_cost_leak() {
+    # ptr.example: 'v=spf1 ptr -all'. A bare ptr has an empty IR value field;
+    # an IFS=$'\t' read merges the trailing tabs and shifts cost (1) into val,
+    # rendering 'ptr:1'. The peel-split parse + ${val:+:$val} label fix this.
+    run_script tree ptr.example
+    assert_rc "tree exits 0" 0
+    assert_stdout_not_contains "no cost leak into ptr value" "ptr:1"
+    assert_stdout_contains "bare ptr rendered cleanly" "ptr"
 }
 
 # --- run ---

@@ -10,7 +10,7 @@
 #
 # Options:
 #   -s, --server <ip>   DNS server to query (default: 8.8.8.8)
-#   -d, --domain <dom>  Restrict output to a specific domain anchor
+#   -d, --domain <dom>  Anchor %{d} macros when input is a raw record
 #   --tcp               Force TCP instead of UDP for dig queries
 #   -q, --quiet         Suppress informational output
 #   -h, --help          Show help message
@@ -41,7 +41,7 @@ _spf() (
         echo "  check record health, and print the full include tree."
         echo "OPTIONS"
         echo "  -s, --server ${s}ip${r}   DNS server to query (default: 8.8.8.8)"
-        echo "  -d, --domain ${s}dom${r}  Restrict output to a specific domain anchor"
+        echo "  -d, --domain ${s}dom${r}  Anchor %{d} macros when input is a raw record"
         echo "  --tcp             Force TCP instead of UDP for dig queries"
         echo "  -q, --quiet       Suppress informational output"
         echo "  -h, --help        Show this help message"
@@ -322,8 +322,17 @@ except ValueError:
         local val
         local cost
         local rc
+        local _row
+        # IFS-whitespace (TAB) merges consecutive separators, collapsing an empty
+        # value field. Peel-split each row so empty fields are preserved.
         # shellcheck disable=SC2034 # cost is read from the IR to keep field alignment but not used in this consumer
-        while IFS=$'\t' read -r depth src qual mech val cost; do
+        while IFS= read -r _row; do
+            depth="${_row%%$'\t'*}";  _row="${_row#*$'\t'}"
+            src="${_row%%$'\t'*}";    _row="${_row#*$'\t'}"
+            qual="${_row%%$'\t'*}";   _row="${_row#*$'\t'}"
+            mech="${_row%%$'\t'*}";   _row="${_row#*$'\t'}"
+            val="${_row%%$'\t'*}";    _row="${_row#*$'\t'}"
+            cost="${_row}"
             case "$mech" in
                 ip4)
                     [ "$family" = 4 ] || continue
@@ -434,13 +443,22 @@ EOF
         local cost
         local indent
         local label
+        local _row
+        # IFS-whitespace (TAB) merges consecutive separators, collapsing an empty
+        # value field. Peel-split each row so empty fields are preserved.
         # shellcheck disable=SC2034 # cost is read from the IR to keep field alignment but not used in this consumer
-        while IFS=$'\t' read -r depth src qual mech val cost; do
+        while IFS= read -r _row; do
+            depth="${_row%%$'\t'*}";  _row="${_row#*$'\t'}"
+            src="${_row%%$'\t'*}";    _row="${_row#*$'\t'}"
+            qual="${_row%%$'\t'*}";   _row="${_row#*$'\t'}"
+            mech="${_row%%$'\t'*}";   _row="${_row#*$'\t'}"
+            val="${_row%%$'\t'*}";    _row="${_row#*$'\t'}"
+            cost="${_row}"
             [ "$mech" = void ] && continue
             indent="$(printf '%*s' "$(( depth * 4 + 2 ))" '')"
             case "$mech" in
                 all)    label="${qual}all" ;;
-                *)      label="$mech:$val" ;;
+                *)      label="$mech${val:+:$val}" ;;
             esac
             printf '%s%s\n' "$indent" "$label"
         done <<EOF
@@ -546,6 +564,12 @@ EOF
             *) args+=("$1"); shift ;;
         esac
     done
+
+    if ! command -v dig >/dev/null 2>&1; then
+        _error "dig is required"
+        return 3
+    fi
+
     local verb; verb="${args[0]}"
     if [ -z "$verb" ]; then
         _error "Must provide a verb (find|flatten|check|tree). Run \`$SCRIPT_NAME -h\` for usage"

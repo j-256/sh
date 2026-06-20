@@ -166,7 +166,7 @@ This is the SPF equivalent of hardcoding a CNAME target's IP instead of using th
 | Flag | Description |
 |---|---|
 | `-s, --server ip` | DNS server to query (default: 8.8.8.8) |
-| `-d, --domain dom` | Restrict output to a specific domain anchor (anchors `%{d}` in raw mode) |
+| `-d, --domain dom` | Anchor `%{d}` macros when input is a raw record |
 | `--tcp` | Force TCP instead of UDP for dig queries |
 | `-q, --quiet` | Suppress informational output |
 | `-h, --help` | Show this help message |
