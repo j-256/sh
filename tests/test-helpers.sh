@@ -173,6 +173,18 @@ assert_captured() {
 # --- test runner ---
 
 run_tests() {
+    # Refuse if the test file was sourced rather than executed. Test files are
+    # execute-only: run_tests ends in exit, so sourcing one into an interactive
+    # shell would close that shell. When sourced, ${BASH_SOURCE[1]} (the test
+    # file that called run_tests) differs from $0 (the interpreter, "bash").
+    # Mirrors the source/execute guard that dbg and prompt use for the inverse
+    # mistake. This is the first thing run_tests does; nothing in any test file
+    # runs between sourcing and this check
+    if [ "${BASH_SOURCE[1]}" != "$0" ]; then
+        echo "[ERR][test-helpers] ${BASH_SOURCE[1]##*/} must be executed, not sourced. Run: bash ${BASH_SOURCE[1]##*/}" >&2
+        return 2
+    fi
+
     while [ $# -gt 0 ]; do
         case "$1" in
             -v) _VERBOSE=1 ;;
