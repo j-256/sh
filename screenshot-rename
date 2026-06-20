@@ -54,15 +54,48 @@ _screenshot_rename() (
         echo "  $SCRIPT_NAME --format \"%Y%m%d-%H%M%S\""
         echo "EXIT STATUS"
         echo "  0  Clean shutdown"
-        echo "  2  Usage error (unknown option, missing flag value, unexpected arg)"
+        echo "  2  Usage error (unknown argument, missing flag value)"
         echo "  3  Dependency error (fswatch missing)"
         echo "DEPENDENCIES"
         echo "  fswatch, defaults (macOS)"
     }
 
+    _expand_short_opts() {
+        # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
+        # $2..$N = "$@"
+        # Populates _EXPANDED; caller does: set -- "${_EXPANDED[@]}"; unset _EXPANDED
+        local value_opts="$1"; shift
+        _EXPANDED=()
+        local passthru=""
+        local arg
+        local rest
+        local c
+        for arg in "$@"; do
+            if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
+            case "$arg" in
+                --)          passthru=1; _EXPANDED+=("$arg") ;;
+                --*|-|"")    _EXPANDED+=("$arg") ;;
+                -[a-zA-Z]?*)
+                    rest="${arg#-}"
+                    while [ -n "$rest" ]; do
+                        c="${rest%"${rest#?}"}"; rest="${rest#?}"
+                        _EXPANDED+=("-$c")
+                        case "$value_opts" in *"$c"*)
+                            [ -n "$rest" ] && _EXPANDED+=("$rest")
+                            rest="" ;;
+                        esac
+                    done ;;
+                *)        _EXPANDED+=("$arg") ;;
+            esac
+        done
+    }
+
     local use_utc=false
     local watch_dir=""
     local fmt="%Y-%m-%d %H.%M.%S"
+
+    _expand_short_opts "" "$@"
+    set -- "${_EXPANDED[@]}"; unset _EXPANDED
 
     while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -78,6 +111,7 @@ _screenshot_rename() (
                 ;;
             --path=*)
                 watch_dir="${1#*=}"
+                [ -n "$watch_dir" ] || { _error "--path requires a directory. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift
                 ;;
             --format)
@@ -91,12 +125,13 @@ _screenshot_rename() (
                 ;;
             --format=*)
                 fmt="${1#*=}"
+                [ -n "$fmt" ] || { _error "--format requires a strftime pattern. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift
                 ;;
             --help|-h) _show_help; return 0 ;;
             --) shift; break ;;
             -*) _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
-            *) _error "Unexpected argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+            *) _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
         esac
     done
 

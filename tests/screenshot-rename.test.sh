@@ -74,13 +74,13 @@ test_unknown_short() {
 test_unexpected_argument() {
     run_script positional
     assert_rc "unexpected exits 2" 2
-    assert_stderr_contains "unexpected msg" "[ERR][screenshot-rename] Unexpected argument 'positional'. Run \`screenshot-rename -h\` for usage"
+    assert_stderr_contains "unexpected msg" "[ERR][screenshot-rename] Unknown argument 'positional'. Run \`screenshot-rename -h\` for usage"
 }
 
 test_utc_then_argument() {
     run_script --utc badarg
     assert_rc "utc arg exits 2" 2
-    assert_stderr_contains "utc arg msg" "[ERR][screenshot-rename] Unexpected argument 'badarg'. Run \`screenshot-rename -h\` for usage"
+    assert_stderr_contains "utc arg msg" "[ERR][screenshot-rename] Unknown argument 'badarg'. Run \`screenshot-rename -h\` for usage"
 }
 
 test_fswatch_missing() {

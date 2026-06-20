@@ -61,7 +61,7 @@ The timestamp is captured at the moment of rename, not extracted from the origin
 | Code | Meaning |
 |---|---|
 | 0 | Clean shutdown |
-| 2 | Usage error (unknown option, missing flag value, unexpected arg) |
+| 2 | Usage error (unknown argument, missing flag value) |
 | 3 | Dependency error (`fswatch` missing) |
 
 ### Dependencies
