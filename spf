@@ -21,6 +21,7 @@ _spf() (
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="spf" ;; esac
 
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+    _warn()  { echo "[WRN][$SCRIPT_NAME] $*" >&2; }
 
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
@@ -204,10 +205,74 @@ _spf() (
 
     # --- command stubs (implemented in later tasks) ---
 
-    _cmd_find()    { return 0; }
-    _cmd_flatten() { return 0; }
-    _cmd_check()   { return 0; }
-    _cmd_tree()    { return 0; }
+    _cmd_find()  { return 0; }
+    _cmd_check() { return 0; }
+    _cmd_tree()  { return 0; }
+
+    _chunk_record() {
+        local full; full="$1"
+        local out; out=""
+        local cur; cur=""
+        local tok
+        # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- splitting record tokens on whitespace is intended
+        for tok in $full; do
+            if [ -z "$cur" ]; then
+                cur="$tok"
+            elif [ $(( ${#cur} + ${#tok} + 1 )) -le 255 ]; then
+                cur="$cur $tok"
+            else
+                out="$out \"$cur\""
+                cur="$tok"
+            fi
+        done
+        [ "$cur" ] && out="$out \"$cur\""
+        printf '%s\n' "${out# }"
+    }
+
+    _cmd_flatten() {
+        local record_mode; record_mode=""
+        local input; input=""
+        local arg
+        for arg in "$@"; do
+            case "$arg" in
+                --record) record_mode=1 ;;
+                *) input="$arg" ;;
+            esac
+        done
+        if [ -z "$input" ]; then
+            _error "Must provide a domain or record. Run \`$SCRIPT_NAME -h\` for usage"
+            return 2
+        fi
+
+        local ir; ir="$(_resolve "$input")" || return 1
+
+        # note unevaluable mechanisms
+        local exists_n; exists_n="$(printf '%s\n' "$ir" | awk -F'\t' '$4=="exists"' | grep -c .)"
+        local ptr_n;    ptr_n="$(printf '%s\n' "$ir" | awk -F'\t' '$4=="ptr"' | grep -c .)"
+        [ "$exists_n" -gt 0 ] && _warn "cannot statically evaluate exists ($exists_n occurrence(s))"
+        [ "$ptr_n" -gt 0 ]    && _warn "cannot statically evaluate ptr ($ptr_n occurrence(s))"
+
+        # collect addresses: ip4 then ip6, each sorted+deduped
+        local v4; v4="$(printf '%s\n' "$ir" | awk -F'\t' '$4=="ip4"{print $5}' | sort -u -t. -k1,1n -k2,2n -k3,3n -k4,4n)"
+        local v6; v6="$(printf '%s\n' "$ir" | awk -F'\t' '$4=="ip6"{print $5}' | sort -u)"
+
+        if [ -z "$record_mode" ]; then
+            [ "$v4" ] && printf '%s\n' "$v4"
+            [ "$v6" ] && printf '%s\n' "$v6"
+            return 0
+        fi
+
+        # --record: build mechanisms, find the root all qualifier, chunk <=255 bytes
+        local allq; allq="$(printf '%s\n' "$ir" | awk -F'\t' '$1=="0" && $4=="all"{print $3; exit}')"
+        local all_mech; all_mech="${allq:-~}all"
+        local mechs; mechs=""
+        local ip
+        # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- splitting the newline/space-separated address list is intended
+        for ip in $v4; do mechs="$mechs ip4:$ip"; done
+        # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- splitting the newline/space-separated address list is intended
+        for ip in $v6; do mechs="$mechs ip6:$ip"; done
+        _chunk_record "v=spf1$mechs $all_mech"
+    }
 
     # --- defaults and parse arguments ---
     local SERVER; SERVER="8.8.8.8"

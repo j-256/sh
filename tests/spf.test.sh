@@ -40,6 +40,8 @@ case "$qtype:$name" in
     TXT:dia-b.example)        printf '%s\n' '"v=spf1 include:dia-c.example -all"' ;;
     TXT:dia-c.example)        printf '%s\n' '"v=spf1 ip4:192.0.2.0/24 -all"' ;;
     TXT:ptrtest.example)      printf '%s\n' '"v=spf1 ptr:mail.ptrtest.example ptr -all"' ;;
+    TXT:exists.example)
+        printf '%s\n' '"v=spf1 exists:%{i}._spf.exists.example -all"' ;;
     # bare a / mx on the apex
     TXT:hosted.example)       printf '%s\n' '"v=spf1 a mx -all"' ;;
     A:hosted.example)         printf '%s\n' '198.51.100.20' ;;
@@ -135,6 +137,46 @@ test_ir_apex_a_resolves() {
     assert_rc "apex a exits 0" 0
     assert_stdout_contains "a cost row" $'0\thosted.example\t+\ta\thosted.example\t1'
     assert_stdout_contains "a resolved ip" $'0\thosted.example\t+\tip4\t198.51.100.20\t0'
+}
+
+test_flatten_lists_ips_sorted_deduped() {
+    run_script flatten example.com
+    assert_rc "flatten exits 0" 0
+    assert_stdout_contains "root ip4" "198.51.100.0/24"
+    assert_stdout_contains "nested ip4" "203.0.113.0/24"
+    assert_stdout_contains "nested ip6" "2001:db8::/32"
+    # IPv4 sorts before IPv6: first line is an ip4, last is the ip6
+    assert_eq "ipv6 last" "$(get_stdout | tail -n1)" "2001:db8::/32"
+}
+
+test_flatten_record_mode() {
+    run_script flatten example.com --record
+    assert_rc "record mode exits 0" 0
+    assert_stdout_contains "starts v=spf1" 'v=spf1'
+    assert_stdout_contains "keeps root all" '~all'
+    assert_stdout_contains "quoted chunk" '"v=spf1'
+}
+
+test_flatten_notes_unevaluable_exists() {
+    # fixture with an exists row (added to shim in this step)
+    run_script flatten exists.example
+    assert_stderr_contains "notes exists skip" "cannot statically evaluate exists"
+}
+
+test_flatten_raw_record_input() {
+    # a literal record is recognized (NOT looked up) and flattened directly
+    run_script flatten 'v=spf1 ip4:198.51.100.0/24 ip4:203.0.113.0/24 -all'
+    assert_rc "raw flatten exits 0" 0
+    assert_stdout_contains "emits first ip" "198.51.100.0/24"
+    assert_stdout_contains "emits second ip" "203.0.113.0/24"
+    # the root record was NOT fetched via dig (no TXT query for a domain)
+    assert_not_contains "no TXT lookup for raw" "$(cat "$TEST_DIR/dig.log" 2>/dev/null)" "TXT v=spf1"
+}
+
+test_flatten_raw_record_via_stdin() {
+    printf 'v=spf1 ip4:198.51.100.0/24 -all\n' | run_script flatten -
+    assert_rc "stdin flatten exits 0" 0
+    assert_stdout_contains "emits ip from stdin" "198.51.100.0/24"
 }
 
 # --- run ---
