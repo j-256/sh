@@ -280,7 +280,7 @@ test_install_brew_install_fails() {
     touch "$TEST_DIR/brew_install_fails"
     run_script --install
     assert_rc "brew fail exits 1" 1
-    assert_stdout_contains "brew fail msg" "Homebrew installation failed"
+    assert_stderr_contains "brew fail msg" "Homebrew installation failed"
 }
 
 test_install_nvm_needs_install_success() {
@@ -297,7 +297,7 @@ test_install_nvm_needs_install_fails() {
     touch "$TEST_DIR/nvm_install_fails"
     run_script --install
     assert_rc "nvm install fail exits 1" 1
-    assert_stdout_contains "nvm fail msg" "nvm installation failed"
+    assert_stderr_contains "nvm fail msg" "nvm installation failed"
 }
 
 test_install_nvm_dir_exists_but_no_command() {
@@ -324,7 +324,7 @@ test_install_nvm_dir_exists_no_script() {
     run_script --install
     assert_rc "nvm reinstall happens but node install fails" 1
     assert_stdout_contains "reinstalling" "Reinstalling nvm"
-    assert_stdout_contains "node install fails" "Node.js installation failed"
+    assert_stderr_contains "node install fails" "Node.js installation failed"
     assert_contains "curl downloads nvm" "$(get_curl_log)" "nvm-sh/nvm"
     assert_contains "nvm installer ran" "$(get_nvm_installer_log)" "nvm-installer"
 }
@@ -335,7 +335,7 @@ test_install_nvm_dir_exists_reinstall_fails() {
     mkdir -p "$HOME/.nvm"
     run_script --install
     assert_rc "nvm reinstall fail exits 1" 1
-    assert_stdout_contains "reinstall fail msg" "nvm reinstallation failed"
+    assert_stderr_contains "reinstall fail msg" "nvm reinstallation failed"
 }
 
 test_install_nvm_fresh_install_no_script_after() {
@@ -360,7 +360,7 @@ CURLSHIM
     chmod +x "$SHIM_DIR/curl"
     run_script --install
     assert_rc "nvm script check fails exits 1" 1
-    assert_stdout_contains "script not found" "nvm script not found"
+    assert_stderr_contains "script not found" "nvm script not found"
 }
 
 test_install_node_install_success() {
@@ -379,7 +379,7 @@ test_install_node_install_fails() {
     touch "$TEST_DIR/nvm_install_fails"
     run_script --install
     assert_rc "node install fail exits 1" 1
-    assert_stdout_contains "node fail msg" "Node.js installation failed"
+    assert_stderr_contains "node fail msg" "Node.js installation failed"
 }
 
 test_install_section_markers() {
@@ -433,7 +433,7 @@ test_unknown_option() {
 test_unexpected_positional() {
     run_script somearg
     assert_rc "positional exits 2" 2
-    assert_stderr_contains "unexpected error" "Unexpected argument"
+    assert_stderr_contains "unexpected error" "Unknown argument"
 }
 
 # --- run ---

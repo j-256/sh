@@ -87,8 +87,9 @@ After installing nvm, the script sources it into the current session so that the
 
 ### Dependencies
 
-- `curl` (for `--install`, used to download Homebrew and nvm installers)
+- `uname` (for the macOS platform check)
 - `xcode-select` (preinstalled on macOS; used to detect and trigger Xcode CLT installation)
+- `curl` (for `--install`, used to download Homebrew and nvm installers)
 
 ### Caveats
 

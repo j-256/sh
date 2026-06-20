@@ -49,12 +49,48 @@ _pwa_prereqs() (
         echo "  1  Missing prerequisites (check mode) or installation failed (install mode)"
         echo "  2  Usage / argument error"
         echo "DEPENDENCIES"
-        echo "  curl (for --install)"
+        echo "  uname"
+        echo "  xcode-select (macOS; for CLT detection and install)"
+        echo "  curl (required only for --install)"
         echo "CAVEATS"
         echo "  macOS only."
     }
 
+    _expand_short_opts() {
+        # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
+        # $2..$N = "$@"
+        # Populates _EXPANDED; caller does: set -- "${_EXPANDED[@]}"; unset _EXPANDED
+        local value_opts="$1"; shift
+        _EXPANDED=()
+        local passthru=""
+        local arg
+        local rest
+        local c
+        for arg in "$@"; do
+            if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
+            case "$arg" in
+                --)          passthru=1; _EXPANDED+=("$arg") ;;
+                --*|-|"")    _EXPANDED+=("$arg") ;;
+                -[a-zA-Z]?*)
+                    rest="${arg#-}"
+                    while [ -n "$rest" ]; do
+                        c="${rest%"${rest#?}"}"; rest="${rest#?}"
+                        _EXPANDED+=("-$c")
+                        case "$value_opts" in *"$c"*)
+                            [ -n "$rest" ] && _EXPANDED+=("$rest")
+                            rest="" ;;
+                        esac
+                    done ;;
+                *)           _EXPANDED+=("$arg") ;;
+            esac
+        done
+    }
+
     local mode="check"
+
+    _expand_short_opts "" "$@"
+    set -- "${_EXPANDED[@]}"; unset _EXPANDED
+
     while [ $# -gt 0 ]; do
         case "$1" in
             -h|--help) _show_help; return 0 ;;
@@ -64,7 +100,7 @@ _pwa_prereqs() (
                 return 2
                 ;;
             *)
-                _error "Unexpected argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"
+                _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"
                 return 2
                 ;;
         esac
@@ -104,7 +140,7 @@ _pwa_prereqs() (
         elif [ -s "$HOME/.nvm/nvm.sh" ]; then
             # NVM_DIR must be exported -- nvm.sh reads it from the environment
             export NVM_DIR="$HOME/.nvm"
-            # shellcheck disable=SC1091 # "Not following: (error message here)"
+            # shellcheck disable=SC1091 # "Not following: $NVM_DIR/nvm.sh was not specified as input (see shellcheck -x)."
             . "$NVM_DIR/nvm.sh" >/dev/null 2>&1
             command -v nvm >/dev/null 2>&1 && nvm_present=0
         fi
@@ -155,7 +191,7 @@ _pwa_prereqs() (
         if /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; then
             echo "Homebrew installed successfully."
         else
-            echo "Homebrew installation failed"
+            _error "Homebrew installation failed"
             return 1
         fi
     fi
@@ -170,7 +206,7 @@ _pwa_prereqs() (
         # the environment (CONVENTIONS allows export for genuinely env-needed vars)
         export NVM_DIR="$HOME/.nvm"
         if [ -s "$NVM_DIR/nvm.sh" ]; then
-            # shellcheck disable=SC1091 # "Not following: (error message here)"
+            # shellcheck disable=SC1091 # "Not following: $NVM_DIR/nvm.sh was not specified as input (see shellcheck -x)."
             . "$NVM_DIR/nvm.sh"
             echo "nvm sourced successfully."
         else
@@ -178,7 +214,7 @@ _pwa_prereqs() (
             if curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash; then
                 echo "nvm reinstalled successfully."
             else
-                echo "nvm reinstallation failed"
+                _error "nvm reinstallation failed"
                 return 1
             fi
         fi
@@ -187,14 +223,14 @@ _pwa_prereqs() (
             echo "nvm installed successfully."
             export NVM_DIR="$HOME/.nvm"
             if [ -s "$NVM_DIR/nvm.sh" ]; then
-                # shellcheck disable=SC1091 # "Not following: (error message here)"
+                # shellcheck disable=SC1091 # "Not following: $NVM_DIR/nvm.sh was not specified as input (see shellcheck -x)."
                 . "$NVM_DIR/nvm.sh"
             else
-                echo "nvm script not found in $NVM_DIR. Please check the installation."
+                _error "nvm script not found in $NVM_DIR after install"
                 return 1
             fi
         else
-            echo "nvm installation failed"
+            _error "nvm installation failed"
             return 1
         fi
     fi
@@ -205,7 +241,7 @@ _pwa_prereqs() (
     if nvm install --lts; then # automatically runs `nvm use --lts`
         echo "Node.js installed successfully."
     else
-        echo "Node.js installation failed"
+        _error "Node.js installation failed"
         return 1
     fi
     echo "--- FINISH node/npm ---"
