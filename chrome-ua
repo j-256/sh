@@ -5,6 +5,12 @@
 #   chrome-ua [--platform mac|win|linux] [--app PATH]
 #   chrome-ua --latest [--platform mac|win|linux]
 #   chrome-ua -h
+#
+# Options:
+#   --latest                   Fetch the latest stable Chrome version from Google's API
+#   --platform mac|win|linux   UA shape and (with --latest) API path (default: mac)
+#   --app PATH                 Path to Chrome.app for local mode
+#   -h, --help                 Show help message
 
 _chrome_ua() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
@@ -69,7 +75,7 @@ _chrome_ua() (
     # Pinned fallback major version -- used when both local read and network
     # fetch fail (or when network is disabled via CHROME_UA_OFFLINE)
     # Update periodically (last set: 2026-04, Chrome stable 148)
-    local fallback_major="148"
+    local FALLBACK_MAJOR="148"
 
     # UA shape per platform -- frozen by Chrome's reduced-UA policy, regardless
     # of actual OS version or Chrome version
@@ -98,9 +104,42 @@ _chrome_ua() (
         printf '%s\n' "${ver%%.*}"
     }
 
+    _expand_short_opts() {
+        # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
+        # $2..$N = "$@"
+        # Populates _EXPANDED; caller does: set -- "${_EXPANDED[@]}"; unset _EXPANDED
+        local value_opts="$1"; shift
+        _EXPANDED=()
+        local passthru=""
+        local arg
+        local rest
+        local c
+        for arg in "$@"; do
+            if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
+            case "$arg" in
+                --)          passthru=1; _EXPANDED+=("$arg") ;;
+                --*|-|"")    _EXPANDED+=("$arg") ;;
+                -[a-zA-Z]?*)
+                    rest="${arg#-}"
+                    while [ -n "$rest" ]; do
+                        c="${rest%"${rest#?}"}"; rest="${rest#?}"
+                        _EXPANDED+=("-$c")
+                        case "$value_opts" in *"$c"*)
+                            [ -n "$rest" ] && _EXPANDED+=("$rest")
+                            rest="" ;;
+                        esac
+                    done ;;
+                *)        _EXPANDED+=("$arg") ;;
+            esac
+        done
+    }
+
     local mode="local"
     local platform="mac"
     local app="/Applications/Google Chrome.app"
+
+    _expand_short_opts "" "$@"
+    set -- "${_EXPANDED[@]}"; unset _EXPANDED
 
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -123,6 +162,7 @@ _chrome_ua() (
                 ;;
             --platform=*)
                 platform="${1#*=}"
+                [ -n "$platform" ] || { _error "--platform requires a value (mac|win|linux). Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift
                 ;;
             --app)
@@ -136,6 +176,7 @@ _chrome_ua() (
                 ;;
             --app=*)
                 app="${1#*=}"
+                [ -n "$app" ] || { _error "--app requires a path. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift
                 ;;
             *)
@@ -161,8 +202,8 @@ _chrome_ua() (
             _ua_for "$platform" "$major"
             return 0
         fi
-        _warn "Failed to fetch latest Chrome version from Google's API; using pinned major=$fallback_major"
-        _ua_for "$platform" "$fallback_major"
+        _warn "Failed to fetch latest Chrome version from Google's API; using pinned major=$FALLBACK_MAJOR"
+        _ua_for "$platform" "$FALLBACK_MAJOR"
         return 0
     fi
 
@@ -190,8 +231,8 @@ _chrome_ua() (
     fi
 
     # Network also failed or blocked: pinned fallback
-    _warn "Using pinned fallback major=$fallback_major (update periodically)"
-    _ua_for "$platform" "$fallback_major"
+    _warn "Using pinned fallback major=$FALLBACK_MAJOR (update periodically)"
+    _ua_for "$platform" "$FALLBACK_MAJOR"
     return 0
 )
 

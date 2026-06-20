@@ -69,7 +69,7 @@ The default (local) mode has a three-step fallback chain:
 
 1. **Read local Chrome** via `defaults read Chrome.app/Contents/Info.plist` — this is the happy path on macOS.
 2. **Auto network fallback** — if the local read fails (Chrome not installed, non-macOS host, permissions, unreadable plist) and `curl` + `jq` are available, the script silently fetches the latest major from Google's API. Warns to stderr that it did so.
-3. **Pinned fallback** — if the local read failed *and* the network fetch failed (no curl, no network, API broken), the script uses a hardcoded `fallback_major` constant and warns to stderr. The constant is set in the script source (`fallback_major=`) and needs periodic refreshing.
+3. **Pinned fallback** – if the local read failed *and* the network fetch failed (no curl, no network, API broken), the script uses a hardcoded `FALLBACK_MAJOR` constant and warns to stderr. The constant is set in the script source (`FALLBACK_MAJOR=`) and needs periodic refreshing.
 
 The explicit `--latest` mode skips step 1 entirely — it goes straight to step 2, then falls back to step 3 if that fails.
 
@@ -119,4 +119,4 @@ Set `CHROME_UA_OFFLINE=1` (or any non-empty value) to block the automatic networ
 - Local version detection is macOS only; on other platforms, default mode will hit the automatic network fallback (or go straight to the pinned constant if `CHROME_UA_OFFLINE` is set).
 - Only the major version is accurate; minor/build/patch are intentionally zeroed to match real Chrome's reduced UA.
 - The platform string is frozen per-OS family (e.g. `Intel Mac OS X 10_15_7` even on Apple Silicon, `Windows NT 10.0` even on Windows 11). This matches what real Chrome emits — the OS version in a modern Chrome UA is not meaningful.
-- The pinned fallback constant goes stale. If you see a major version that's obviously behind reality, grep the script for `fallback_major=` and bump it, or just use `--latest`.
+- The pinned fallback constant goes stale. If you see a major version that's obviously behind reality, grep the script for `FALLBACK_MAJOR=` and bump it, or just use `--latest`.
