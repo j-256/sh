@@ -77,6 +77,7 @@ jq -n --arg v "$verifier" --arg c "$challenge" \
 | Code | Meaning |
 |---|---|
 | 0 | Success |
+| 2 | Usage error (unknown option) |
 | 3 | Dependency error (`openssl` missing) |
 
 ### Dependencies
