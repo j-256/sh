@@ -94,12 +94,12 @@ Mechanisms are indented by depth (2 spaces at the root, +4 per include level). `
 Use `-s` to query a specific DNS server. Running `flatten` against two resolvers and diffing the output reveals split-horizon or geo-aware SPF -- common with providers that serve different IP ranges to different resolvers:
 
 ```bash
-spf flatten example.com -s 8.8.8.8  > /tmp/spf-google.txt
-spf flatten example.com -s 1.1.1.1  > /tmp/spf-cf.txt
+spf flatten google.com -s 8.8.8.8  > /tmp/spf-google.txt
+spf flatten google.com -s 1.1.1.1  > /tmp/spf-cf.txt
 diff /tmp/spf-google.txt /tmp/spf-cf.txt
 ```
 
-If the diff is non-empty, one or more included domains returns different IP ranges depending on resolver. A mail server using a different resolver than your test machine may authorize a different set of IPs -- this is the root cause of "works for me but fails for some recipients" SPF failures.
+An empty diff is the normal, healthy result -- both resolvers see the same IP ranges. A non-empty diff flags resolver-dependent SPF: one or more included domains returns different IP ranges depending on the resolver used. A mail server querying through a different resolver than your test machine may authorize a different set of IPs -- this is the root cause of "works for me but fails for some recipients" SPF failures.
 
 ## Salesforce `exists:` macros
 
