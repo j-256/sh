@@ -100,7 +100,7 @@ _dw_jwt() (
     local rc_dgst=$?
     if [ "$rc_dgst" -ne 0 ] || [ ! -s "$sig_bin" ]; then
         rm -f "$sig_bin"
-        _error "Signing failed (openssl exited $rc_dgst). Check the private key file"
+        _error "Signing failed (openssl exited $rc_dgst)"
         return 1
     fi
     local signature; signature="$(openssl base64 -e -A -in "$sig_bin" | tr '+/' '-_' | tr -d '=')"

@@ -80,8 +80,8 @@ The token is signed with RS256 (RSA signature with SHA-256) using your private k
 
 - `openssl` -- for base64 encoding and RSA signing
 
-### Notes
+### Warnings
 
 - The private key must be in PEM format (starts with `-----BEGIN RSA PRIVATE KEY-----` or `-----BEGIN PRIVATE KEY-----`).
 - The JWT is valid for exactly 30 minutes from generation time.
-- If `openssl` fails (e.g., invalid key file, wrong format, permissions), the script exits with a non-zero status and may print openssl error messages to stderr.
+- If `openssl` fails (e.g., invalid key file, wrong format, permissions), the script exits 1 with `Signing failed (openssl exited N)`. openssl's own stderr from the signing step is suppressed, so the exit code is the signal to check the key file.
