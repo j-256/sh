@@ -418,7 +418,35 @@ EOF
         fi
         return 4
     }
-    _cmd_tree()  { return 0; }
+    _cmd_tree() {
+        local input; input="$1"
+        if [ -z "$input" ]; then
+            _error "Must provide a domain or record. Run \`$SCRIPT_NAME -h\` for usage"
+            return 2
+        fi
+        local ir; ir="$(_resolve "$input")" || return 1
+
+        local depth
+        local src
+        local qual
+        local mech
+        local val
+        local cost
+        local indent
+        local label
+        # shellcheck disable=SC2034 # cost is read from the IR to keep field alignment but not used in this consumer
+        while IFS=$'\t' read -r depth src qual mech val cost; do
+            [ "$mech" = void ] && continue
+            indent="$(printf '%*s' "$(( depth * 4 + 2 ))" '')"
+            case "$mech" in
+                all)    label="${qual}all" ;;
+                *)      label="$mech:$val" ;;
+            esac
+            printf '%s%s\n' "$indent" "$label"
+        done <<EOF
+$ir
+EOF
+    }
 
     _chunk_record() {
         local full; full="$1"

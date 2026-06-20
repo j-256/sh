@@ -421,5 +421,31 @@ test_check_multiple_all_in_one_record() {
     assert_stdout_contains "flags multiple all" "multiple all"
 }
 
+# --- tree (Task 9) ---
+
+test_tree_renders_hierarchy() {
+    run_script tree example.com
+    assert_rc "tree exits 0" 0
+    assert_stdout_contains "shows include target" "_spf.example.net"
+    assert_stdout_contains "shows a root ip" "198.51.100.0/24"
+    assert_stdout_contains "shows a nested ip" "203.0.113.0/24"
+}
+test_tree_indents_by_depth() {
+    run_script tree example.com
+    # depth-1 ip4 row renders as "      ip4:203.0.113.0/24" (6 leading spaces).
+    # Assert 4+ spaces + mech:val so the substring is only satisfied by a
+    # depth-1 (or deeper) line, not the 2-space depth-0 lines.
+    assert_stdout_contains "nested line indented" "    ip4:203.0.113.0/24"
+}
+test_tree_no_record_runtime_error() {
+    run_script tree nospf.example
+    assert_rc "no record exits 1" 1
+}
+test_tree_skips_void_rows() {
+    run_script tree void.example
+    assert_rc "tree exits 0" 0
+    assert_stdout_not_contains "no void leaf" "void:"
+}
+
 # --- run ---
 run_tests "$@"
