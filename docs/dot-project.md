@@ -82,13 +82,14 @@ The `<name>` element comes from the cartridge directory name. The nature (`beehi
 | Flag | Description |
 |---|---|
 | `code_version_directory` | Directory containing cartridge subdirectories (default: current directory) |
-| `-h, --help` | Display help |
+| `-h, --help` | Show help |
 
 ### Exit codes
 
 | Code | Meaning |
 |---|---|
-| 0 | Always (see note below) |
+| 0 | Success, including no-op cases (see note below) |
+| 2 | Usage error (unknown flag, or more than one directory) |
 
 The script continues processing even if one cartridge fails. Per-file write errors are logged to stderr but do not affect the final exit code. If you need partial-failure detection, check stderr.
 

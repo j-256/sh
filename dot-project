@@ -18,8 +18,8 @@ _dot_project() (
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
 
     _show_help() {
-        local s; [ -t 1 ] && s=$'\033[4m' || s=''
-        local r; [ -t 1 ] && r=$'\033[24m' || r=''
+        local s; [ -t 1 ] && s=$'\033[4m'
+        local r; [ -t 1 ] && r=$'\033[24m'
         echo "NAME"
         echo "  $SCRIPT_NAME - generate .project files for B2C Commerce cartridges"
         echo "SYNOPSIS"
@@ -35,14 +35,60 @@ _dot_project() (
         echo "EXIT STATUS"
         echo "  0  Success (includes no-op cases: nonexistent dir, write errors"
         echo "     per-file logged to stderr but not propagated)"
+        echo "  2  Usage error (unknown flag, multiple directories)"
     }
 
-    case "${1-}" in
-        -h|--help) _show_help; return 0 ;;
-    esac
+    _expand_short_opts() {
+        # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
+        # $2..$N = "$@"
+        # Populates _EXPANDED; caller does: set -- "${_EXPANDED[@]}"; unset _EXPANDED
+        local value_opts="$1"; shift
+        _EXPANDED=()
+        local passthru=""
+        local arg
+        local rest
+        local c
+        for arg in "$@"; do
+            if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
+            case "$arg" in
+                --)          passthru=1; _EXPANDED+=("$arg") ;;
+                --*|-|"")    _EXPANDED+=("$arg") ;;
+                -[a-zA-Z]?*)
+                    rest="${arg#-}"
+                    while [ -n "$rest" ]; do
+                        c="${rest%"${rest#?}"}"; rest="${rest#?}"
+                        _EXPANDED+=("-$c")
+                        case "$value_opts" in *"$c"*)
+                            [ -n "$rest" ] && _EXPANDED+=("$rest")
+                            rest="" ;;
+                        esac
+                    done ;;
+                *)        _EXPANDED+=("$arg") ;;
+            esac
+        done
+    }
+
+    local code_version=""
+
+    _expand_short_opts "" "$@"
+    set -- "${_EXPANDED[@]}"; unset _EXPANDED
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -h|--help) _show_help; return 0 ;;
+            --) shift; [ $# -gt 0 ] && code_version="$1"; break ;;
+            -*) _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+            *)
+                if [ -n "$code_version" ]; then
+                    _error "Multiple directories specified. Run \`$SCRIPT_NAME -h\` for usage"
+                    return 2
+                fi
+                code_version="$1"; shift ;;
+        esac
+    done
 
     # Default to current directory
-    local code_version="${1:-"."}"
+    code_version="${code_version:-"."}"
     # Create a .project file in each subdirectory (cartridge)
     local cartridge
     for cartridge in "${code_version%"/"}"/*; do # remove trailing slash, if present, to avoid doubling
