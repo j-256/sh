@@ -173,7 +173,7 @@ Then run the tests to confirm the script still parses everything correctly:
 
 | Flag | Description |
 |---|---|
-| `-h, --help` | Display help message |
+| `-h, --help` | Show help message |
 
 ### Exit codes
 
