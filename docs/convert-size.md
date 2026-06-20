@@ -92,7 +92,7 @@ Use whichever makes the most sense for your context.
 | 2 | Usage error (missing required flag, invalid unit, invalid size, duplicate flags) |
 | 3 | Dependency error (bc missing) |
 
-### Constraints
+### Warnings
 
 - Input size must be a **positive integer** (no decimals). For fractional sizes, scale up to the next unit (e.g., use `4700M` instead of `4.7G`).
 - Units are case-insensitive in input and forced to uppercase in output.

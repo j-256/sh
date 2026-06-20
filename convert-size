@@ -108,23 +108,25 @@ _convert_size() (
                 return 0
                 ;;
             -u|--unit)
-                [ "$unit" ] && { _error "The -u|--unit option is specified more than once. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                [ "$unit" ] && { _error "Multiple units not allowed (already set to '$unit'). Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                [ -n "${2-}" ] || { _error "-u|--unit requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift
                 unit="$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')"
                 ;;
             --unit=*)
-                [ "$unit" ] && { _error "The -u|--unit option is specified more than once. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                [ "$unit" ] && { _error "Multiple units not allowed (already set to '$unit'). Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 unit="${1#*=}"
                 [ -n "$unit" ] || { _error "-u|--unit requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 unit="$(printf '%s' "$unit" | tr '[:lower:]' '[:upper:]')"
                 ;;
             -t|--to)
-                [ "$to" ] && { _error "The -t|--to option is specified more than once. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                [ "$to" ] && { _error "Multiple target systems not allowed (already set to '$to'). Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                [ -n "${2-}" ] || { _error "-t|--to requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift
                 to="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
                 ;;
             --to=*)
-                [ "$to" ] && { _error "The -t|--to option is specified more than once. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                [ "$to" ] && { _error "Multiple target systems not allowed (already set to '$to'). Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 to="${1#*=}"
                 [ -n "$to" ] || { _error "-t|--to requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 to="$(printf '%s' "$to" | tr '[:upper:]' '[:lower:]')"
@@ -173,10 +175,10 @@ _convert_size() (
     input_unit="${unit:-${input_unit:-B}}"
 
     case "$input_size" in
-        ''|*[!0-9]*) _error "Invalid size: $input_size. Must be a positive integer"; return 2 ;;
+        ''|*[!0-9]*) _error "Invalid size '$input_size' (must be a positive integer). Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
     esac
     if [ -z "$(_si_unit "$input_unit")" ]; then
-        _error "Invalid unit: $input_unit. Supported: B, K, M, G, T"
+        _error "Invalid unit '$input_unit' (valid: B, K, M, G, T). Run \`$SCRIPT_NAME -h\` for usage"
         return 2
     fi
 

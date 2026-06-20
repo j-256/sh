@@ -53,13 +53,13 @@ test_missing_size() {
 test_duplicate_to_option() {
     run_script -t binary -t si 500G
     assert_rc "duplicate -t exits 2" 2
-    assert_stderr_contains "duplicate -t error" "-t|--to option is specified more than once"
+    assert_stderr_contains "duplicate -t error" "Multiple target systems not allowed (already set to"
 }
 
 test_duplicate_unit_option() {
     run_script -t binary -u G -u M 500
     assert_rc "duplicate -u exits 2" 2
-    assert_stderr_contains "duplicate -u error" "-u|--unit option is specified more than once"
+    assert_stderr_contains "duplicate -u error" "Multiple units not allowed (already set to"
 }
 
 test_multiple_sizes() {
@@ -95,13 +95,13 @@ test_space_separated_rejects_when_first_has_suffix() {
 test_invalid_size_non_numeric() {
     run_script -t binary abc
     assert_rc "invalid size exits 2" 2
-    assert_stderr_contains "invalid size error" "Invalid size: A. Must be a positive integer"
+    assert_stderr_contains "invalid size error" "Invalid size 'A' (must be a positive integer)"
 }
 
 test_invalid_size_negative() {
     run_script -t binary -500G
     assert_rc "negative size exits 2" 2
-    assert_stderr_contains "negative size error" "Invalid size: -500"
+    assert_stderr_contains "negative size error" "Invalid size '-500'"
 }
 
 test_bundled_short_with_glued_value() {
@@ -120,13 +120,13 @@ test_equals_long_option() {
 test_invalid_unit() {
     run_script -t binary 500X
     assert_rc "invalid unit exits 2" 2
-    assert_stderr_contains "invalid unit error" "Invalid size: 500X. Must be a positive integer"
+    assert_stderr_contains "invalid unit error" "Invalid size '500X' (must be a positive integer)"
 }
 
 test_invalid_unit_override() {
     run_script -t binary -u Z 500
     assert_rc "invalid unit override exits 2" 2
-    assert_stderr_contains "invalid unit override error" "Invalid unit: Z"
+    assert_stderr_contains "invalid unit override error" "Invalid unit 'Z'"
 }
 
 test_invalid_target_system() {
