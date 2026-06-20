@@ -227,9 +227,9 @@ __dbg__main() {
 }
 
 __dbg__main "$@"
-__dbg__main_rc=$?
+__dbg__rc=$?
 unset -f __dbg__main
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
-    eval "unset __dbg__main_rc; return $__dbg__main_rc"
+    eval "unset __dbg__rc; return $__dbg__rc"
 fi
-eval "unset __dbg__main_rc; exit $__dbg__main_rc"
+eval "unset __dbg__rc; exit $__dbg__rc"
