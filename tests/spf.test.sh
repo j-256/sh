@@ -39,6 +39,7 @@ case "$qtype:$name" in
     TXT:dia-a.example)        printf '%s\n' '"v=spf1 include:dia-c.example -all"' ;;
     TXT:dia-b.example)        printf '%s\n' '"v=spf1 include:dia-c.example -all"' ;;
     TXT:dia-c.example)        printf '%s\n' '"v=spf1 ip4:192.0.2.0/24 -all"' ;;
+    TXT:ptrtest.example)      printf '%s\n' '"v=spf1 ptr:mail.ptrtest.example ptr -all"' ;;
     # bare a / mx on the apex
     TXT:hosted.example)       printf '%s\n' '"v=spf1 a mx -all"' ;;
     A:hosted.example)         printf '%s\n' '198.51.100.20' ;;
@@ -116,6 +117,17 @@ test_ir_diamond_counts_twice() {
     # but dia-c's leaf ip4 also appears twice in the IR (flatten dedups later)
     assert_eq "dia-c ip appears twice in IR" \
         "$(get_stdout | awk -F'\t' '$4=="ip4" && $5=="192.0.2.0/24"' | grep -c .)" "2"
+}
+
+test_ir_ptr_value_has_no_leading_colon() {
+    run_script __ir ptrtest.example
+    assert_rc "ptr ir exits 0" 0
+    # qualified ptr: value is the bare host, no leading colon
+    assert_stdout_contains "qualified ptr value" $'0\tptrtest.example\t+\tptr\tmail.ptrtest.example\t1'
+    # bare ptr: empty value field
+    assert_stdout_contains "bare ptr empty value" $'0\tptrtest.example\t+\tptr\t\t1'
+    # negative: the buggy ':mail...' form must NOT appear
+    assert_stdout_not_contains "no stray colon" $'\tptr\t:mail'
 }
 
 test_ir_apex_a_resolves() {

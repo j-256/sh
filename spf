@@ -169,7 +169,8 @@ _spf() (
                 a|a:*|a/*)      _emit_host_ips "$token" a  "$src" "$depth" "$qual" ;;
                 mx|mx:*|mx/*)   _emit_host_ips "$token" mx "$src" "$depth" "$qual" ;;
                 exists:*)   _ir_row "$depth" "$src" "$qual" exists "${token#exists:}" 1 ;;
-                ptr|ptr:*)  _ir_row "$depth" "$src" "$qual" ptr "${token#ptr}" 1 ;;
+                ptr)        _ir_row "$depth" "$src" "$qual" ptr "" 1 ;;
+                ptr:*)      _ir_row "$depth" "$src" "$qual" ptr "${token#ptr:}" 1 ;;
                 v=spf1)     ;;   # already shifted, but be safe
                 *)          ;;   # unknown token: ignore (verify's job, not ours)
             esac
