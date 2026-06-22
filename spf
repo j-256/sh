@@ -111,6 +111,16 @@ _spf() (
     # Print one IR row.
     _ir_row() { printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5" "$6"; }
 
+    # Print a host's A then AAAA addresses, one per line (empty if none).
+    _resolve_host() {
+        local host; host="$1"
+        local tcp; [ "$USE_TCP" ] && tcp="+tcp"
+        # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- $tcp expands to +tcp or empty; splitting dig short output on whitespace is intended
+        dig @"$SERVER" $tcp +short A "$host" 2>/dev/null
+        # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- $tcp expands to +tcp or empty; splitting dig short output on whitespace is intended
+        dig @"$SERVER" $tcp +short AAAA "$host" 2>/dev/null
+    }
+
     # _emit_host_ips <token> <mech> <src> <depth> <qual>
     _emit_host_ips() {
         local token; token="$1"
@@ -126,15 +136,13 @@ _spf() (
         esac
         # cost row for the mechanism itself (1 lookup)
         _ir_row "$depth" "$src" "$qual" "$mech" "$host" 1
-        local tcp; [ "$USE_TCP" ] && tcp="+tcp"
         local ip
-        # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- $tcp expands to +tcp or empty; splitting dig short output on whitespace is intended
-        for ip in $(dig @"$SERVER" $tcp +short A "$host" 2>/dev/null); do
-            _ir_row "$depth" "$src" "$qual" ip4 "$ip" 0
-        done
-        # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- $tcp expands to +tcp or empty; splitting dig short output on whitespace is intended
-        for ip in $(dig @"$SERVER" $tcp +short AAAA "$host" 2>/dev/null); do
-            _ir_row "$depth" "$src" "$qual" ip6 "$ip" 0
+        # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- splitting dig short output on whitespace is intended
+        for ip in $(_resolve_host "$host"); do
+            case "$ip" in
+                *:*) _ir_row "$depth" "$src" "$qual" ip6 "$ip" 0 ;;
+                *)   _ir_row "$depth" "$src" "$qual" ip4 "$ip" 0 ;;
+            esac
         done
     }
 
