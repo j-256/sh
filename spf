@@ -263,9 +263,27 @@ except ValueError:
     sys.exit(2)' "$ip" "$cidr"
     }
 
+    # _find_hit <ip> <src> <qual> <mech> <value> -- print a mechanism-appropriate match line.
     _find_hit() {
-        printf '%s is listed/covered by %s (qualifier: %s)\n' "$1" "$2" "$3"
-        printf '  matched: %s:%s\n' "$4" "$5"
+        local ip; ip="$1"
+        local src; src="$2"
+        local qual; qual="$3"
+        local mech; mech="$4"
+        local val; val="$5"
+        local verb
+        case "$mech" in
+            ip4|ip6)
+                # exact host (no prefix, or /32 v4, or /128 v6) -> "listed in"; a shorter prefix -> "covered by"
+                case "$val" in
+                    */32|*/128) verb="is listed in" ;;
+                    */*)        verb="is covered by" ;;
+                    *)          verb="is listed in" ;;
+                esac ;;
+            a|mx)     verb="matches" ;;
+            exists)   verb="matches" ;;
+            *)        verb="matches" ;;
+        esac
+        printf '%s %s %s:%s in %s (qualifier: %s)\n' "$ip" "$verb" "$mech" "$val" "$src" "$qual"
     }
 
     # Expand IP/domain-derivable macros. Returns 1 if an unsupported macro appears.

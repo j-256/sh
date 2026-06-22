@@ -394,6 +394,26 @@ test_find_exists_unsupported_macro_skipped() {
     assert_rc "skipped, falls through to not-found" 4
 }
 
+# --- find wording (Task 2: mechanism-aware match verbs) ---
+
+test_find_ip4_range_says_covered() {
+    run_script find example.com 198.51.100.42
+    assert_rc "covered exits 0" 0
+    assert_stdout_contains "range match says covered" "is covered by ip4:198.51.100.0/24"
+}
+test_find_ip4_exact_says_listed() {
+    # bare IP (no prefix) is an exact host -> "is listed in"
+    run_script find 'v=spf1 ip4:203.0.113.7 -all' 203.0.113.7
+    assert_rc "exact exits 0" 0
+    assert_stdout_contains "exact match says listed" "is listed in ip4:203.0.113.7"
+}
+test_find_exists_says_matches_not_covered() {
+    run_script find exists.example 198.51.100.7
+    assert_rc "exists match exits 0" 0
+    assert_stdout_contains "exists says matches" "matches exists:"
+    assert_stdout_not_contains "exists does NOT say listed/covered" "listed/covered"
+}
+
 # --- check (Task 8) ---
 
 test_check_clean_record() {            # example.com: 1 include + ip4 + ip6 -> 1 lookup, clean
