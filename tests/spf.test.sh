@@ -119,6 +119,10 @@ case "$qtype:$name" in
     # absent.example: queried host's IP appears nowhere
     TXT:absent.example)       printf '%s\n' '"v=spf1 ip4:192.0.2.0/24 -all"' ;;
     A:missing.absent.example) printf '%s\n' '198.51.100.250' ;;
+    # find a:<host> IPv6 coverage (for python3-absent degradation test)
+    # v6flat.example: NO literal a:; host's only address is an AAAA inside a flattened ip6: range
+    TXT:v6flat.example)        printf '%s\n' '"v=spf1 ip6:2001:db8::/32 -all"' ;;
+    AAAA:host.v6flat.example)  printf '%s\n' '2001:db8::99' ;;
 esac
 exit 0
 SHIM
@@ -130,6 +134,7 @@ ip="${@: -2:1}"; cidr="${@: -1}"
 printf 'python3 %s\n' "$ip $cidr" >> "$TEST_DIR/python3.log"
 case "$ip:$cidr" in
     "2001:db8::9:2001:db8::/32") exit 0 ;;
+    "2001:db8::99:2001:db8::/32") exit 0 ;;
     *) exit 4 ;;
 esac
 SHIM
@@ -474,6 +479,24 @@ test_find_ip_path_unchanged_exit0() {
 test_find_ip_path_unchanged_exit4() {
     run_script find example.com 192.0.2.1
     assert_rc "bare IP not-found still 4" 4
+}
+test_find_a_ipv6_coverage_warns_without_python3() {
+    # v6flat.example: host's only address is IPv6, covered only by a flattened
+    # ip6: range. Without python3 the coverage CANNOT be confirmed, so the
+    # outcome is "not found" (exit 4) -- but the user must be told IPv6 wasn't
+    # really checked, mirroring the bare-IP path's degradation warning.
+    run_script_no_python3 find v6flat.example a:host.v6flat.example
+    assert_stderr_contains "warns python3 absent" "python3 not found"
+    assert_rc "cannot confirm coverage without python3 -> exit 4" 4
+}
+test_find_a_ipv6_coverage_fragile_with_python3() {
+    # Same fixture WITH python3 (shim present): coverage is confirmed, so the
+    # flattened-range case fires -> fragile (exit 5).
+    run_script find v6flat.example a:host.v6flat.example
+    assert_rc "covered by ip6 range -> fragile exit 5" 5
+    assert_stdout_contains "says not literal" "NOT present literally"
+    assert_stdout_contains "names the covering ip6 range" "2001:db8::/32"
+    assert_stdout_contains "warns fragile" "fragile"
 }
 
 # --- check (Task 8) ---

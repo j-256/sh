@@ -332,6 +332,8 @@ except ValueError:
         local ir; ir="$1"
         local host; host="$2"
         local input; input="$3"
+        local rc
+        local warned_py; warned_py=""
 
         # (a) literal a:<host> row present?
         local lit; lit="$(printf '%s\n' "$ir" | awk -F'\t' -v h="$host" '$4=="a" && $5==h{print; exit}')"
@@ -378,9 +380,13 @@ except ValueError:
                                  return 5
                              fi ;;
                         ip6) [ "$fam" = 6 ] || continue
-                             if _ip6_in_cidr "$addr" "$val"; then
+                             _ip6_in_cidr "$addr" "$val"
+                             rc=$?
+                             if [ "$rc" -eq 0 ]; then
                                  printf '%s is NOT present literally, but its address %s is covered by ip6:%s in %s -- fragile: a flattened range does not self-heal if the host renumbers\n' "a:$host" "$addr" "$val" "$src"
                                  return 5
+                             elif [ "$rc" -eq 2 ]; then
+                                 [ "$warned_py" ] || { _warn "python3 not found; IPv6 matching is literal-only"; warned_py=1; }
                              fi ;;
                         a|mx) # case (c): IP shared with a different directive's host
                              if [ "$val" != "$host" ] && [ "$addr" = "$(_resolve_one "$val" "$fam")" ]; then
