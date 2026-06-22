@@ -171,8 +171,20 @@ test_dig_missing_exits_3() {
     assert_stderr_contains "says dig required" "dig is required"
 }
 
+test_ir_public_verb_emits_rows() {
+    run_script ir example.com
+    assert_rc "ir exits 0" 0
+    # root ip4 row, then the include row, then nested rows -- assert a couple of exact IR lines
+    assert_stdout_contains "root ip4 row" "$(printf '0\texample.com\t+\tip4\t198.51.100.0/24\t0')"
+    assert_stdout_contains "include row" "$(printf '0\texample.com\t+\tinclude\t_spf.example.net\t1')"
+}
+test_ir_no_record_runtime_error() {
+    run_script ir nospf.example
+    assert_rc "no record exits 1" 1
+}
+
 test_ir_root_and_include() {
-    run_script __ir example.com
+    run_script ir example.com
     assert_rc "ir exits 0" 0
     # root ip4 row, cost 0
     assert_stdout_contains "root ip4" $'0\texample.com\t+\tip4\t198.51.100.0/24\t0'
@@ -185,18 +197,18 @@ test_ir_root_and_include() {
 }
 
 test_ir_qualifiers() {
-    run_script __ir example.com
+    run_script ir example.com
     assert_stdout_contains "tilde all from root" $'0\texample.com\t~\tall\t\t0'
 }
 
 test_ir_no_record_is_runtime_error() {
-    run_script __ir nospf.example
+    run_script ir nospf.example
     assert_rc "no record exits 1" 1
     assert_stderr_contains "says no record" "No SPF record"
 }
 
 test_ir_cycle_terminates() {
-    run_script __ir cyc-a.example
+    run_script ir cyc-a.example
     assert_rc "cycle still exits 0" 0
     # cyc-a includes cyc-b includes cyc-a: the second cyc-a is in the ancestor
     # path, so it is NOT re-walked -> exactly two include rows, no hang.
@@ -205,7 +217,7 @@ test_ir_cycle_terminates() {
 }
 
 test_ir_diamond_counts_twice() {
-    run_script __ir dia-root.example
+    run_script ir dia-root.example
     assert_rc "diamond exits 0" 0
     # dia-c reached via dia-a AND dia-b -> its include row appears TWICE
     # (no global dedup), so check's lookup count sees both.
@@ -217,7 +229,7 @@ test_ir_diamond_counts_twice() {
 }
 
 test_ir_ptr_value_has_no_leading_colon() {
-    run_script __ir ptrtest.example
+    run_script ir ptrtest.example
     assert_rc "ptr ir exits 0" 0
     # qualified ptr: value is the bare host, no leading colon
     assert_stdout_contains "qualified ptr value" $'0\tptrtest.example\t+\tptr\tmail.ptrtest.example\t1'
@@ -228,7 +240,7 @@ test_ir_ptr_value_has_no_leading_colon() {
 }
 
 test_ir_apex_a_resolves() {
-    run_script __ir hosted.example
+    run_script ir hosted.example
     assert_rc "apex a exits 0" 0
     assert_stdout_contains "a cost row" $'0\thosted.example\t+\ta\thosted.example\t1'
     assert_stdout_contains "a resolved ip" $'0\thosted.example\t+\tip4\t198.51.100.20\t0'

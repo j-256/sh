@@ -6,6 +6,7 @@
 #   spf [options] flatten <domain>           Print all IPs authorized by an SPF record
 #   spf [options] check   <domain>           Check SPF health (lookups, includes, etc.)
 #   spf [options] tree    <domain>           Print SPF include tree
+#   spf [options] ir      <domain>           Print the raw resolver IR (tab-delimited)
 #   spf -h
 #
 # Options:
@@ -33,6 +34,7 @@ _spf() (
         echo "  $SCRIPT_NAME [${s}options${r}] flatten ${s}domain${r}"
         echo "  $SCRIPT_NAME [${s}options${r}] check   ${s}domain${r}"
         echo "  $SCRIPT_NAME [${s}options${r}] tree    ${s}domain${r}"
+        echo "  $SCRIPT_NAME [${s}options${r}] ir      ${s}domain${r}"
         echo "  $SCRIPT_NAME -h"
         echo "DESCRIPTION"
         echo "  Fetches and recursively resolves SPF TXT records for a domain."
@@ -707,8 +709,7 @@ EOF
         flatten) _cmd_flatten "${rest[@]}" ;;
         check)   _cmd_check   "${rest[@]}" ;;
         tree)    _cmd_tree    "${rest[@]}" ;;
-        # __ir: test-only -- dumps the raw IR for the test harness
-        __ir)    _resolve     "${rest[@]}" ;;
+        ir)      _resolve     "${rest[@]}" ;;
         # __ip4: test-only -- exercises _ip4_in_cidr directly
         __ip4)   _ip4_in_cidr "${rest[@]}"; return $? ;;
         *) _error "Unknown argument '$verb'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;

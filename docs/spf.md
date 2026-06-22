@@ -128,6 +128,50 @@ $ spf tree 'v=spf1 ip4:1.2.3.0/24 include:_spf.google.com ~all'
 
 Mechanisms are indented by depth (2 spaces at the root, +4 per include level). `include:` lines mark delegation boundaries; the child mechanisms are indented beneath them.
 
+## Escape hatch: raw resolver IR (`ir`)
+
+Every `spf` subcommand is built on a single resolver engine that emits a frozen six-column tab-delimited IR. The `ir` verb exposes that stream directly so you can pipe it into `awk`, `grep`, or any other tool without going through a higher-level command.
+
+```
+$ spf ir google.com -q
+0	google.com	+	include	_spf.google.com	1
+1	_spf.google.com	+	ip4	74.125.0.0/16	0
+1	_spf.google.com	+	ip4	209.85.128.0/17	0
+1	_spf.google.com	+	ip6	2001:4860:4864::/56	0
+1	_spf.google.com	+	ip6	2404:6800:4864::/56	0
+1	_spf.google.com	+	ip6	2607:f8b0:4864::/56	0
+1	_spf.google.com	+	ip6	2800:3f0:4864::/56	0
+1	_spf.google.com	+	ip6	2a00:1450:4864::/56	0
+1	_spf.google.com	+	ip6	2c0f:fb50:4864::/56	0
+1	_spf.google.com	~	all		0
+0	google.com	~	all		0
+```
+
+### Column layout (stable contract)
+
+The six columns are separated by a single tab (`\t`). This layout is a stable contract -- the column positions will not change.
+
+| Column | Name | Description |
+|---|---|---|
+| 1 | `depth` | Include nesting depth (0 = root record) |
+| 2 | `source_domain` | Domain that owns this mechanism |
+| 3 | `qualifier` | SPF qualifier (`+`, `-`, `~`, `?`) |
+| 4 | `mechanism` | Mechanism keyword (`ip4`, `ip6`, `include`, `a`, `mx`, `all`, `redirect`, `exists`, `ptr`, `void`) |
+| 5 | `value` | Mechanism value (CIDR, target domain, etc.; empty for bare `all` and `ptr`) |
+| 6 | `lookup_cost` | DNS lookup cost this row contributes (1 for mechanisms that require a DNS lookup, 0 otherwise) |
+
+Use `-F'\t'` in `awk` to split on tab. For example, to filter only `include` rows:
+
+```bash
+spf ir google.com -q | awk -F'\t' '$4=="include"'
+```
+
+```
+0	google.com	+	include	_spf.google.com	1
+```
+
+Exit 0 when the record resolves; exit 1 when no SPF record is found.
+
 ## Cross-resolver comparison
 
 Use `-s` to query a specific DNS server. Running `flatten` against two resolvers and diffing the output reveals split-horizon or geo-aware SPF -- common with providers that serve different IP ranges to different resolvers:
