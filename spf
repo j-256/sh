@@ -316,6 +316,89 @@ except ValueError:
 
     # --- command stubs (implemented in later tasks) ---
 
+    # _resolve_one <host> <fam:4|6> -- first A (fam 4) or AAAA (fam 6) address of host, or empty.
+    _resolve_one() {
+        local host; host="$1"
+        local fam; fam="$2"
+        local qtype; [ "$fam" = 6 ] && qtype=AAAA || qtype=A
+        local tcp; [ "$USE_TCP" ] && tcp="+tcp"
+        # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- $tcp expands to +tcp or empty; the split is intentional
+        dig @"$SERVER" $tcp +short "$qtype" "$host" 2>/dev/null | head -n1
+    }
+
+    # _find_a_host <ir> <host> <input-domain> -- evaluate an a:<host> query.
+    # exit 0 literal present / 5 fragile (covered by range or other directive) / 4 absent.
+    _find_a_host() {
+        local ir; ir="$1"
+        local host; host="$2"
+        local input; input="$3"
+
+        # (a) literal a:<host> row present?
+        local lit; lit="$(printf '%s\n' "$ir" | awk -F'\t' -v h="$host" '$4=="a" && $5==h{print; exit}')"
+        if [ -n "$lit" ]; then
+            local src; src="$(printf '%s\n' "$lit" | cut -f2)"
+            local qual; qual="$(printf '%s\n' "$lit" | cut -f3)"
+            printf '%s matches a:%s in %s (qualifier: %s)\n' "$host" "$host" "$src" "$qual"
+            # dangling check: literal present but host resolves to nothing
+            if [ -z "$(_resolve_host "$host")" ]; then
+                _warn "a:$host is present but the host resolves to no addresses (dead directive)"
+            fi
+            return 0
+        fi
+
+        # resolve the host for coverage checks (b/c)
+        local addrs; addrs="$(_resolve_host "$host")"
+        if [ -n "$addrs" ]; then
+            local addr
+            # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- splitting the newline-separated address list is intended
+            for addr in $addrs; do
+                local fam; case "$addr" in *:*) fam=6 ;; *) fam=4 ;; esac
+                # walk IR rows; first covering ip4/ip6 (b) or a/mx-for-other-host (c) wins
+                local depth
+                local src
+                local qual
+                local mech
+                local val
+                local cost
+                local _row
+                # IFS-whitespace (TAB) merges consecutive separators, collapsing an empty
+                # value field. Peel-split each row so empty fields are preserved.
+                # shellcheck disable=SC2034 # cost is read from the IR to keep field alignment but not used in this consumer
+                while IFS= read -r _row; do
+                    depth="${_row%%$'\t'*}";  _row="${_row#*$'\t'}"
+                    src="${_row%%$'\t'*}";    _row="${_row#*$'\t'}"
+                    qual="${_row%%$'\t'*}";   _row="${_row#*$'\t'}"
+                    mech="${_row%%$'\t'*}";   _row="${_row#*$'\t'}"
+                    val="${_row%%$'\t'*}";    _row="${_row#*$'\t'}"
+                    cost="${_row}"
+                    case "$mech" in
+                        ip4) [ "$fam" = 4 ] || continue
+                             if _ip4_in_cidr "$addr" "$val"; then
+                                 printf '%s is NOT present literally, but its address %s is covered by ip4:%s in %s -- fragile: a flattened range does not self-heal if the host renumbers\n' "a:$host" "$addr" "$val" "$src"
+                                 return 5
+                             fi ;;
+                        ip6) [ "$fam" = 6 ] || continue
+                             if _ip6_in_cidr "$addr" "$val"; then
+                                 printf '%s is NOT present literally, but its address %s is covered by ip6:%s in %s -- fragile: a flattened range does not self-heal if the host renumbers\n' "a:$host" "$addr" "$val" "$src"
+                                 return 5
+                             fi ;;
+                        a|mx) # case (c): IP shared with a different directive's host
+                             if [ "$val" != "$host" ] && [ "$addr" = "$(_resolve_one "$val" "$fam")" ]; then
+                                 printf '%s is NOT present literally; its address %s is covered by %s:%s in %s, not your directive\n' "a:$host" "$addr" "$mech" "$val" "$src"
+                                 return 5
+                             fi ;;
+                    esac
+                done <<EOF
+$ir
+EOF
+            done
+        fi
+
+        # (d) absent
+        printf '%s not found in %s'"'"'s SPF record\n' "a:$host" "$input"
+        return 4
+    }
+
     _cmd_find() {
         local input; input=""
         local ip; ip=""
@@ -331,11 +414,22 @@ except ValueError:
             return 2
         fi
         if [ -z "$ip" ]; then
-            _error "ip is required. Run \`$SCRIPT_NAME -h\` for usage"
+            _error "ip or a:<host> is required. Run \`$SCRIPT_NAME -h\` for usage"
             return 2
         fi
+        # Reject ambiguous ip4:/ip6: query inputs (spec 4.4)
+        case "$ip" in
+            ip4:*|ip6:*)
+                _error "find does not take ip4:/ip6: queries (ambiguous). Use a bare IP for membership, \`has\` for token presence, or \`ir | grep\` for a literal scan. Run \`$SCRIPT_NAME -h\` for usage"
+                return 2 ;;
+        esac
 
         local ir; ir="$(_resolve "$input")" || return 1
+
+        # a:<host> query -> presence/coverage evaluation (spec 4.2-4.3)
+        case "$ip" in
+            a:*) _find_a_host "$ir" "${ip#a:}" "$input"; return $? ;;
+        esac
 
         local family; case "$ip" in *:*) family=6 ;; *) family=4 ;; esac
         local warned_py; warned_py=""

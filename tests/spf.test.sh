@@ -102,6 +102,23 @@ case "$qtype:$name" in
     # check: 3 void lookups (each include target has no record)
     TXT:void.example)     printf '%s\n' '"v=spf1 include:v1.void include:v2.void include:v3.void -all"' ;;
     TXT:v1.void|TXT:v2.void|TXT:v3.void)  ;;   # no record -> each is a void lookup
+    # find a:<host> three-way fixtures
+    # litera.example: literal a:mail.litera.example present; host resolves into its own listed range
+    TXT:litera.example)       printf '%s\n' '"v=spf1 a:mail.litera.example ip4:198.51.100.0/24 -all"' ;;
+    A:mail.litera.example)    printf '%s\n' '198.51.100.50' ;;
+    # flat.example: NO literal a:; host's IP only inside a flattened ip4: range (fragile)
+    TXT:flat.example)         printf '%s\n' '"v=spf1 ip4:203.0.113.0/24 -all"' ;;
+    A:host.flat.example)      printf '%s\n' '203.0.113.9' ;;
+    # other.example: host's IP covered only via a DIFFERENT a: directive (case c)
+    TXT:other.example)        printf '%s\n' '"v=spf1 a:known.other.example -all"' ;;
+    A:known.other.example)    printf '%s\n' '203.0.113.20' ;;
+    A:wanted.other.example)   printf '%s\n' '203.0.113.20' ;;   # same IP as known.other.example
+    # gone.example: host resolves to nothing (dangling), but a:dead.gone.example is literally present
+    TXT:gone.example)         printf '%s\n' '"v=spf1 a:dead.gone.example -all"' ;;
+    A:dead.gone.example)      ;;                                # no A record -> dangling
+    # absent.example: queried host's IP appears nowhere
+    TXT:absent.example)       printf '%s\n' '"v=spf1 ip4:192.0.2.0/24 -all"' ;;
+    A:missing.absent.example) printf '%s\n' '198.51.100.250' ;;
 esac
 exit 0
 SHIM
@@ -412,6 +429,51 @@ test_find_exists_says_matches_not_covered() {
     assert_rc "exists match exits 0" 0
     assert_stdout_contains "exists says matches" "matches exists:"
     assert_stdout_not_contains "exists does NOT say listed/covered" "listed/covered"
+}
+
+# --- find a:<host> (Task 3: presence/coverage three-way) ---
+
+test_find_a_literal_present_exit0() {
+    run_script find litera.example a:mail.litera.example
+    assert_rc "literal a: exits 0" 0
+    assert_stdout_contains "reports literal a:" "matches a:mail.litera.example"
+}
+test_find_a_flattened_is_fragile_exit5() {
+    run_script find flat.example a:host.flat.example
+    assert_rc "flattened-only exits 5" 5
+    assert_stdout_contains "says not literal" "NOT present literally"
+    assert_stdout_contains "names the covering range" "203.0.113.0/24"
+    assert_stdout_contains "warns fragile" "fragile"
+}
+test_find_a_covered_via_other_directive_exit5() {
+    run_script find other.example a:wanted.other.example
+    assert_rc "covered via other directive exits 5" 5
+    assert_stdout_contains "names the other directive" "a:known.other.example"
+    assert_stdout_contains "flags not your directive" "not your directive"
+}
+test_find_a_dangling_present_warns_exit0() {
+    run_script find gone.example a:dead.gone.example
+    assert_rc "dangling literal still exits 0" 0
+    assert_stdout_contains "still reports present" "matches a:dead.gone.example"
+    assert_stderr_contains "warns dead directive" "resolves to no addresses"
+}
+test_find_a_absent_exit4() {
+    run_script find absent.example a:missing.absent.example
+    assert_rc "absent exits 4" 4
+    assert_stdout_contains "says not found" "not found"
+}
+test_find_rejects_ip4_query() {
+    run_script find example.com ip4:198.51.100.0/24
+    assert_rc "ip4: query is usage error" 2
+    assert_stderr_contains "explains rejection" "does not take ip4:/ip6:"
+}
+test_find_ip_path_unchanged_exit0() {
+    run_script find example.com 198.51.100.42
+    assert_rc "bare IP still works" 0
+}
+test_find_ip_path_unchanged_exit4() {
+    run_script find example.com 192.0.2.1
+    assert_rc "bare IP not-found still 4" 4
 }
 
 # --- check (Task 8) ---
