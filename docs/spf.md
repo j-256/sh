@@ -15,8 +15,7 @@ $ spf find mailchimp.com 205.201.128.1
 [INF][spf] mailchimp.com: v=spf1 ip4:205.201.128.0/20 ...
 [INF][spf] _spf.google.com: v=spf1 ip4:74.125.0.0/16 ...
 ...
-205.201.128.1 is listed/covered by mailchimp.com (qualifier: +)
-  matched: ip4:205.201.128.0/20
+205.201.128.1 is covered by ip4:205.201.128.0/20 in mailchimp.com (qualifier: +)
 ```
 
 Exit 0 means the IP is authorized; exit 4 means it was not found.
@@ -30,11 +29,51 @@ $ spf find github.com 192.30.252.1
 [INF][spf] github.com: v=spf1 ip4:192.30.252.0/22 include:spf.protection.outlook.com ...
 [INF][spf] spf.protection.outlook.com: v=spf1 ip4:40.92.0.0/15 ...
 ...
-192.30.252.1 is listed/covered by github.com (qualifier: +)
-  matched: ip4:192.30.252.0/22
+192.30.252.1 is covered by ip4:192.30.252.0/22 in github.com (qualifier: +)
 ```
 
-`[INF]` lines (informational, to stderr) show each SPF record as it is fetched so you can trace the path. The last two stdout lines are the verdict.
+`[INF]` lines (informational, to stderr) show each SPF record as it is fetched so you can trace the path. The last stdout line is the verdict.
+
+**Check whether a host is explicitly listed as an `a:` sender (`find a:<host>`):**
+
+A common CI check: is your mail host still authorized by name (self-healing on renumber), or has it been flattened into an anonymous CIDR (fragile)?
+
+```
+$ spf find mailsenders.netsuite.com a:outboundips.netsuite.com
+[INF][spf] mailsenders.netsuite.com: v=spf1 a:outboundips.netsuite.com -all
+outboundips.netsuite.com matches a:outboundips.netsuite.com in mailsenders.netsuite.com (qualifier: +)
+```
+
+Exit 0 -- the host is present literally. If the host renumbers, the `a:` directive picks up the new address automatically.
+
+Now imagine a record that was flattened and the host's IP landed in a static range instead:
+
+```
+$ spf find 'v=spf1 ip4:142.250.100.0/24 -all' a:smtp.gmail.com
+[INF][spf] <record>: v=spf1 ip4:142.250.100.0/24 -all
+a:smtp.gmail.com is NOT present literally, but its address 142.250.100.109 is covered by ip4:142.250.100.0/24 in <record> -- fragile: a flattened range does not self-heal if the host renumbers
+```
+
+Exit 5 -- the host resolves to an IP inside a CIDR, but the `a:` directive itself is missing. Email will flow today but break silently if the host renumbers.
+
+```
+$ spf find mailsenders.netsuite.com a:mail.example.com
+[INF][spf] mailsenders.netsuite.com: v=spf1 a:outboundips.netsuite.com -all
+a:mail.example.com not found in mailsenders.netsuite.com's SPF record
+```
+
+Exit 4 -- the directive is absent entirely.
+
+In a CI script, branch on `$?`:
+
+```bash
+spf find "$domain" "a:$host" -q
+case $? in
+  0) echo "OK: a:$host present literally" ;;
+  5) echo "WARN: a:$host covered by a CIDR range -- fragile" ;;
+  4) echo "FAIL: a:$host not found" ;;
+esac
+```
 
 **Dump all authorized IP ranges (`flatten`):**
 
@@ -105,14 +144,14 @@ An empty diff is the normal, healthy result -- both resolvers see the same IP ra
 
 Salesforce uses `exists:%{i}._spf.mta.salesforce.com` instead of a static CIDR list. The mechanism is evaluated by doing an A lookup against a domain that encodes the query IP -- only registered Salesforce MTA IPs resolve.
 
-`find` evaluates the macro: it expands `%{i}` to the query IP, performs the A lookup, and reports a match if the lookup resolves:
+`find` evaluates the macro: it expands `%{i}` to the query IP, performs the A lookup, and reports a match if the lookup resolves. The following uses a raw record with `exists:%{d}` anchored to `google.com` (so the A lookup hits `google.com`, which resolves -- a reliable demonstration of a positive match):
 
 ```
-$ spf find _spf.salesforce.com 198.51.100.7
-[INF][spf] _spf.salesforce.com: v=spf1 exists:%{i}._spf.mta.salesforce.com -all
-198.51.100.7 is listed/covered by _spf.salesforce.com (qualifier: -)
-  matched: exists:%{i}._spf.mta.salesforce.com
+$ spf find 'v=spf1 exists:%{d} -all' 1.2.3.4 -d google.com -q
+1.2.3.4 matches exists:%{d} in google.com (qualifier: +)
 ```
+
+Note the qualifier is `+`: an `exists:` mechanism without an explicit qualifier sign defaults to pass, regardless of what the trailing `all` mechanism says.
 
 `flatten` cannot expand `exists:` without a query IP and emits a warning instead:
 
@@ -181,8 +220,9 @@ This is the SPF equivalent of hardcoding a CNAME target's IP instead of using th
 | `2` | Usage error: missing argument, unknown flag, or bad flag value |
 | `3` | `dig` is not installed |
 | `4` | Negative predicate result: IP not found (`find`) or problems detected (`check`) |
+| `5` | `find a:<host>`: host is absent as a literal directive but its resolved address is covered by a CIDR range (fragile) |
 
-Exit code `4` applies to `find` and `check` only. `flatten` and `tree` always exit `0` on success.
+Exit codes `4` and `5` apply to `find` only; `check` exits `4` when problems are found. `flatten` and `tree` always exit `0` on success.
 
 ### Dependencies
 
