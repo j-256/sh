@@ -123,6 +123,14 @@ case "$qtype:$name" in
     # v6flat.example: NO literal a:; host's only address is an AAAA inside a flattened ip6: range
     TXT:v6flat.example)        printf '%s\n' '"v=spf1 ip6:2001:db8::/32 -all"' ;;
     AAAA:host.v6flat.example)  printf '%s\n' '2001:db8::99' ;;
+    # has: nested include provenance + lookalike (token-boundary correctness)
+    TXT:hasroot.example)      printf '%s\n' '"v=spf1 include:mid.has.example -all"' ;;
+    TXT:mid.has.example)      printf '%s\n' '"v=spf1 include:target.has.example include:target.has.example.attacker.example -all"' ;;
+    TXT:target.has.example)   printf '%s\n' '"v=spf1 ip4:198.51.100.0/24 -all"' ;;
+    TXT:target.has.example.attacker.example) printf '%s\n' '"v=spf1 ip4:203.0.113.0/24 -all"' ;;
+    # has: a -include: (negative qualifier) to prove qualifier reporting
+    TXT:negq.example)         printf '%s\n' '"v=spf1 -include:blocked.negq.example -all"' ;;
+    TXT:blocked.negq.example) printf '%s\n' '"v=spf1 -all"' ;;
 esac
 exit 0
 SHIM
@@ -597,6 +605,47 @@ test_tree_bare_ptr_no_cost_leak() {
     assert_rc "tree exits 0" 0
     assert_stdout_not_contains "no cost leak into ptr value" "ptr:1"
     assert_stdout_contains "bare ptr rendered cleanly" "ptr"
+}
+
+# --- has (Task 6: token-aware recursive search) ---
+
+test_has_include_present_with_provenance() {
+    run_script has hasroot.example include:target.has.example
+    assert_rc "present exits 0" 0
+    assert_stdout_contains "says present" "PRESENT"
+    assert_stdout_contains "names the token" "include:target.has.example"
+    assert_stdout_contains "names the parent record" "mid.has.example"
+    assert_stdout_contains "shows depth" "depth"
+}
+test_has_token_boundary_no_lookalike() {
+    # querying include:target.has.example must NOT match include:target.has.example.attacker.example
+    run_script has hasroot.example include:target.has.example
+    assert_rc "still 0 (real match exists)" 0
+    assert_stdout_not_contains "lookalike not reported as the match" "attacker.example"
+}
+test_has_lookalike_absent_when_only_lookalike() {
+    # a record that ONLY has the attacker lookalike -> querying the real target is ABSENT
+    run_script has 'v=spf1 include:target.has.example.attacker.example -all' include:target.has.example
+    assert_rc "lookalike-only is absent" 4
+    assert_stdout_contains "says absent" "ABSENT"
+}
+test_has_reports_qualifier() {
+    run_script has negq.example include:blocked.negq.example
+    assert_rc "present exits 0" 0
+    assert_stdout_contains "reports the - qualifier" "qualifier: -"
+}
+test_has_absent_exit4() {
+    run_script has example.com include:nonexistent.example
+    assert_rc "absent exits 4" 4
+    assert_stdout_contains "says absent" "ABSENT"
+}
+test_has_missing_token_usage_error() {
+    run_script has example.com
+    assert_rc "missing token exits 2" 2
+}
+test_has_bare_all_usage_error() {
+    run_script has example.com all
+    assert_rc "no-value token exits 2" 2
 }
 
 # --- run ---

@@ -492,6 +492,70 @@ EOF
         printf '%s\n' "$ip not found in $input's SPF record"
         return 4
     }
+    _cmd_has() {
+        local input; input=""
+        local token; token=""
+        local arg
+        for arg in "$@"; do
+            case "$arg" in
+                -*) ;;   # global opts already consumed; ignore strays
+                *)  if [ -z "$input" ]; then input="$arg"; else token="$arg"; fi ;;
+            esac
+        done
+        if [ -z "$input" ]; then
+            _error "Must provide a domain or record. Run \`$SCRIPT_NAME -h\` for usage"
+            return 2
+        fi
+        if [ -z "$token" ]; then
+            _error "Must provide a token to search for (e.g. include:_spf.example.com). Run \`$SCRIPT_NAME -h\` for usage"
+            return 2
+        fi
+
+        # parse the query token: strip leading qualifier, split mech:value on first : or =
+        local qtok; qtok="$token"
+        case "$qtok" in [+~?-]*) qtok="${qtok#?}" ;; esac
+        local qmech; qmech="${qtok%%[:=]*}"
+        local qval; qval=""
+        case "$qtok" in *[:=]*) qval="${qtok#*[:=]}" ;; esac
+        if [ -z "$qval" ]; then
+            _error "Token must have a value (e.g. include:domain, a:host). Run \`$SCRIPT_NAME -h\` for usage"
+            return 2
+        fi
+
+        local ir; ir="$(_resolve "$input")" || return 1
+
+        # scan IR for exact mech+value matches; report all with provenance
+        local found; found=0
+        local depth
+        local src
+        local qual
+        local mech
+        local val
+        local cost
+        local _row
+        # shellcheck disable=SC2034 # cost is read from the IR to keep field alignment but not used in this consumer
+        while IFS= read -r _row; do
+            depth="${_row%%$'\t'*}";  _row="${_row#*$'\t'}"
+            src="${_row%%$'\t'*}";    _row="${_row#*$'\t'}"
+            qual="${_row%%$'\t'*}";   _row="${_row#*$'\t'}"
+            mech="${_row%%$'\t'*}";   _row="${_row#*$'\t'}"
+            val="${_row%%$'\t'*}";    _row="${_row#*$'\t'}"
+            cost="${_row}"
+            if [ "$mech" = "$qmech" ] && [ "$val" = "$qval" ]; then
+                if [ "$found" -eq 0 ]; then printf 'PRESENT: %s:%s\n' "$qmech" "$qval"; fi
+                printf '  in %s (depth %s, qualifier: %s)\n' "$src" "$depth" "$qual"
+                found=1
+            fi
+        done <<EOF
+$ir
+EOF
+
+        if [ "$found" -eq 0 ]; then
+            printf 'ABSENT: %s:%s not found in %s'"'"'s SPF tree\n' "$qmech" "$qval" "$input"
+            return 4
+        fi
+        return 0
+    }
     _cmd_check() {
         local input; input="$1"
         if [ -z "$input" ]; then
@@ -707,6 +771,7 @@ EOF
     local -a rest; rest=("${args[@]:1}")
     case "$verb" in
         find)    _cmd_find    "${rest[@]}" ;;
+        has)     _cmd_has     "${rest[@]}" ;;
         flatten) _cmd_flatten "${rest[@]}" ;;
         check)   _cmd_check   "${rest[@]}" ;;
         tree)    _cmd_tree    "${rest[@]}" ;;
