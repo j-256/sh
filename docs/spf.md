@@ -2,7 +2,7 @@
 
 [View script](../spf)
 
-Recursively resolve and inspect SPF DNS records. `spf` walks the full `include:` tree for a domain and answers four questions: is this IP authorized (`find`), what are all the authorized addresses (`flatten`), is the record healthy (`check`), and what does the full delegation tree look like (`tree`).
+Recursively resolve and inspect SPF DNS records. `spf` walks the full `include:` tree for a domain and answers five questions: is this IP authorized (`find`), what are all the authorized addresses (`flatten`), is the record healthy (`check`), what does the full delegation tree look like (`tree`), and is a specific mechanism token present anywhere in the tree (`has`).
 
 SPF authorization is often buried three or four levels of `include:` directives deep. A single TXT lookup rarely gives you the full picture -- `spf` follows every include recursively, counts DNS lookups against the RFC 7208 limit, and surfaces problems that would cause silent delivery failures in production.
 
@@ -172,6 +172,39 @@ spf ir google.com -q | awk -F'\t' '$4=="include"'
 
 Exit 0 when the record resolves; exit 1 when no SPF record is found.
 
+## Token search (`has`)
+
+`has` answers one question: is a specific mechanism token present anywhere in the recursively-expanded SPF tree, and if so, where? It is a pure lexical scan -- no host resolution, no IP comparison. The token must match exactly: mechanism type, separator, and value must all be identical.
+
+```
+$ spf has google.com include:_spf.google.com -q
+PRESENT: include:_spf.google.com
+  in google.com (depth 0, qualifier: +)
+```
+
+Exit 0. The output names the mechanism and value, then lists every record that contains it with the owning domain, include depth, and qualifier.
+
+When the token is not in the tree at any depth, `has` reports the absence and exits 4:
+
+```
+$ spf has google.com include:nonexistent.example -q
+ABSENT: include:nonexistent.example not found in google.com's SPF tree
+```
+
+### Why `has` instead of `dig txt | grep`
+
+Three things `grep` on a single DNS lookup cannot do:
+
+1. **Recurses the include tree.** `dig TXT example.com` returns one record. An `include:` two levels deep is invisible to `grep`; `has` follows every delegation.
+
+2. **Exact token match, not substring match.** `grep include:site.com` matches `include:site.com.attacker.example` -- a false positive that conceals a domain-takeover risk. `has include:site.com` requires the value to be exactly `site.com` with nothing following.
+
+3. **Reports the qualifier.** A mechanism can appear with a `-` (fail) qualifier. `has` shows `qualifier: -` in the provenance line, so you can see at a glance whether the match authorizes or rejects.
+
+### `has` vs `find` for `a:` directives
+
+For IP-authorization questions involving a hostname, prefer `find a:<host>`. It resolves the host, checks the full CIDR coverage, and returns three states: present literally (exit 0), covered by a CIDR range but not named explicitly (exit 5, fragile), or absent (exit 4). `has a:<host>` only answers whether the literal `a:<host>` token appears in the tree -- it will not catch a flattened range that happens to cover the host's current address.
+
 ## Cross-resolver comparison
 
 Use `-s` to query a specific DNS server. Running `flatten` against two resolvers and diffing the output reveals split-horizon or geo-aware SPF -- common with providers that serve different IP ranges to different resolvers:
@@ -259,14 +292,14 @@ This is the SPF equivalent of hardcoding a CNAME target's IP instead of using th
 
 | Code | Meaning |
 |---|---|
-| `0` | Success: IP covered (`find`), output emitted (`flatten`), record clean (`check`), tree rendered (`tree`) |
+| `0` | Success: IP covered (`find`), output emitted (`flatten`), record clean (`check`), tree rendered (`tree`), token found (`has`) |
 | `1` | Runtime failure: no SPF record found, DNS error, or unexpected dig output |
 | `2` | Usage error: missing argument, unknown flag, or bad flag value |
 | `3` | `dig` is not installed |
-| `4` | Negative predicate result: IP not found (`find`) or problems detected (`check`) |
+| `4` | Negative predicate result: IP not found (`find`), problems detected (`check`), or token absent (`has`) |
 | `5` | `find a:<host>`: host is absent as a literal directive but its resolved address is covered by a CIDR range (fragile) |
 
-Exit codes `4` and `5` apply to `find` only; `check` exits `4` when problems are found. `flatten` and `tree` always exit `0` on success.
+Exit code `5` applies to `find` only. Exit code `4` means: IP not found (`find`), problems detected (`check`), or token absent (`has`). `flatten` and `tree` always exit `0` on success.
 
 ### Dependencies
 
