@@ -631,6 +631,7 @@ EOF
             mech="${_row%%$'\t'*}";   _row="${_row#*$'\t'}"
             val="${_row%%$'\t'*}";    _row="${_row#*$'\t'}"
             cost="${_row}"
+            [ "$mech" = void ] && continue
             if [ "$mech" = "$qmech" ] && [ "$val" = "$qval" ]; then
                 if [ "$found" -eq 0 ]; then printf 'PRESENT: %s:%s\n' "$qmech" "$qval"; fi
                 printf '  in %s (depth %s, qualifier: %s)\n' "$src" "$depth" "$qual"

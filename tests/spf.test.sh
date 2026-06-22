@@ -667,6 +667,14 @@ test_has_absent_exit4() {
     assert_rc "absent exits 4" 4
     assert_stdout_contains "says absent" "ABSENT"
 }
+test_has_does_not_match_void_sentinel() {
+    # void rows are an internal resolver sentinel, not a queryable mechanism.
+    # has must not surface them.
+    run_script has void.example void:v1.void
+    assert_rc "void sentinel not matchable -> absent" 4
+    assert_stdout_contains "says absent" "ABSENT"
+    assert_stdout_not_contains "does not leak void sentinel" "PRESENT"
+}
 test_has_missing_token_usage_error() {
     run_script has example.com
     assert_rc "missing token exits 2" 2
