@@ -2,7 +2,7 @@
 
 [View script](../spf)
 
-Recursively resolve and inspect SPF DNS records. `spf` walks the full `include:` tree for a domain and answers five questions: is this IP authorized (`find`), what are all the authorized addresses (`flatten`), is the record healthy (`check`), what does the full delegation tree look like (`tree`), and is a specific mechanism token present anywhere in the tree (`has`).
+Recursively resolve and inspect SPF DNS records. `spf` walks the full `include:` tree for a domain and answers the common inspection questions: is this IP authorized (`find`), what are all the authorized addresses (`flatten`), is the record healthy (`check`), what does the full delegation tree look like (`tree`), is a specific mechanism token present anywhere in the tree (`has`), and what does the raw resolver output look like for piping into other tools (`ir`).
 
 SPF authorization is often buried three or four levels of `include:` directives deep. A single TXT lookup rarely gives you the full picture -- `spf` follows every include recursively, counts DNS lookups against the RFC 7208 limit, and surfaces problems that would cause silent delivery failures in production.
 
@@ -191,6 +191,8 @@ $ spf has google.com include:nonexistent.example -q
 ABSENT: include:nonexistent.example not found in google.com's SPF tree
 ```
 
+Exit 4. No record in the recursively-expanded tree contains the exact token.
+
 ### Why `has` instead of `dig txt | grep`
 
 Three things `grep` on a single DNS lookup cannot do:
@@ -285,7 +287,7 @@ This is the SPF equivalent of hardcoding a CNAME target's IP instead of using th
 | `-d, --domain dom` | Anchor `%{d}` macros when input is a raw record |
 | `--tcp` | Force TCP instead of UDP for dig queries |
 | `-q, --quiet` | Suppress informational output |
-| `-h, --help` | Show this help message |
+| `-h, --help` | Show the top-level help; `spf <verb> -h` (or `spf -h <verb>`) shows per-verb detail |
 | `--record` | (flatten only) Emit the result as a quoted TXT record string instead of one CIDR per line |
 
 ### Exit codes

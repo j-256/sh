@@ -161,6 +161,34 @@ test_top_help() {
     assert_stdout_contains "help lists tree" "tree"
 }
 
+# --- per-subcommand help (Task 8) ---
+
+test_top_help_lists_six_verbs() {
+    run_script -h
+    assert_rc "top help exits 0" 0
+    for v in find flatten check tree has ir; do
+        assert_stdout_contains "top help lists $v" "$v"
+    done
+}
+test_find_help_shows_find_detail_not_top() {
+    run_script find -h
+    assert_rc "find help exits 0" 0
+    assert_stdout_contains "find help mentions a:<host>" "a:<host>"
+    assert_stdout_contains "find help documents exit 5" "5"
+    # regression: must NOT be the top-level menu (which lists all six verbs incl. flatten)
+    assert_stdout_not_contains "find help is not the top menu" "flatten"
+}
+test_help_verb_arg_equals_verb_help() {
+    run_script -h has
+    assert_rc "-h has exits 0" 0
+    assert_stdout_contains "shows has detail" "token"
+}
+test_has_help_via_verb_flag() {
+    run_script has -h
+    assert_rc "has -h exits 0" 0
+    assert_stdout_contains "shows has detail" "token"
+}
+
 test_no_verb_is_usage_error() {
     run_script
     assert_rc "no verb exits 2" 2

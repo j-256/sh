@@ -2,19 +2,20 @@
 # spf - Resolve and inspect SPF DNS records
 #
 # Usage:
-#   spf [options] find    <domain>           Find matching SPF mechanism for an IP
-#   spf [options] flatten <domain>           Print all IPs authorized by an SPF record
-#   spf [options] check   <domain>           Check SPF health (lookups, includes, etc.)
-#   spf [options] tree    <domain>           Print SPF include tree
-#   spf [options] ir      <domain>           Print the raw resolver IR (tab-delimited)
-#   spf -h
+#   spf [options] find    <domain> {<ip>|a:<host>}  Is an IP covered, or an a:<host> present? (and how)
+#   spf [options] has     <domain> <token>          Is a token present in the expanded record? (and where)
+#   spf [options] flatten <domain>                  Print all IPs authorized by an SPF record
+#   spf [options] check   <domain>                  Check SPF health (lookups, includes, etc.)
+#   spf [options] tree    <domain>                  Print SPF include tree
+#   spf [options] ir      <domain>                  Print the raw resolver IR (tab-delimited)
+#   spf <verb> -h
 #
 # Options:
 #   -s, --server <ip>   DNS server to query (default: 8.8.8.8)
 #   -d, --domain <dom>  Anchor %{d} macros when input is a raw record
 #   --tcp               Force TCP instead of UDP for dig queries
 #   -q, --quiet         Suppress informational output
-#   -h, --help          Show help message
+#   -h, --help          Show help message (or per-verb: spf <verb> -h)
 
 _spf() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
@@ -24,39 +25,128 @@ _spf() (
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
     _warn()  { echo "[WRN][$SCRIPT_NAME] $*" >&2; }
 
+    # _show_help [verb] -- top-level menu when no (or unknown) verb; per-verb detail otherwise.
     _show_help() {
+        local verb; verb="$1"
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
-        echo "NAME"
-        echo "  $SCRIPT_NAME - resolve and inspect SPF DNS records"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME [${s}options${r}] find    ${s}domain${r}"
-        echo "  $SCRIPT_NAME [${s}options${r}] flatten ${s}domain${r}"
-        echo "  $SCRIPT_NAME [${s}options${r}] check   ${s}domain${r}"
-        echo "  $SCRIPT_NAME [${s}options${r}] tree    ${s}domain${r}"
-        echo "  $SCRIPT_NAME [${s}options${r}] ir      ${s}domain${r}"
-        echo "  $SCRIPT_NAME -h"
-        echo "DESCRIPTION"
-        echo "  Fetches and recursively resolves SPF TXT records for a domain."
-        echo "  Subcommands cover the common inspection tasks: find a matching"
-        echo "  mechanism for an IP, flatten all authorized addresses, check"
-        echo "  record health, print the full include tree, and dump the raw"
-        echo "  resolver IR."
-        echo "OPTIONS"
-        echo "  -s, --server ${s}ip${r}   DNS server to query (default: 8.8.8.8)"
-        echo "  -d, --domain ${s}dom${r}  Anchor %{d} macros when input is a raw record"
-        echo "  --tcp             Force TCP instead of UDP for dig queries"
-        echo "  -q, --quiet       Suppress informational output"
-        echo "  -h, --help        Show this help message"
-        echo "DEPENDENCIES"
-        echo "  dig"
-        echo "  python3 (IPv6 matching only)"
-        echo "EXIT STATUS"
-        echo "  0  Success"
-        echo "  1  Runtime failure (network error, dig returned unexpected output)"
-        echo "  2  Usage error (missing arg, unknown flag, bad flag value)"
-        echo "  3  dig is not installed"
-        echo "  4  Negative predicate result (IP did not match any mechanism)"
+        case "$verb" in
+            find)
+                echo "NAME"
+                echo "  $SCRIPT_NAME find - check whether an IP is covered or an a:<host> directive is present"
+                echo "SYNOPSIS"
+                echo "  $SCRIPT_NAME find ${s}domain${r} ${s}ip${r}"
+                echo "  $SCRIPT_NAME find ${s}domain${r} a:${s}host${r}"
+                echo "DESCRIPTION"
+                echo "  With an IP: reports whether it is covered/listed by the record and how."
+                echo "  With a:${s}host${r}: reports whether the directive is present literally"
+                echo "  (expected), only as a covering range or other directive (fragile), or"
+                echo "  absent. Resolves ${s}host${r} via dig."
+                echo "EXIT STATUS"
+                echo "  0  IP covered, or a:host present literally"
+                echo "  4  not found / absent"
+                echo "  5  a:host present only as covered-by-range or via another directive (fragile)"
+                echo "  1  runtime failure   2  usage error   3  dig missing"
+                ;;
+            has)
+                echo "NAME"
+                echo "  $SCRIPT_NAME has - is a mechanism token present in the expanded record?"
+                echo "SYNOPSIS"
+                echo "  $SCRIPT_NAME has ${s}domain${r} ${s}token${r}"
+                echo "DESCRIPTION"
+                echo "  Recursively resolves the record and reports every occurrence of the"
+                echo "  exact ${s}token${r} (e.g. include:_spf.example.com) with its source record,"
+                echo "  depth, and qualifier. Token-aware: include:site.com does not match"
+                echo "  include:site.com.attacker.example. For a:${s}host${r}, find is the richer check."
+                echo "EXIT STATUS"
+                echo "  0  present   4  absent   1  runtime failure   2  usage error   3  dig missing"
+                ;;
+            ir)
+                echo "NAME"
+                echo "  $SCRIPT_NAME ir - print the raw resolver IR (tab-delimited)"
+                echo "SYNOPSIS"
+                echo "  $SCRIPT_NAME ir ${s}domain${r}"
+                echo "DESCRIPTION"
+                echo "  Emits one row per mechanism: depth, source_domain, qualifier,"
+                echo "  mechanism, value, lookup_cost (tab-separated). Stable column layout"
+                # printf (not echo) so the literal backslash-t survives without SC2028;
+                # %s carries SCRIPT_NAME, the single-quoted format keeps awk's $4 intact
+                # shellcheck disable=SC2016 # "Expressions don't expand in single quotes, use double quotes for that." -- $4 is awk's field ref, intentionally literal
+                printf '  for piping: %s ir example.com | awk -F'\''\\t'\'' '\''$4=="include"'\''\n' "$SCRIPT_NAME"
+                echo "EXIT STATUS"
+                echo "  0  rendered   1  runtime failure   2  usage error   3  dig missing"
+                ;;
+            flatten)
+                echo "NAME"
+                echo "  $SCRIPT_NAME flatten - print every IP/CIDR the record authorizes"
+                echo "SYNOPSIS"
+                echo "  $SCRIPT_NAME flatten ${s}domain${r} [--record]"
+                echo "DESCRIPTION"
+                echo "  Resolves the full include tree and prints each ip4/ip6 address, sorted"
+                echo "  and deduped, one per line. --record emits a single quoted TXT record"
+                echo "  string instead. See $SCRIPT_NAME -h for the staleness caveat."
+                echo "EXIT STATUS"
+                echo "  0  rendered   1  runtime failure   2  usage error   3  dig missing"
+                ;;
+            check)
+                echo "NAME"
+                echo "  $SCRIPT_NAME check - RFC 7208 health report"
+                echo "SYNOPSIS"
+                echo "  $SCRIPT_NAME check ${s}domain${r}"
+                echo "DESCRIPTION"
+                echo "  Counts DNS lookups (limit 10) and void lookups (limit 2), and flags"
+                echo "  +all, multiple all in the record, and deprecated ptr usage."
+                echo "EXIT STATUS"
+                echo "  0  clean   4  problems found   1  runtime failure   2  usage error   3  dig missing"
+                ;;
+            tree)
+                echo "NAME"
+                echo "  $SCRIPT_NAME tree - indented structural view of the include tree"
+                echo "SYNOPSIS"
+                echo "  $SCRIPT_NAME tree ${s}domain${r}"
+                echo "DESCRIPTION"
+                echo "  Prints each mechanism indented by include depth, so delegation"
+                echo "  boundaries and nesting are visible at a glance."
+                echo "EXIT STATUS"
+                echo "  0  rendered   1  runtime failure   2  usage error   3  dig missing"
+                ;;
+            *)
+                echo "NAME"
+                echo "  $SCRIPT_NAME - resolve and inspect SPF DNS records"
+                echo "SYNOPSIS"
+                echo "  $SCRIPT_NAME [${s}options${r}] find    ${s}domain${r} {${s}ip${r}|a:${s}host${r}}"
+                echo "  $SCRIPT_NAME [${s}options${r}] has     ${s}domain${r} ${s}token${r}"
+                echo "  $SCRIPT_NAME [${s}options${r}] flatten ${s}domain${r}"
+                echo "  $SCRIPT_NAME [${s}options${r}] check   ${s}domain${r}"
+                echo "  $SCRIPT_NAME [${s}options${r}] tree    ${s}domain${r}"
+                echo "  $SCRIPT_NAME [${s}options${r}] ir      ${s}domain${r}"
+                echo "  $SCRIPT_NAME ${s}verb${r} -h"
+                echo "DESCRIPTION"
+                echo "  Fetches and recursively resolves SPF TXT records. Verbs:"
+                echo "    find     is an IP covered, or an a:host directive present? (and how)"
+                echo "    has      is a token present in the expanded record? (and where)"
+                echo "    flatten  print all authorized IPs/CIDRs"
+                echo "    check    RFC 7208 health report"
+                echo "    tree     indented structural view"
+                echo "    ir       raw tab-delimited resolver output"
+                echo "OPTIONS"
+                echo "  -s, --server ${s}ip${r}   DNS server to query (default: 8.8.8.8)"
+                echo "  -d, --domain ${s}dom${r}  Anchor %{d} macros when input is a raw record"
+                echo "  --tcp             Force TCP instead of UDP for dig queries"
+                echo "  -q, --quiet       Suppress informational output"
+                echo "  -h, --help        Show this help message (or per-verb: $SCRIPT_NAME ${s}verb${r} -h)"
+                echo "DEPENDENCIES"
+                echo "  dig"
+                echo "  python3 (IPv6 matching only)"
+                echo "EXIT STATUS"
+                echo "  0  Success (affirmative)"
+                echo "  1  Runtime failure (network error, dig returned unexpected output)"
+                echo "  2  Usage error (missing arg, unknown flag, bad flag value)"
+                echo "  3  dig is not installed"
+                echo "  4  Negative predicate result (not found / problems found)"
+                echo "  5  find a:host present only as covered-by-range (fragile)"
+                ;;
+        esac
     }
 
     _expand_short_opts() {
@@ -729,6 +819,7 @@ EOF
     local DOMAIN_ANCHOR; DOMAIN_ANCHOR=""
     local USE_TCP; USE_TCP=""
     local QUIET; QUIET=""
+    local WANT_HELP; WANT_HELP=""
     local -a args=()
 
     _expand_short_opts "sd" "$@"
@@ -736,7 +827,13 @@ EOF
 
     while [ $# -gt 0 ]; do
         case "$1" in
-            -h|--help) _show_help; return 0 ;;
+            -h|--help)
+                # defer: a verb may follow (spf -h find) or precede (spf find -h).
+                # acting now would show top-level help before the verb is read.
+                case "${2-}" in
+                    find|has|flatten|check|tree|ir) _show_help "$2"; return 0 ;;
+                    *) WANT_HELP=1; shift ;;
+                esac ;;
             -s|--server)
                 [ -n "${2-}" ] || { _error "--server requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 SERVER="$2"; shift 2 ;;
@@ -764,11 +861,23 @@ EOF
     fi
 
     local verb; verb="${args[0]}"
+    local -a rest; rest=("${args[@]:1}")
+
+    # help routing: per-verb help if a verb is in play, else top-level.
+    # -h among a verb's own args (spf find -h) is treated as "show my help".
+    local a
+    local verb_help; verb_help=""
+    for a in "${rest[@]}"; do
+        case "$a" in -h|--help) verb_help=1 ;; esac
+    done
+    if [ -n "$verb" ] && { [ -n "$verb_help" ] || [ -n "$WANT_HELP" ]; }; then
+        _show_help "$verb"; return 0
+    fi
     if [ -z "$verb" ]; then
-        _error "Must provide a verb (find|flatten|check|tree). Run \`$SCRIPT_NAME -h\` for usage"
+        if [ -n "$WANT_HELP" ]; then _show_help; return 0; fi
+        _error "Must provide a verb (find|has|flatten|check|tree|ir). Run \`$SCRIPT_NAME -h\` for usage"
         return 2
     fi
-    local -a rest; rest=("${args[@]:1}")
     case "$verb" in
         find)    _cmd_find    "${rest[@]}" ;;
         has)     _cmd_has     "${rest[@]}" ;;
