@@ -27,7 +27,7 @@ _spf() (
 
     # _show_help [verb] -- top-level menu when no (or unknown) verb; per-verb detail otherwise.
     _show_help() {
-        local verb; verb="$1"
+        local verb="$1"
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
         case "$verb" in
@@ -201,7 +201,7 @@ _spf() (
     # --- resolver engine ---
 
     _dig_txt() {
-        local name; name="$1"
+        local name="$1"
         local tcp; [ "$USE_TCP" ] && tcp="+tcp"
         # join character-strings, drop quotes, keep only the v=spf1 record
         # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- $tcp expands to +tcp or empty; the split is intentional
@@ -212,7 +212,7 @@ _spf() (
     }
 
     _spf_input() {
-        local a; a="$1"
+        local a="$1"
         case "$a" in
             "v=spf1"*) printf '%s\n' "$a" ;;
             -)         local line; IFS= read -r line; printf '%s\n' "$line" ;;
@@ -225,7 +225,7 @@ _spf() (
 
     # Print a host's A then AAAA addresses, one per line (empty if none).
     _resolve_host() {
-        local host; host="$1"
+        local host="$1"
         local tcp; [ "$USE_TCP" ] && tcp="+tcp"
         # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- $tcp expands to +tcp or empty; splitting dig short output on whitespace is intended
         dig @"$SERVER" $tcp +short A "$host" 2>/dev/null
@@ -235,11 +235,11 @@ _spf() (
 
     # _emit_host_ips <token> <mech> <src> <depth> <qual>
     _emit_host_ips() {
-        local token; token="$1"
-        local mech; mech="$2"
-        local src; src="$3"
-        local depth; depth="$4"
-        local qual; qual="$5"
+        local token="$1"
+        local mech="$2"
+        local src="$3"
+        local depth="$4"
+        local qual="$5"
         local host
         case "$token" in
             "$mech")      host="$src" ;;        # bare a / mx -> the current domain
@@ -260,10 +260,10 @@ _spf() (
 
     # _resolve_rec <record-string> <source_domain> <depth> <ancestor-path>
     _resolve_rec() {
-        local record; record="$1"
-        local src; src="$2"
-        local depth; depth="$3"
-        local ancestors; ancestors="$4"
+        local record="$1"
+        local src="$2"
+        local depth="$3"
+        local ancestors="$4"
         [ "$QUIET" ] || printf '[INF][%s] %s: %s\n' "$SCRIPT_NAME" "$src" "$record" >&2
 
         local token
@@ -300,9 +300,9 @@ _spf() (
 
     # follow include/redirect with cycle + cap guards
     _walk_into() {
-        local target; target="$1"
-        local parent_depth; parent_depth="$2"
-        local ancestors; ancestors="$3"
+        local target="$1"
+        local parent_depth="$2"
+        local ancestors="$3"
         case " $ancestors " in *" $target "*) return 0 ;; esac   # cycle: skip
         if [ "$parent_depth" -ge 20 ]; then return 0; fi          # depth cap
         local sub; sub="$(_dig_txt "$target")"
@@ -316,14 +316,14 @@ _spf() (
     }
 
     _resolve() {
-        local arg; arg="$1"
-        local anchor; anchor="${2:-$DOMAIN_ANCHOR}"
+        local arg="$1"
+        local anchor="${2:-$DOMAIN_ANCHOR}"
         local root; root="$(_spf_input "$arg")"
         if [ -z "$root" ]; then
             _error "No SPF record found for $arg"
             return 1
         fi
-        local rootsrc; rootsrc="$arg"
+        local rootsrc="$arg"
         case "$arg" in "v=spf1"*|-) rootsrc="${anchor:-<record>}" ;; esac
         _resolve_rec "$root" "$rootsrc" 0 "$rootsrc"
     }
@@ -344,9 +344,9 @@ _spf() (
     }
 
     _ip4_in_cidr() {
-        local ip; ip="$1"
-        local cidr; cidr="$2"
-        local net; net="${cidr%/*}"
+        local ip="$1"
+        local cidr="$2"
+        local net="${cidr%/*}"
         local prefix
         case "$cidr" in */*) prefix="${cidr#*/}" ;; *) prefix=32 ;; esac
         case "$prefix" in ''|*[!0-9]*) return 2 ;; esac
@@ -365,8 +365,8 @@ _spf() (
     }
 
     _ip6_in_cidr() {
-        local ip; ip="$1"
-        local cidr; cidr="$2"
+        local ip="$1"
+        local cidr="$2"
         command -v python3 >/dev/null 2>&1 || return 2
         python3 -c 'import ipaddress,sys
 try:
@@ -377,11 +377,11 @@ except ValueError:
 
     # _find_hit <ip> <src> <qual> <mech> <value> -- print a mechanism-appropriate match line.
     _find_hit() {
-        local ip; ip="$1"
-        local src; src="$2"
-        local qual; qual="$3"
-        local mech; mech="$4"
-        local val; val="$5"
+        local ip="$1"
+        local src="$2"
+        local qual="$3"
+        local mech="$4"
+        local val="$5"
         local verb
         case "$mech" in
             ip4|ip6)
@@ -400,9 +400,9 @@ except ValueError:
 
     # Expand IP/domain-derivable macros. Returns 1 if an unsupported macro appears.
     _expand_macro() {
-        local s; s="$1"
-        local qip; qip="$2"
-        local dom; dom="$3"
+        local s="$1"
+        local qip="$2"
+        local dom="$3"
         # shellcheck disable=SC1083 # "This { is literal." -- the { is intentional in the glob; case pattern matches literal %{s/l/o/h/p
         case "$s" in *%{[slohp]*) return 1 ;; esac   # sender/HELO/ptr macros: unsupported
 
@@ -430,8 +430,8 @@ except ValueError:
 
     # _resolve_one <host> <fam:4|6> -- first A (fam 4) or AAAA (fam 6) address of host, or empty.
     _resolve_one() {
-        local host; host="$1"
-        local fam; fam="$2"
+        local host="$1"
+        local fam="$2"
         local qtype; [ "$fam" = 6 ] && qtype=AAAA || qtype=A
         local tcp; [ "$USE_TCP" ] && tcp="+tcp"
         # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- $tcp expands to +tcp or empty; the split is intentional
@@ -441,11 +441,11 @@ except ValueError:
     # _find_a_host <ir> <host> <input-domain> -- evaluate an a:<host> query.
     # exit 0 literal present / 5 fragile (covered by range or other directive) / 4 absent.
     _find_a_host() {
-        local ir; ir="$1"
-        local host; host="$2"
-        local input; input="$3"
+        local ir="$1"
+        local host="$2"
+        local input="$3"
         local rc
-        local warned_py; warned_py=""
+        local warned_py=""
 
         # (a) literal a:<host> row present?
         local lit; lit="$(printf '%s\n' "$ir" | awk -F'\t' -v h="$host" '$4=="a" && $5==h{print; exit}')"
@@ -518,8 +518,8 @@ EOF
     }
 
     _cmd_find() {
-        local input; input=""
-        local ip; ip=""
+        local input=""
+        local ip=""
         local arg
         for arg in "$@"; do
             case "$arg" in
@@ -550,7 +550,7 @@ EOF
         esac
 
         local family; case "$ip" in *:*) family=6 ;; *) family=4 ;; esac
-        local warned_py; warned_py=""
+        local warned_py=""
 
         # Walk rows in order; first containing CIDR wins.
         local depth
@@ -602,8 +602,8 @@ EOF
         return 4
     }
     _cmd_has() {
-        local input; input=""
-        local token; token=""
+        local input=""
+        local token=""
         local arg
         for arg in "$@"; do
             case "$arg" in
@@ -621,10 +621,10 @@ EOF
         fi
 
         # parse the query token: strip leading qualifier, split mech:value on first : or =
-        local qtok; qtok="$token"
+        local qtok="$token"
         case "$qtok" in [+~?-]*) qtok="${qtok#?}" ;; esac
-        local qmech; qmech="${qtok%%[:=]*}"
-        local qval; qval=""
+        local qmech="${qtok%%[:=]*}"
+        local qval=""
         case "$qtok" in *[:=]*) qval="${qtok#*[:=]}" ;; esac
         if [ -z "$qval" ]; then
             _error "Token must have a value (e.g. include:domain, a:host). Run \`$SCRIPT_NAME -h\` for usage"
@@ -634,7 +634,7 @@ EOF
         local ir; ir="$(_resolve "$input")" || return 1
 
         # scan IR for exact mech+value matches; report all with provenance
-        local found; found=0
+        local found=0
         local depth
         local src
         local qual
@@ -667,15 +667,15 @@ EOF
         return 0
     }
     _cmd_check() {
-        local input; input="$1"
+        local input="$1"
         if [ -z "$input" ]; then
             _error "Must provide a domain or record. Run \`$SCRIPT_NAME -h\` for usage"
             return 2
         fi
-        local raw; raw=""; case "$input" in "v=spf1"*|-) raw=1 ;; esac
+        local raw=""; case "$input" in "v=spf1"*|-) raw=1 ;; esac
 
         local ir; ir="$(_resolve "$input")" || return 1
-        local problems; problems=0
+        local problems=0
 
         # lookup count: sum of field 6 (lookup_cost) across the resolved tree
         local lookups; lookups="$(printf '%s\n' "$ir" | awk -F'\t' '{s+=$6} END{print s+0}')"
@@ -731,7 +731,7 @@ EOF
         return 4
     }
     _cmd_tree() {
-        local input; input="$1"
+        local input="$1"
         if [ -z "$input" ]; then
             _error "Must provide a domain or record. Run \`$SCRIPT_NAME -h\` for usage"
             return 2
@@ -770,9 +770,9 @@ EOF
     }
 
     _chunk_record() {
-        local full; full="$1"
-        local out; out=""
-        local cur; cur=""
+        local full="$1"
+        local out=""
+        local cur=""
         local tok
         # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- splitting record tokens on whitespace is intended
         for tok in $full; do
@@ -790,8 +790,8 @@ EOF
     }
 
     _cmd_flatten() {
-        local record_mode; record_mode=""
-        local input; input=""
+        local record_mode=""
+        local input=""
         local arg
         for arg in "$@"; do
             case "$arg" in
@@ -824,8 +824,8 @@ EOF
 
         # --record: build mechanisms, find the root all qualifier, chunk <=255 bytes
         local allq; allq="$(printf '%s\n' "$ir" | awk -F'\t' '$1=="0" && $4=="all"{print $3; exit}')"
-        local all_mech; all_mech="${allq:-~}all"
-        local mechs; mechs=""
+        local all_mech="${allq:-~}all"
+        local mechs=""
         local ip
         # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- splitting the newline/space-separated address list is intended
         for ip in $v4; do mechs="$mechs ip4:$ip"; done
@@ -835,11 +835,11 @@ EOF
     }
 
     # --- defaults and parse arguments ---
-    local SERVER; SERVER="8.8.8.8"
-    local DOMAIN_ANCHOR; DOMAIN_ANCHOR=""
-    local USE_TCP; USE_TCP=""
-    local QUIET; QUIET=""
-    local WANT_HELP; WANT_HELP=""
+    local SERVER="8.8.8.8"
+    local DOMAIN_ANCHOR=""
+    local USE_TCP=""
+    local QUIET=""
+    local WANT_HELP=""
     local -a args=()
 
     _expand_short_opts "sd" "$@"
@@ -880,13 +880,13 @@ EOF
         return 3
     fi
 
-    local verb; verb="${args[0]}"
+    local verb="${args[0]}"
     local -a rest; rest=("${args[@]:1}")
 
     # help routing: per-verb help if a verb is in play, else top-level.
     # -h among a verb's own args (spf find -h) is treated as "show my help".
     local a
-    local verb_help; verb_help=""
+    local verb_help=""
     for a in "${rest[@]}"; do
         case "$a" in -h|--help) verb_help=1 ;; esac
     done
