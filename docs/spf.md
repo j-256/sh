@@ -12,9 +12,6 @@ Check whether a specific IP is authorized to send email for a domain:
 
 ```
 $ spf find mailchimp.com 205.201.128.1
-[INF][spf] mailchimp.com: v=spf1 ip4:205.201.128.0/20 ...
-[INF][spf] _spf.google.com: v=spf1 ip4:74.125.0.0/16 ...
-...
 205.201.128.1 is covered by ip4:205.201.128.0/20 in mailchimp.com (qualifier: +)
 ```
 
@@ -26,13 +23,19 @@ Exit 0 means the IP is authorized; exit 4 means it was not found.
 
 ```
 $ spf find github.com 192.30.252.1
-[INF][spf] github.com: v=spf1 ip4:192.30.252.0/22 include:spf.protection.outlook.com ...
-[INF][spf] spf.protection.outlook.com: v=spf1 ip4:40.92.0.0/15 ...
-...
 192.30.252.1 is covered by ip4:192.30.252.0/22 in github.com (qualifier: +)
 ```
 
-`[INF]` lines (informational, to stderr) show each SPF record as it is fetched so you can trace the path. The last stdout line is the verdict.
+By default, `spf` prints only the verdict on stdout. Pass `-v`/`--verbose` to add the resolution trace on stderr:
+
+```
+$ spf find google.com 1.2.3.4 -v
+[INF][spf] google.com: v=spf1 include:_spf.google.com ~all
+[INF][spf] _spf.google.com: v=spf1 ip4:74.125.0.0/16 ip4:209.85.128.0/17 ip6:2001:4860:4864::/56 ip6:2404:6800:4864::/56 ip6:2607:f8b0:4864::/56 ip6:2800:3f0:4864::/56 ip6:2a00:1450:4864::/56 ip6:2c0f:fb50:4864::/56 ~all
+1.2.3.4 not found in google.com's SPF record
+```
+
+`[INF]` lines show each record as it is fetched so you can trace the delegation path. The last stdout line is the verdict.
 
 **Check whether a host is explicitly listed as an `a:` sender (`find a:<host>`):**
 
@@ -40,7 +43,6 @@ A common CI check: is your mail host still authorized by name (self-healing on r
 
 ```
 $ spf find mailsenders.netsuite.com a:outboundips.netsuite.com
-[INF][spf] mailsenders.netsuite.com: v=spf1 a:outboundips.netsuite.com -all
 outboundips.netsuite.com matches a:outboundips.netsuite.com in mailsenders.netsuite.com (qualifier: +)
 ```
 
@@ -49,16 +51,14 @@ Exit 0 -- the host is present literally. If the host renumbers, the `a:` directi
 Now imagine a record that was flattened and the host's IP landed in a static range instead:
 
 ```
-$ spf find 'v=spf1 ip4:142.250.100.0/24 -all' a:smtp.gmail.com
-[INF][spf] <record>: v=spf1 ip4:142.250.100.0/24 -all
-a:smtp.gmail.com is NOT present literally, but its address 142.250.100.109 is covered by ip4:142.250.100.0/24 in <record> -- fragile: a flattened range does not self-heal if the host renumbers
+$ spf find 'v=spf1 ip4:172.253.122.0/24 -all' a:smtp.gmail.com
+a:smtp.gmail.com is NOT present literally, but its address 172.253.122.109 is covered by ip4:172.253.122.0/24 in <record> -- fragile: a flattened range does not self-heal if the host renumbers
 ```
 
 Exit 5 -- the host resolves to an IP inside a CIDR, but the `a:` directive itself is missing. Email will flow today but break silently if the host renumbers.
 
 ```
 $ spf find mailsenders.netsuite.com a:mail.example.com
-[INF][spf] mailsenders.netsuite.com: v=spf1 a:outboundips.netsuite.com -all
 a:mail.example.com not found in mailsenders.netsuite.com's SPF record
 ```
 
@@ -79,9 +79,6 @@ esac
 
 ```
 $ spf flatten github.com
-[INF][spf] github.com: v=spf1 ip4:192.30.252.0/22 include:spf.protection.outlook.com ...
-[INF][spf] spf.protection.outlook.com: v=spf1 ip4:40.92.0.0/15 ...
-...
 [WRN][spf] cannot statically evaluate exists (1 occurrence(s))
 37.188.97.188/32
 40.92.0.0/15
@@ -96,8 +93,6 @@ One CIDR per line on stdout. `exists:` mechanisms that reference a query-IP macr
 
 ```
 $ spf check github.com
-[INF][spf] github.com: v=spf1 ip4:192.30.252.0/22 ...
-...
 DNS lookups: 10/10
 Void lookups: 0/2
 Published SPF records: 1
@@ -110,8 +105,6 @@ OK: no problems found
 
 ```
 $ spf tree 'v=spf1 ip4:1.2.3.0/24 include:_spf.google.com ~all'
-[INF][spf] <record>: v=spf1 ip4:1.2.3.0/24 include:_spf.google.com ~all
-[INF][spf] _spf.google.com: v=spf1 ip4:74.125.0.0/16 ip4:209.85.128.0/17 ...
   ip4:1.2.3.0/24
   include:_spf.google.com
       ip4:74.125.0.0/16
@@ -133,7 +126,7 @@ Mechanisms are indented by depth (2 spaces at the root, +4 per include level). `
 Every `spf` subcommand is built on a single resolver engine that emits a frozen six-column tab-delimited IR. The `ir` verb exposes that stream directly so you can pipe it into `awk`, `grep`, or any other tool without going through a higher-level command.
 
 ```
-$ spf ir google.com -q
+$ spf ir google.com
 0	google.com	+	include	_spf.google.com	1
 1	_spf.google.com	+	ip4	74.125.0.0/16	0
 1	_spf.google.com	+	ip4	209.85.128.0/17	0
@@ -163,7 +156,7 @@ The six columns are separated by a single tab (`\t`). This layout is a stable co
 Use `-F'\t'` in `awk` to split on tab. For example, to filter only `include` rows:
 
 ```bash
-spf ir google.com -q | awk -F'\t' '$4=="include"'
+spf ir google.com | awk -F'\t' '$4=="include"'
 ```
 
 ```
@@ -177,7 +170,7 @@ Exit 0 when the record resolves; exit 1 when no SPF record is found.
 `has` answers one question: is a specific mechanism token present anywhere in the recursively-expanded SPF tree, and if so, where? It is a pure lexical scan -- no host resolution, no IP comparison. The token must match exactly: mechanism type, separator, and value must all be identical.
 
 ```
-$ spf has google.com include:_spf.google.com -q
+$ spf has google.com include:_spf.google.com
 PRESENT: include:_spf.google.com
   in google.com (depth 0, qualifier: +)
 ```
@@ -187,7 +180,7 @@ Exit 0. The output names the mechanism and value, then lists every record that c
 When the token is not in the tree at any depth, `has` reports the absence and exits 4:
 
 ```
-$ spf has google.com include:nonexistent.example -q
+$ spf has google.com include:nonexistent.example
 ABSENT: include:nonexistent.example not found in google.com's SPF tree
 ```
 
@@ -226,7 +219,7 @@ Salesforce uses `exists:%{i}._spf.mta.salesforce.com` instead of a static CIDR l
 `find` evaluates the macro: it expands `%{i}` to the query IP, performs the A lookup, and reports a match if the lookup resolves. The following uses a raw record with `exists:%{d}` anchored to `google.com` (so the A lookup hits `google.com`, which resolves -- a reliable demonstration of a positive match):
 
 ```
-$ spf find 'v=spf1 exists:%{d} -all' 1.2.3.4 -d google.com -q
+$ spf find 'v=spf1 exists:%{d} -all' 1.2.3.4 -d google.com
 1.2.3.4 matches exists:%{d} in google.com (qualifier: +)
 ```
 
@@ -236,7 +229,6 @@ Note the qualifier is `+`: an `exists:` mechanism without an explicit qualifier 
 
 ```
 $ spf flatten _spf.salesforce.com
-[INF][spf] _spf.salesforce.com: v=spf1 exists:%{i}._spf.mta.salesforce.com -all
 [WRN][spf] cannot statically evaluate exists (1 occurrence(s))
 ```
 
@@ -248,7 +240,6 @@ Pass a literal SPF record string instead of a domain name to vet a record before
 
 ```
 $ spf check 'v=spf1 ip4:192.0.2.0/24 ~all'
-[INF][spf] <record>: v=spf1 ip4:192.0.2.0/24 ~all
 DNS lookups: 0/10
 Void lookups: 0/2
 Record count: N/A (raw-record input)
@@ -259,7 +250,6 @@ OK: no problems found
 
 ```
 $ echo 'v=spf1 ip4:10.0.0.0/8 ~all' | spf flatten -
-[INF][spf] <record>: v=spf1 ip4:10.0.0.0/8 ~all
 10.0.0.0/8
 ```
 
@@ -286,9 +276,18 @@ This is the SPF equivalent of hardcoding a CNAME target's IP instead of using th
 | `-s, --server ip` | DNS server to query (default: 8.8.8.8) |
 | `-d, --domain dom` | Anchor `%{d}` macros when input is a raw record |
 | `--tcp` | Force TCP instead of UDP for dig queries |
-| `-q, --quiet` | Suppress informational output |
+| `-q, --quiet` | Errors only -- suppress warnings and the resolution trace |
+| `-v, --verbose` | Show the resolution trace (`[INF]` lines) on stderr |
 | `-h, --help` | Show the top-level help; `spf <verb> -h` (or `spf -h <verb>`) shows per-verb detail |
 | `--record` | (flatten only) Emit the result as a quoted TXT record string instead of one CIDR per line |
+
+Verbosity levels (last flag wins when both are given):
+
+| Level | Flag | Output |
+|---|---|---|
+| Default | _(none)_ | Verdict on stdout; `[WRN]` advisories on stderr |
+| Quiet | `-q, --quiet` | Exit code only -- no stdout verdict, no warnings, no trace |
+| Verbose | `-v, --verbose` | Adds `[INF]` resolution trace to stderr |
 
 ### Exit codes
 
