@@ -286,7 +286,7 @@ Verbosity levels (last flag wins when both are given):
 | Level | Flag | Output |
 |---|---|---|
 | Default | _(none)_ | Verdict on stdout; `[WRN]` advisories on stderr |
-| Quiet | `-q, --quiet` | Exit code only -- no stdout verdict, no warnings, no trace |
+| Quiet | `-q, --quiet` | Verdict on stdout (unchanged); stderr silenced -- no warnings, no trace |
 | Verbose | `-v, --verbose` | Adds `[INF]` resolution trace to stderr |
 
 ### Exit codes
