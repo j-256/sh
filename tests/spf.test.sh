@@ -684,5 +684,44 @@ test_has_bare_all_usage_error() {
     assert_rc "no-value token exits 2" 2
 }
 
+# --- verbosity ---
+test_default_is_quiet_no_inf() {
+    # bare run: no [INF] resolution trace on stderr by default
+    run_script find example.com 198.51.100.42
+    assert_rc "default run exits 0" 0
+    assert_stderr_not_contains "no INF trace by default" "[INF]"
+}
+test_verbose_shows_inf_trace() {
+    run_script find example.com 198.51.100.42 -v
+    assert_rc "verbose run exits 0" 0
+    assert_stderr_contains "verbose shows INF trace" "[INF]"
+}
+test_default_shows_warn_advisory() {
+    # dead-directive advisory prints at the default level (1)
+    run_script find gone.example a:dead.gone.example
+    assert_stderr_contains "advisory at default level" "resolves to no addresses"
+}
+test_quiet_suppresses_warn_advisory() {
+    # -q (level 0) hides the [WRN] advisory entirely
+    run_script find gone.example a:dead.gone.example -q
+    assert_stderr_not_contains "advisory suppressed by -q" "resolves to no addresses"
+    assert_stderr_not_contains "no WRN under -q" "[WRN]"
+}
+test_quiet_still_shows_error() {
+    # [ERR] always prints, even under -q (no SPF record -> runtime error)
+    run_script find nospf.example 198.51.100.1 -q
+    assert_stderr_contains "error prints under -q" "[ERR]"
+}
+test_verbosity_last_wins_qv_verbose() {
+    # -q then -v -> verbose (INF shown)
+    run_script find example.com 198.51.100.42 -q -v
+    assert_stderr_contains "qv -> verbose" "[INF]"
+}
+test_verbosity_last_wins_vq_quiet() {
+    # -v then -q -> quiet (no INF)
+    run_script find example.com 198.51.100.42 -v -q
+    assert_stderr_not_contains "vq -> quiet" "[INF]"
+}
+
 # --- run ---
 run_tests "$@"
