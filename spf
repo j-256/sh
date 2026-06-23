@@ -44,9 +44,11 @@ _spf() (
                 echo "  absent. Resolves ${s}host${r} via dig."
                 echo "EXIT STATUS"
                 echo "  0  IP covered, or a:host present literally"
-                echo "  4  not found / absent"
+                echo "  1  Runtime failure"
+                echo "  2  Usage error"
+                echo "  3  dig is not installed"
+                echo "  4  Not found / absent"
                 echo "  5  a:host present only as covered-by-range or via another directive (fragile)"
-                echo "  1  runtime failure   2  usage error   3  dig missing"
                 ;;
             has)
                 echo "NAME"
@@ -59,7 +61,11 @@ _spf() (
                 echo "  depth, and qualifier. Token-aware: include:site.com does not match"
                 echo "  include:site.com.attacker.example. For a:${s}host${r}, find is the richer check."
                 echo "EXIT STATUS"
-                echo "  0  present   4  absent   1  runtime failure   2  usage error   3  dig missing"
+                echo "  0  Present"
+                echo "  1  Runtime failure"
+                echo "  2  Usage error"
+                echo "  3  dig is not installed"
+                echo "  4  Absent"
                 ;;
             ir)
                 echo "NAME"
@@ -74,7 +80,10 @@ _spf() (
                 # shellcheck disable=SC2016 # "Expressions don't expand in single quotes, use double quotes for that." -- $4 is awk's field ref, intentionally literal
                 printf '  for piping: %s ir example.com | awk -F'\''\\t'\'' '\''$4=="include"'\''\n' "$SCRIPT_NAME"
                 echo "EXIT STATUS"
-                echo "  0  rendered   1  runtime failure   2  usage error   3  dig missing"
+                echo "  0  Rendered"
+                echo "  1  Runtime failure"
+                echo "  2  Usage error"
+                echo "  3  dig is not installed"
                 ;;
             flatten)
                 echo "NAME"
@@ -86,7 +95,10 @@ _spf() (
                 echo "  and deduped, one per line. --record emits a single quoted TXT record"
                 echo "  string instead. See $SCRIPT_NAME -h for the staleness caveat."
                 echo "EXIT STATUS"
-                echo "  0  rendered   1  runtime failure   2  usage error   3  dig missing"
+                echo "  0  Rendered"
+                echo "  1  Runtime failure"
+                echo "  2  Usage error"
+                echo "  3  dig is not installed"
                 ;;
             check)
                 echo "NAME"
@@ -97,7 +109,11 @@ _spf() (
                 echo "  Counts DNS lookups (limit 10) and void lookups (limit 2), and flags"
                 echo "  +all, multiple all in the record, and deprecated ptr usage."
                 echo "EXIT STATUS"
-                echo "  0  clean   4  problems found   1  runtime failure   2  usage error   3  dig missing"
+                echo "  0  Clean"
+                echo "  1  Runtime failure"
+                echo "  2  Usage error"
+                echo "  3  dig is not installed"
+                echo "  4  Problems found"
                 ;;
             tree)
                 echo "NAME"
@@ -108,7 +124,10 @@ _spf() (
                 echo "  Prints each mechanism indented by include depth, so delegation"
                 echo "  boundaries and nesting are visible at a glance."
                 echo "EXIT STATUS"
-                echo "  0  rendered   1  runtime failure   2  usage error   3  dig missing"
+                echo "  0  Rendered"
+                echo "  1  Runtime failure"
+                echo "  2  Usage error"
+                echo "  3  dig is not installed"
                 ;;
             *)
                 echo "NAME"
