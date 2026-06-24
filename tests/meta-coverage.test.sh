@@ -14,6 +14,11 @@
 # these files are named meta-* rather than masquerading as tests for scripts
 # called "coverage", "cleanup-on-source", or "curl-pipe".
 #
+# Also checks the script<->INDEX.md bijection in both directions, so the
+# toolio.sh catalog can't drift from the repo:
+#   3. Every bash script has an INDEX.md entry (no script ships undocumented)
+#   4. Every INDEX.md entry has a script in the repo (no stale catalog rows)
+#
 # Also checks the executable-bit convention: test files are execute-only and
 # carry +x; test-runner.sh (the entry point) is +x; test-helpers.sh (sourced,
 # never run) is -x. This mirrors the repo-wide rule that -x marks a source-only
@@ -70,6 +75,51 @@ test_every_test_has_a_script() {
             _fail "$name.test.sh: no matching bash script (../$name) -- rename to meta-$name.test.sh if cross-cutting"
         fi
     done
+}
+
+test_every_script_is_in_index() {
+    # Walk every bash script; each must be catalogued in INDEX.md. Detection
+    # keys on the raw-script link `[script](<name>)` -- the literal `](<name>)`.
+    # The trailing `)` anchors the match so `](s)` can't match `](stats)`, and
+    # the leading `](` keeps it from matching the doc link `](docs/<name>.md...)`
+    local index="$REPO_DIR/INDEX.md"
+    if [ ! -f "$index" ]; then
+        _fail "INDEX.md: not found at $index"
+        return
+    fi
+    local script
+    for script in "$REPO_DIR"/*; do
+        _is_bash_script "$script" || continue
+        local name
+        name="$(basename "$script")"
+        if grep -qF "]($name)" "$index"; then
+            _ok "$name: in INDEX.md"
+        else
+            _fail "$name: missing from INDEX.md -- add a catalog row linking [script]($name)"
+        fi
+    done
+}
+
+test_every_index_entry_has_a_script() {
+    # Reverse direction: each INDEX.md raw-script link `[script](<name>)` must
+    # point at a script that exists in the repo, so a renamed or removed script
+    # can't leave a dead catalog row. Existence is checked with -f, not
+    # _is_bash_script: render-md is catalogued but is the one node (non-bash)
+    # tool, and a dead link is just as broken whatever the shebang
+    local index="$REPO_DIR/INDEX.md"
+    if [ ! -f "$index" ]; then
+        _fail "INDEX.md: not found at $index"
+        return
+    fi
+    local name
+    while IFS= read -r name; do
+        [ -n "$name" ] || continue
+        if [ -f "$REPO_DIR/$name" ]; then
+            _ok "INDEX.md entry '$name': script exists"
+        else
+            _fail "INDEX.md entry '$name': no script ../$name -- remove the stale catalog row or restore the script"
+        fi
+    done < <(grep -oE '\[script\]\([^)]+\)' "$index" | sed 's/^\[script\](//; s/)$//')
 }
 
 test_test_files_are_executable() {
