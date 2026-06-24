@@ -117,7 +117,7 @@ __dbg__main() {
         # Optional safety guard (enabled by $__DBG_STRICT): this function evals refs, so reject
         # constructs/operators that could change eval semantics
         if [ "$__dbg__strict" = true ]; then
-            # shellcheck disable=SC2016 # "Expressions don't expand in single quotes, use double quotes for that."
+            # shellcheck disable=SC2016 # "Expressions don't expand in single quotes, use double quotes for that." -- the single-quoted patterns match literal $, backtick, ${ etc. in the ref; expansion would defeat the guard
             case "$__dbg__arg" in
                 *'$('* | *'`'* | *'${'* | *';'* | *'|'* | *'&'* | *'>'* | *'<'* | *$'\n'* | *$'\r'* | *"'"* | *'"'*)
                     __dbg__error "Unsupported reference '$__dbg__arg' (expected a simple name/ref; no quotes, \$(...), backticks, \${...}, operators, or newlines)"
@@ -185,8 +185,7 @@ __dbg__main() {
         # Identify [@] vs [*]
         local __dbg__is_all_at=false
         local __dbg__is_all_star=false
-        # Ignore false positive: this is just string removal, not an array operation
-        # shellcheck disable=SC2198 # "Arrays don't work as operands in [ ]. Use a loop (or concatenate with * instead of @)."
+        # shellcheck disable=SC2198 # "Arrays don't work as operands in [ ]. Use a loop (or concatenate with * instead of @)." -- $__dbg__arg is a scalar string; the ${var%'[@]'} suffix removal is string ops, not an array operand
         [ "${__dbg__arg%'[@]'}" != "$__dbg__arg" ] && __dbg__is_all_at=true
         [ "${__dbg__arg%'[*]'}" != "$__dbg__arg" ] && __dbg__is_all_star=true
 

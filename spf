@@ -480,7 +480,7 @@ except ValueError:
                 local _row
                 # IFS-whitespace (TAB) merges consecutive separators, collapsing an empty
                 # value field. Peel-split each row so empty fields are preserved.
-                # shellcheck disable=SC2034 # cost is read from the IR to keep field alignment but not used in this consumer
+                # shellcheck disable=SC2034 # "cost appears unused. Verify use (or export if used externally)." -- cost is read from the IR to keep field alignment but not used in this consumer
                 while IFS= read -r _row; do
                     depth="${_row%%$'\t'*}";  _row="${_row#*$'\t'}"
                     src="${_row%%$'\t'*}";    _row="${_row#*$'\t'}"
@@ -566,7 +566,7 @@ EOF
         local _row
         # IFS-whitespace (TAB) merges consecutive separators, collapsing an empty
         # value field. Peel-split each row so empty fields are preserved.
-        # shellcheck disable=SC2034 # cost is read from the IR to keep field alignment but not used in this consumer
+        # shellcheck disable=SC2034 # "cost appears unused. Verify use (or export if used externally)." -- cost is read from the IR to keep field alignment but not used in this consumer
         while IFS= read -r _row; do
             depth="${_row%%$'\t'*}";  _row="${_row#*$'\t'}"
             src="${_row%%$'\t'*}";    _row="${_row#*$'\t'}"
@@ -645,7 +645,7 @@ EOF
         local val
         local cost
         local _row
-        # shellcheck disable=SC2034 # cost is read from the IR to keep field alignment but not used in this consumer
+        # shellcheck disable=SC2034 # "cost appears unused. Verify use (or export if used externally)." -- cost is read from the IR to keep field alignment but not used in this consumer
         while IFS= read -r _row; do
             depth="${_row%%$'\t'*}";  _row="${_row#*$'\t'}"
             src="${_row%%$'\t'*}";    _row="${_row#*$'\t'}"
@@ -752,7 +752,7 @@ EOF
         local _row
         # IFS-whitespace (TAB) merges consecutive separators, collapsing an empty
         # value field. Peel-split each row so empty fields are preserved.
-        # shellcheck disable=SC2034 # cost is read from the IR to keep field alignment but not used in this consumer
+        # shellcheck disable=SC2034 # "cost appears unused. Verify use (or export if used externally)." -- cost is read from the IR to keep field alignment but not used in this consumer
         while IFS= read -r _row; do
             depth="${_row%%$'\t'*}";  _row="${_row#*$'\t'}"
             src="${_row%%$'\t'*}";    _row="${_row#*$'\t'}"

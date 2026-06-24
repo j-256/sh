@@ -318,7 +318,7 @@ shell_func() (
 # @tsv outputs tab-separated values; IFS=$'\t' prevents splitting on spaces in values
 # name/version/count and $json are placeholders -- in real use the caller supplies
 # $json and consumes name/version/count afterwards
-# shellcheck disable=SC2034,SC2154 # "foo appears unused. Verify it or export it." / "var is referenced but not assigned."
+# shellcheck disable=SC2034,SC2154 # "foo appears unused. Verify it or export it." / "var is referenced but not assigned." -- reference snippet: name/version/count are consumed by the caller and $json is supplied by the caller, neither visible in this excerpt
 IFS=$'\t' read -r name version count \
     < <(jq -r '[
         (.name // ""),

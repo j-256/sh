@@ -241,12 +241,10 @@ _progress() (
         local fd="$1"
         shift
         if [ "$fd" -eq 2 ]; then
-            # Ignore ShellCheck: We are explicitly expecting a printf format string in the variable
-            # shellcheck disable=SC2059 # "Don't use variables in the printf format string. Use printf '..%s..' "$foo"."
+            # shellcheck disable=SC2059 # "Don't use variables in the printf format string. Use printf '..%s..' "$foo"." -- "$@" is a caller-supplied format string by design; this is a printf passthrough
             printf "$@" >&2
         else
-            # Ignore ShellCheck: We are explicitly expecting a printf format string in the variable
-            # shellcheck disable=SC2059 # "Don't use variables in the printf format string. Use printf '..%s..' "$foo"."
+            # shellcheck disable=SC2059 # "Don't use variables in the printf format string. Use printf '..%s..' "$foo"." -- "$@" is a caller-supplied format string by design; this is a printf passthrough
             printf "$@"
         fi
     }
