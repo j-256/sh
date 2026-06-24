@@ -24,9 +24,10 @@ Every script is a one-liner away — no install step. Pipe it straight into bash
     curl -fsS https://toolio.sh/tsd | bash -s -- 1800
     curl -fsS https://toolio.sh/inflate | bash -s -- 150 1970
 
-The only exception is [`prompt`](docs/prompt.md?html), which must be sourced so it can set a variable in your shell. For a one-shot run without installing:
+The exceptions are [`prompt`](docs/prompt.md?html) and [`dbg`](docs/dbg.md?html), which must be sourced so they can read from (and, for `prompt`, write to) your shell. For a one-shot run without installing:
 
     . <(curl -fsS https://toolio.sh/prompt) name "Name: "
+    . <(curl -fsS https://toolio.sh/dbg) name
 
 ## Installation
 
