@@ -122,9 +122,17 @@ fi
 
 # --- script runner ---
 
+# All script runners pin PATH to $SHIM_DIR plus the system tool dirs
+# (/usr/bin:/bin) rather than inheriting the caller's $PATH, so a run is
+# deterministic across machines: the script under test sees its shims first,
+# then only stock OS tools -- never a host-specific Homebrew/nvm binary that is
+# present on one box and absent on another. A test that asserts a tool is
+# absent (e.g. "glow is not on PATH") must not hinge on the dev's installs.
+# Tests needing tighter isolation still narrow PATH locally (PATH="$SHIM_DIR"
+# or PATH=""); a test that genuinely needs a non-system tool sets its own PATH
 run_script() {
     # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- $_TIMEOUT is "timeout N" or empty; the split is intentional
-    $_TIMEOUT env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR:$PATH" \
+    $_TIMEOUT env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR:/usr/bin:/bin" \
         /bin/bash "$UNDER_TEST" "$@" >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
 }
@@ -135,7 +143,7 @@ run_script() {
 # passes. stdout/stderr/rc captured the same way as run_script
 run_script_sourced() {
     # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- $_TIMEOUT is "timeout N" or empty; the split is intentional
-    $_TIMEOUT env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR:$PATH" \
+    $_TIMEOUT env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR:/usr/bin:/bin" \
         /bin/bash -c 'script="$1"; shift; . "$script" "$@"' bash "$UNDER_TEST" "$@" \
         >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
@@ -148,7 +156,7 @@ run_script_sourced() {
 run_script_sourced_capture() {
     local vars="$1"; shift
     # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- $_TIMEOUT is "timeout N" or empty; the split is intentional
-    $_TIMEOUT env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR:$PATH" VARS="$vars" \
+    $_TIMEOUT env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR:/usr/bin:/bin" VARS="$vars" \
         /bin/bash -c '
             script="$1"; shift
             . "$script" "$@"
