@@ -28,20 +28,33 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=test-helpers.sh
 source "$SCRIPT_DIR/test-helpers.sh"
 
-# Scripts to check. Excludes:
-#   - render-md (doesn't use the wrapper-function boilerplate)
-#   - snippets.sh (reference doc, not executable as-is)
-#   - test-runner.sh (piping would recursively re-run the suite)
-SCRIPTS=(
-    bak cf-ddns cf-ips-subnets chrome-ua client-credentials
-    colorize-url convert-size curl-timing dkim-pubkey dot-project
-    dw-jwt explode find-zone-by-name gen-catalog generate-p12
-    get git-add-nonsub git-backup httpcode inflate install-bash
-    notify ods-usage pin-dns pkce progress
-    prompt propfind-p12 pwa-prereqs genpw s
-    screenshot-rename slow-server snippet spf stats
-    swap tsd unbak verify-p12
-)
+REPO_DIR="$SCRIPT_DIR/.."
+
+# Test bash scripts only: shebang must be /bin/bash or /usr/bin/env bash.
+# Skips render-md (node), the .md/.sh/.json files at the repo root, and any
+# subdirectories. Identical to the filter in meta-coverage.test.sh
+_is_bash_script() {
+    local file="$1"
+    [ -f "$file" ] || return 1
+    case "$(basename "$file")" in *.md|*.sh|*.json) return 1 ;; esac
+    local first_line
+    first_line="$(head -1 "$file")"
+    case "$first_line" in
+        '#!/bin/bash'|'#!/usr/bin/env bash') return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Bash scripts to skip these checks, as a space-padded membership string
+# (e.g. " foo bar "). Empty today: every bash script in the repo survives
+# `<src> | bash -- -h` in all three shapes below. The historical exclusions are
+# now filtered structurally rather than hand-listed:
+#   - render-md      node shebang, not bash -- _is_bash_script rejects it
+#   - snippets.sh    .sh extension -- _is_bash_script rejects it
+#   - test-runner.sh lives in tests/, never reached by the repo-root walk
+# Add a name here only if a real bash script genuinely cannot be -h-piped
+EXCLUDE=" "
+_is_excluded() { case "$EXCLUDE" in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 
 # Pipe a script's source into `bash -s -- -h`, capturing stdout/stderr/rc
 # into $TEST_DIR. Simulates `curl -s URL | bash -s -- -h`
@@ -107,16 +120,24 @@ assert_help_clean() {
 }
 
 test_all_scripts_pipe_cleanly() {
-    local s
-    for s in "${SCRIPTS[@]}"; do
+    local script
+    for script in "$REPO_DIR"/*; do
+        _is_bash_script "$script" || continue
+        local s
+        s="$(basename "$script")"
+        _is_excluded "$s" && continue
         pipe_script "$s"
         assert_help_clean "$s" "stdin-pipe"
     done
 }
 
 test_all_scripts_procsub_exec_cleanly() {
-    local s
-    for s in "${SCRIPTS[@]}"; do
+    local script
+    for script in "$REPO_DIR"/*; do
+        _is_bash_script "$script" || continue
+        local s
+        s="$(basename "$script")"
+        _is_excluded "$s" && continue
         procsub_exec_script "$s"
         assert_help_clean "$s" "procsub-exec"
     done
