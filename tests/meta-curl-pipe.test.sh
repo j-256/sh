@@ -39,7 +39,7 @@ SCRIPTS=(
     get git-add-nonsub git-backup httpcode inflate install-bash
     notify ods-usage pin-dns pkce progress
     prompt propfind-p12 pwa-prereqs genpw s
-    screenshot-rename slow-server snippet spf-find-ip stats
+    screenshot-rename slow-server snippet spf stats
     swap tsd unbak verify-p12
 )
 

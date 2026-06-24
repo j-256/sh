@@ -31,19 +31,19 @@ Each row's primary link opens the doc; the `script` link opens the raw script.
 | Tool | Description |
 |------|-------------|
 | [`pin-dns`](docs/pin-dns.md?html) · [script](pin-dns) | curl wrapper that overrides DNS resolution for a hostname without touching /etc/hosts |
-| [`curl-timing`](docs/curl-timing.md?html) · [script](curl-timing) | Time HTTP requests and compare URLs head-to-head with IQR-aware outlier detection |
-| [`httpcode`](docs/httpcode.md?html) · [script](httpcode) | Quick HTTP status code lookup — standard codes plus Cloudflare, nginx, and IIS non-standard codes, all offline |
 | [`chrome-ua`](docs/chrome-ua.md?html) · [script](chrome-ua) | Print a realistic Chrome User-Agent from the local install or Google's live API |
+| [`httpcode`](docs/httpcode.md?html) · [script](httpcode) | Quick HTTP status code lookup — standard codes plus Cloudflare, nginx, and IIS non-standard codes, all offline |
+| [`curl-timing`](docs/curl-timing.md?html) · [script](curl-timing) | Time HTTP requests and compare URLs head-to-head with IQR-aware outlier detection |
 | [`slow-server`](docs/slow-server.md?html) · [script](slow-server) | Local HTTP server that responds after a configurable delay, for testing timeout logic |
 
 ## DNS & networking
 
 | Tool | Description |
 |------|-------------|
-| [`cf-ddns`](docs/cf-ddns.md?html) · [script](cf-ddns) | Update a Cloudflare DNS A record to match this machine's current outbound IP |
-| [`spf-find-ip`](docs/spf-find-ip.md?html) · [script](spf-find-ip) | Recursively search SPF records to see if a given IP can send mail for a domain |
-| [`cf-ips-subnets`](docs/cf-ips-subnets.md?html) · [script](cf-ips-subnets) | Expand Cloudflare IPv4 ranges into /16 or /24 subnets for picky firewalls |
+| [`spf`](docs/spf.md?html) · [script](spf) | Recursively resolve and inspect SPF records – find whether an IP is authorized, check record health, flatten to all addresses, or print the include tree |
 | [`dkim-pubkey`](docs/dkim-pubkey.md?html) · [script](dkim-pubkey) | Extract the base64-encoded public key from a DKIM DNS record |
+| [`cf-ddns`](docs/cf-ddns.md?html) · [script](cf-ddns) | Update a Cloudflare DNS A record to match this machine's current outbound IP |
+| [`cf-ips-subnets`](docs/cf-ips-subnets.md?html) · [script](cf-ips-subnets) | Expand Cloudflare IPv4 ranges into /16 or /24 subnets for picky firewalls |
 
 ## File operations
 
@@ -59,15 +59,15 @@ Each row's primary link opens the doc; the `script` link opens the raw script.
 
 | Tool | Description |
 |------|-------------|
-| [`genpw`](docs/genpw.md?html) · [script](genpw) | Generate random passwords or strings with configurable length, charset, and exclusions |
 | [`pkce`](docs/pkce.md?html) · [script](pkce) | Generate a PKCE code verifier and its SHA256 challenge for OAuth2 authorization flows |
+| [`genpw`](docs/genpw.md?html) · [script](genpw) | Generate random passwords or strings with configurable length, charset, and exclusions |
 | [`client-credentials`](docs/client-credentials.md?html) · [script](client-credentials) | Fetch an OAuth2 access token via the `client_credentials` grant (defaults tuned for SFCC, works against any token URL) |
 
 ## Development
 
 | Tool | Description |
 |------|-------------|
-| [`git-backup`](docs/git-backup.md?html) · [script](git-backup) | Push tracked + untracked changes to a timestamped remote branch, then restore local state |
+| [`git-backup`](docs/git-backup.md?html) · [script](git-backup) | Push tracked + untracked changes to a timestamped remote tag, then restore local state |
 | [`git-add-nonsub`](docs/git-add-nonsub.md?html) · [script](git-add-nonsub) | Stage a git repository inside another git repository without treating it as a submodule |
 | [`find-cc-tool-output`](docs/find-cc-tool-output.md?html) · [script](find-cc-tool-output) | Recover full, untruncated tool output from Claude Code session transcripts |
 
@@ -83,7 +83,6 @@ Each row's primary link opens the doc; the `script` link opens the raw script.
 
 | Tool | Description |
 |------|-------------|
-| [`s`](docs/s.md?html) · [script](s) | `sfcc-ci` wrapper with shortcuts, enhanced output, and human-readable token expiration |
 | [`generate-p12`](docs/generate-p12.md?html) · [script](generate-p12) | Generate a PKCS#12 client certificate for B2C staging code uploads that require mTLS |
 | [`dot-project`](docs/dot-project.md?html) · [script](dot-project) | Generate `.project` files for B2C cartridge directories so Eclipse-based tooling picks them up |
 | [`verify-p12`](docs/verify-p12.md?html) · [script](verify-p12) | Smoke-test WebDAV `/Cartridges` access with Bearer or Basic auth, with optional `.p12` mTLS |
@@ -93,6 +92,7 @@ Each row's primary link opens the doc; the `script` link opens the raw script.
 | [`ods-usage`](docs/ods-usage.md?html) · [script](ods-usage) | Calculate On-Demand Sandbox credits used from an ODS API response |
 | [`gen-catalog`](docs/gen-catalog.md?html) · [script](gen-catalog) | Generate SFCC catalog XML (base products, variants, relationships) for seeding sandboxes or QA |
 | [`pwa-prereqs`](docs/pwa-prereqs.md?html) · [script](pwa-prereqs) | Check or install PWA Kit development prerequisites on macOS (Xcode CLT, Homebrew, nvm, Node LTS) |
+| [`s`](docs/s.md?html) · [script](s) | `sfcc-ci` wrapper with shortcuts, enhanced output, and human-readable token expiration |
 
 ## Meta
 
