@@ -70,6 +70,7 @@ Each row's primary link opens the doc; the `script` link opens the raw script.
 | [`git-backup`](docs/git-backup.md?html) · [script](git-backup) | Push tracked + untracked changes to a timestamped remote tag, then restore local state |
 | [`git-add-nonsub`](docs/git-add-nonsub.md?html) · [script](git-add-nonsub) | Stage a git repository inside another git repository without treating it as a submodule |
 | [`find-cc-tool-output`](docs/find-cc-tool-output.md?html) · [script](find-cc-tool-output) | Recover full, untruncated tool output from Claude Code session transcripts |
+| [`scdef`](docs/scdef.md?html) · [script](scdef) | Look up a ShellCheck warning or error by code or message – brief fix examples, full page, or raw markdown |
 
 ## macOS
 

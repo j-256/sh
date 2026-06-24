@@ -1,0 +1,733 @@
+#!/bin/bash
+# scdef - look up a ShellCheck warning/error definition by code or message
+#
+# Usage:
+#   scdef [options] <code>
+#   scdef -s <pattern>
+#   scdef --list
+#   scdef -h
+#
+# Options:
+#   -r, --raw       Raw markdown source, no extraction or rendering
+#       --full      Full wiki page (rendered) instead of brief
+#   -u, --url       Print wiki URL and exit
+#   -o, --open      Open the wiki page in a browser
+#   -s, --search    Search index by description (case-insensitive substring)
+#   -l, --list      Print the full index
+#       --refresh   Force refresh of the cached index
+#   -h, --help      Show help
+#
+# Environment:
+#   SCDEF_RENDERER  Force a specific renderer: glow|render-md|text|none
+#                   Default: auto (glow > render-md > built-in plaintext)
+#   XDG_CACHE_HOME  Cache root (default $HOME/.cache)
+
+_scdef() (
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="scdef" ;; esac
+
+    local INDEX_URL='https://www.shellcheck.net/wiki/'
+    local WIKI_BASE='https://github.com/koalaman/shellcheck/wiki'
+    local RAW_BASE='https://raw.githubusercontent.com/wiki/koalaman/shellcheck'
+    local CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/scdef"
+    local CACHE_FILE="$CACHE_DIR/index.tsv"
+    local CACHE_TTL_SEC=$((7 * 24 * 60 * 60))
+
+    _show_help() {
+        local s; [ -t 1 ] && s=$'\033[4m'
+        local r; [ -t 1 ] && r=$'\033[24m'
+        echo "NAME"
+        echo "  $SCRIPT_NAME - look up a ShellCheck warning/error by code or message"
+        echo "SYNOPSIS"
+        echo "  $SCRIPT_NAME [${s}options${r}] <${s}code${r}>"
+        echo "  $SCRIPT_NAME -s <${s}pattern${r}>"
+        echo "  $SCRIPT_NAME --list"
+        echo "DESCRIPTION"
+        echo "  Fetches a ShellCheck wiki entry and prints a brief summary -- title,"
+        echo "  problematic example, correct example, URL. Use --full for the whole"
+        echo "  page; --raw for the markdown source. The code argument is flexible:"
+        echo "  SC2155, sc2155, 2155, '#SC2155', '[SC2155]' all resolve to SC2155."
+        echo "  With --search, looks up by message; auto-fetches on a unique match."
+        echo "OPTIONS"
+        echo "  -r, --raw                Raw markdown (skip extraction and rendering)"
+        echo "      --full               Full wiki page (rendered) instead of brief"
+        echo "  -u, --url                Print the wiki URL and exit"
+        echo "  -o, --open               Open the wiki page in a browser"
+        echo "  -s, --search ${s}pattern${r}     Search index by description (substring, case-insensitive)"
+        echo "  -l, --list               Print the full index (SC####<TAB>description)"
+        echo "      --refresh            Force refresh of the cached index (7-day TTL)"
+        echo "  -h, --help               Show this help message"
+        echo "EXAMPLES"
+        echo "  $SCRIPT_NAME 2155                       # brief summary to stdout"
+        echo "  $SCRIPT_NAME --full 2155                # full wiki page"
+        echo "  $SCRIPT_NAME --raw 2155 | glow -        # pipe markdown to a renderer"
+        echo "  $SCRIPT_NAME -u 2086                    # print URL only"
+        echo "  $SCRIPT_NAME -s 'declare and assign'    # search by message"
+        echo "ENVIRONMENT"
+        echo "  SCDEF_RENDERER    Force renderer: glow, render-md, text, or none"
+        echo "                    Default: auto (glow > render-md > built-in plaintext)"
+        echo "  XDG_CACHE_HOME    Cache root (default \$HOME/.cache)"
+        echo "EXIT STATUS"
+        echo "  0  Success"
+        echo "  1  Runtime failure (network, filesystem)"
+        echo "  2  Usage error"
+        echo "  3  Dependency error (curl missing; open/xdg-open missing for --open)"
+        echo "  4  No search matches"
+        echo "  5  Code not found on the ShellCheck wiki"
+        echo "DEPENDENCIES"
+        echo "  curl"
+        echo "  column     (optional, aligns --search output on a TTY)"
+        echo "  glow       (optional, preferred renderer)"
+        echo "  render-md  (optional, fallback renderer)"
+        echo "  open       (required only for --open; xdg-open on Linux)"
+    }
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+    _warn()  { echo "[WRN][$SCRIPT_NAME] $*" >&2; }
+    _info()  { echo "[INF][$SCRIPT_NAME] $*" >&2; }
+
+    _expand_short_opts() {
+        local value_opts="$1"; shift
+        _EXPANDED=()
+        local passthru=""
+        local arg
+        local rest
+        local c
+        for arg in "$@"; do
+            if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
+            case "$arg" in
+                --)          passthru=1; _EXPANDED+=("$arg") ;;
+                --*|-|"")    _EXPANDED+=("$arg") ;;
+                -[a-zA-Z]?*)
+                    rest="${arg#-}"
+                    while [ -n "$rest" ]; do
+                        c="${rest%"${rest#?}"}"; rest="${rest#?}"
+                        _EXPANDED+=("-$c")
+                        case "$value_opts" in *"$c"*)
+                            [ -n "$rest" ] && _EXPANDED+=("$rest")
+                            rest="" ;;
+                        esac
+                    done ;;
+                *)        _EXPANDED+=("$arg") ;;
+            esac
+        done
+    }
+    # Normalize one string into a canonical "SC####" form. Accepts SC2155,
+    # sc2155, 2155, SC-2155, SC_2155, '#SC2155', '[SC2155]' etc. Prints the
+    # canonical form on success; returns 1 on no match
+    _normalize() {
+        local in="$1"
+        in="${in#"${in%%[![:space:]]*}"}"
+        in="${in%"${in##*[![:space:]]}"}"
+        in="${in#\#}"
+        in="${in#\[}"
+        in="${in%\]}"
+        local re='^[Ss][Cc][-_[:space:]]?([0-9]+)$'
+        if [[ "$in" =~ $re ]]; then
+            printf 'SC%s' "${BASH_REMATCH[1]}"
+            return 0
+        fi
+        if [[ "$in" =~ ^([0-9]+)$ ]]; then
+            printf 'SC%s' "${BASH_REMATCH[1]}"
+            return 0
+        fi
+        return 1
+    }
+    _build_url()         { printf '%s/%s'    "$WIKI_BASE" "$1"; }
+    _build_raw_url()     { printf '%s/%s.md' "$RAW_BASE"  "$1"; }
+    # Fetch $1 to file $2. Silent on failure -- callers inspect the return
+    # code and the _FETCH_CURL_RC / _FETCH_HTTP vars to compose their own
+    # messaging (the same failure is fatal in some contexts and recoverable
+    # in others). The dest file is populated only on success
+    # Return: 0=200, 2=404, 1=transport error or unexpected HTTP
+    _fetch() {
+        local url="$1"
+        local dest="$2"
+        _FETCH_CURL_RC=0
+        _FETCH_HTTP=""
+        _FETCH_HTTP="$(curl -fsS -L -o "$dest" -w '%{http_code}' "$url" 2>/dev/null)"
+        _FETCH_CURL_RC=$?
+        if [ "$_FETCH_CURL_RC" -ne 0 ] && [ "$_FETCH_HTTP" != "404" ]; then
+            rm -f "$dest"
+            return 1
+        fi
+        case "$_FETCH_HTTP" in
+            200) return 0 ;;
+            404) rm -f "$dest"; return 2 ;;
+            *)   rm -f "$dest"; return 1 ;;
+        esac
+    }
+    # Build the index by stripping every HTML tag and walking SC#### markers.
+    # Resilient to wiki HTML changes as long as the page contains
+    # "SC#### - description" somewhere in the text
+    # Emits SC####<TAB>description per line
+    _parse_index() {
+        # shellcheck disable=SC1003 # "Want to escape a single quote? echo 'This is how it'\''s done'." -- the \'$'\n'' below injects a literal newline before each SC#### marker; the trailing \' closes the quote, not a botched escape
+        sed -E \
+            -e 's/<[^>]*>/ /g' \
+            -e 's/&ndash;/-/g; s/&mdash;/-/g' \
+            -e 's/&amp;/\&/g; s/&lt;/</g; s/&gt;/>/g' \
+            -e 's/&quot;/"/g; s/&#39;/'"'"'/g; s/&apos;/'"'"'/g' \
+            -e 's/&#13;//g; s/&#x2026;/.../g; s/&hellip;/.../g; s/&nbsp;/ /g' \
+            -e 's/&#([0-9]+);/ /g' \
+            -e 's/&[a-zA-Z]+;/ /g' \
+        | tr '\n' ' ' \
+        | sed -E 's/(SC[0-9]+)/\'$'\n''\1/g' \
+        | awk '
+            /^SC[0-9]+/ {
+                if (match($0, /^SC[0-9]+/)) {
+                    code = substr($0, 1, RLENGTH)
+                    desc = substr($0, RLENGTH + 1)
+                    sub(/^[[:space:]-]+/, "", desc)
+                    sub(/[[:space:]]+$/, "", desc)
+                    gsub(/[[:space:]]+/, " ", desc)
+                    if (!(code in seen)) {
+                        seen[code] = 1
+                        print code "\t" desc
+                    }
+                }
+            }
+        '
+    }
+    # Ensure a cached index exists. Respects $force and CACHE_TTL_SEC. On
+    # fetch/parse failure, falls back to the existing cache (stale or
+    # otherwise) with a warning, so scdef keeps working offline. Prints path
+    # to the cache file on stdout; returns 1 only when there is no usable
+    # cache at all
+    _ensure_index() {
+        local force="$1"
+        local have_cache=0
+        [ -s "$CACHE_FILE" ] && have_cache=1
+
+        local need=0
+        if [ "$force" = "1" ] || [ "$have_cache" = "0" ]; then
+            need=1
+        else
+            local mtime
+            local now
+            local age
+            if mtime="$(stat -f '%m' "$CACHE_FILE" 2>/dev/null)" \
+                || mtime="$(stat -c '%Y' "$CACHE_FILE" 2>/dev/null)"; then
+                now="$(date +%s)"
+                age=$((now - mtime))
+                [ "$age" -gt "$CACHE_TTL_SEC" ] && need=1
+            else
+                need=1
+            fi
+        fi
+
+        if [ "$need" = "1" ]; then
+            if ! command -v curl >/dev/null 2>&1; then
+                if [ "$have_cache" = "1" ]; then
+                    _warn "curl missing; using existing cache (may be stale)"
+                    printf '%s\n' "$CACHE_FILE"
+                    return 0
+                fi
+                _error "curl is required"
+                return 3
+            fi
+            if ! mkdir -p "$CACHE_DIR" 2>/dev/null; then
+                if [ "$have_cache" = "1" ]; then
+                    _warn "Cannot write to $CACHE_DIR; using existing cache"
+                    printf '%s\n' "$CACHE_FILE"
+                    return 0
+                fi
+                _error "Cannot create cache dir: $CACHE_DIR"
+                return 1
+            fi
+
+            _info "Refreshing index from $INDEX_URL"
+            local raw
+            if ! raw="$(mktemp "$CACHE_DIR/raw.XXXXXX" 2>/dev/null)"; then
+                if [ "$have_cache" = "1" ]; then
+                    _warn "mktemp failed; using existing cache"
+                    printf '%s\n' "$CACHE_FILE"
+                    return 0
+                fi
+                _error "mktemp failed"
+                return 1
+            fi
+            local tmp
+            if ! tmp="$(mktemp "$CACHE_DIR/index.XXXXXX" 2>/dev/null)"; then
+                rm -f "$raw"
+                if [ "$have_cache" = "1" ]; then
+                    _warn "mktemp failed; using existing cache"
+                    printf '%s\n' "$CACHE_FILE"
+                    return 0
+                fi
+                _error "mktemp failed"
+                return 1
+            fi
+
+            _fetch "$INDEX_URL" "$raw"
+            local fetch_rc=$?
+            if [ "$fetch_rc" -ne 0 ]; then
+                rm -f "$raw" "$tmp"
+                local reason
+                if [ "$_FETCH_CURL_RC" -ne 0 ]; then
+                    reason="curl exit $_FETCH_CURL_RC"
+                else
+                    reason="HTTP $_FETCH_HTTP"
+                fi
+                if [ "$have_cache" = "1" ]; then
+                    _warn "Fetch failed ($reason); using existing cache (may be stale)"
+                    printf '%s\n' "$CACHE_FILE"
+                    return 0
+                fi
+                _error "Fetch failed ($reason) for $INDEX_URL"
+                return 1
+            fi
+
+            if ! _parse_index < "$raw" > "$tmp" || [ ! -s "$tmp" ]; then
+                rm -f "$raw" "$tmp"
+                if [ "$have_cache" = "1" ]; then
+                    _warn "Index parse failed (wiki HTML may have changed); using existing cache"
+                    printf '%s\n' "$CACHE_FILE"
+                    return 0
+                fi
+                _error "Failed to parse index (wiki HTML may have changed)"
+                return 1
+            fi
+            rm -f "$raw"
+
+            if ! mv "$tmp" "$CACHE_FILE"; then
+                rm -f "$tmp"
+                if [ "$have_cache" = "1" ]; then
+                    _warn "Cache write failed; using existing cache"
+                    printf '%s\n' "$CACHE_FILE"
+                    return 0
+                fi
+                _error "Cannot write cache file: $CACHE_FILE"
+                return 1
+            fi
+        fi
+        printf '%s\n' "$CACHE_FILE"
+    }
+    # Brief-extract a wiki page's markdown to: title + Problematic blocks +
+    # Correct blocks + URL. Walks the page once: the first non-section ATX
+    # heading is the title; subsequent headings whose first word is
+    # "Problematic" or "Correct" begin a section whose fenced code blocks are
+    # captured. Output is markdown (so the rendering step can still apply).
+    # $1: SC code, $2: source URL
+    _extract_brief() {
+        local code="$1"
+        local url="$2"
+        awk -v code="$code" -v url="$url" '
+            BEGIN { in_code=0; section=""; have_title=0 }
+
+            # ATX heading lines change section state. Only the first non-
+            # section heading becomes the title
+            /^##+[[:space:]]+/ {
+                t = $0
+                sub(/^##+[[:space:]]+/, "", t)
+                sub(/[[:space:]]+$/, "", t)
+                if (t ~ /^[Pp]roblematic/) { section = "problem"; next }
+                if (t ~ /^[Cc]orrect/)     { section = "correct"; next }
+                if (!have_title) {
+                    title = t
+                    sub(/[.:][[:space:]]*$/, "", title)
+                    have_title = 1
+                }
+                section = "other"
+                next
+            }
+
+            /^[[:space:]]*```/ {
+                in_code = !in_code
+                next
+            }
+
+            in_code && section == "problem" { problem[++np] = $0; next }
+            in_code && section == "correct" { correct[++nc] = $0; next }
+
+            END {
+                if (have_title) {
+                    printf "# %s: %s\n\n", code, title
+                } else {
+                    printf "# %s\n\n", code
+                }
+                if (np > 0) {
+                    print "## Problematic"
+                    print ""
+                    print "```sh"
+                    for (i = 1; i <= np; i++) print problem[i]
+                    print "```"
+                    print ""
+                }
+                if (nc > 0) {
+                    print "## Correct"
+                    print ""
+                    print "```sh"
+                    for (i = 1; i <= nc; i++) print correct[i]
+                    print "```"
+                    print ""
+                }
+                printf "%s\n", url
+            }
+        '
+    }
+
+    # Markdown-to-text converter tuned for shellcheck wiki pages. Handles
+    # the small feature set they actually use: ATX headings, fenced code
+    # blocks, inline backticks, [text](url) links, **bold** / *italic* /
+    # _italic_, and bullet lists. Code content is preserved verbatim (just
+    # indented), so asterisks inside code samples don't get eaten
+    _to_text() {
+        awk '
+            BEGIN { in_code = 0; blank_pending = 0 }
+
+            # Fenced code-block boundary. Drop the fence line itself
+            /^[[:space:]]*```/ {
+                in_code = !in_code
+                next
+            }
+
+            # Inside code: emit indented, verbatim
+            in_code {
+                print "    " $0
+                blank_pending = 0
+                next
+            }
+
+            {
+                line = $0
+
+                # ATX headings: strip leading #s and following space
+                if (match(line, /^#+[[:space:]]+/)) {
+                    line = substr(line, RLENGTH + 1)
+                }
+
+                # Protect inline `code` spans so we do not mangle their
+                # asterisks/underscores. Swap backtick-bounded runs for
+                # NUL-delimited placeholders, transform, then restore
+                n_code = 0
+                while (match(line, /`[^`]+`/)) {
+                    n_code++
+                    code_save[n_code] = substr(line, RSTART + 1, RLENGTH - 2)
+                    line = substr(line, 1, RSTART - 1) "\001" n_code "\002" \
+                           substr(line, RSTART + RLENGTH)
+                }
+
+                # [text](url) -> text (url). Bare [text] without a link is
+                # left alone -- the wiki uses [[SC####]] sparingly and it
+                # reads fine
+                while (match(line, /\[[^]]+\]\([^)]+\)/)) {
+                    seg = substr(line, RSTART, RLENGTH)
+                    rb = index(seg, "]")
+                    text = substr(seg, 2, rb - 2)
+                    url  = substr(seg, rb + 2, length(seg) - rb - 2)
+                    line = substr(line, 1, RSTART - 1) text " (" url ")" \
+                           substr(line, RSTART + RLENGTH)
+                }
+
+                # Strip emphasis markers. POSIX awk gsub does not support
+                # backreferences, so iterate with match/substr. Process bold
+                # first so **x** does not get eaten by the *x* pass
+                while (match(line, /\*\*[^*]+\*\*/)) {
+                    inner = substr(line, RSTART + 2, RLENGTH - 4)
+                    line  = substr(line, 1, RSTART - 1) inner \
+                            substr(line, RSTART + RLENGTH)
+                }
+                while (match(line, /\*[^*]+\*/)) {
+                    inner = substr(line, RSTART + 1, RLENGTH - 2)
+                    line  = substr(line, 1, RSTART - 1) inner \
+                            substr(line, RSTART + RLENGTH)
+                }
+                # _italic_ -- require non-word context on both sides so we do
+                # not eat `$_NAMES_LIKE_THIS`. Handles `_x_`, ` _x_ `, `_x_\n`,
+                # `\n_x_` by checking lead and tail separately
+                start = 1
+                while (match(substr(line, start), /_[^_[:space:]][^_]*_/)) {
+                    abs = start + RSTART - 1
+                    before = (abs == 1) ? "" : substr(line, abs - 1, 1)
+                    after  = substr(line, abs + RLENGTH, 1)
+                    if ((before == "" || before ~ /[[:space:][:punct:]]/) \
+                        && (after == "" || after ~ /[[:space:][:punct:]]/)) {
+                        inner = substr(line, abs + 1, RLENGTH - 2)
+                        line  = substr(line, 1, abs - 1) inner \
+                                substr(line, abs + RLENGTH)
+                        start = abs + length(inner)
+                    } else {
+                        start = abs + RLENGTH
+                    }
+                }
+
+                # Restore protected inline code, keeping the backticks as
+                # visual markers for the terminal reader
+                while (match(line, /\001[0-9]+\002/)) {
+                    tag = substr(line, RSTART, RLENGTH)
+                    id = substr(tag, 2, length(tag) - 2) + 0
+                    line = substr(line, 1, RSTART - 1) "`" code_save[id] "`" \
+                           substr(line, RSTART + RLENGTH)
+                }
+
+                # Collapse runs of blank lines to one
+                if (line ~ /^[[:space:]]*$/) {
+                    blank_pending = 1
+                    next
+                }
+                if (blank_pending) { print ""; blank_pending = 0 }
+                print line
+            }
+        '
+    }
+    # Pick a renderer per $SCDEF_RENDERER (if set) or by auto-detecting the
+    # preferred chain (glow > render-md > text). Prints the chosen renderer
+    # name on stdout: "glow", "render-md", "text", or "none" (raw markdown).
+    # Honors a TTY check: TTY-only renderers fall back to text when stdout
+    # isn't a TTY, since they would emit nothing
+    _pick_renderer() {
+        local choice="${SCDEF_RENDERER:-}"
+        if [ -n "$choice" ]; then
+            case "$choice" in
+                glow|render-md|text|none) ;;
+                *)
+                    _warn "Unknown SCDEF_RENDERER '$choice'; falling back to auto"
+                    choice=""
+                    ;;
+            esac
+        fi
+
+        # Forced choices: validate availability, fall back if missing or if
+        # stdout is not a TTY for TTY-only renderers
+        case "$choice" in
+            glow|render-md)
+                if ! command -v "$choice" >/dev/null 2>&1; then
+                    _warn "$choice is not on PATH; falling back to text"
+                    choice="text"
+                elif [ ! -t 1 ]; then
+                    _warn "$choice produces no output when stdout is not a TTY; falling back to text"
+                    choice="text"
+                fi
+                ;;
+            text|none)
+                ;;
+            "")
+                # Auto: pick the best TTY-capable renderer; on non-TTY, text
+                if [ -t 1 ]; then
+                    if command -v glow >/dev/null 2>&1; then
+                        choice="glow"
+                    elif command -v render-md >/dev/null 2>&1; then
+                        choice="render-md"
+                    else
+                        choice="text"
+                    fi
+                else
+                    choice="text"
+                fi
+                ;;
+        esac
+        printf '%s' "$choice"
+    }
+
+    # Render markdown on stdin using the picked renderer. Caller decides
+    # which renderer via _pick_renderer; this just executes
+    _render() {
+        local r="$1"
+        case "$r" in
+            glow)      glow - ;;
+            render-md) render-md ;;
+            text)      _to_text ;;
+            none)      cat ;;
+            *)         _to_text ;;  # defensive default
+        esac
+    }
+    # Fetch the wiki page for a canonical SC#### code, then either:
+    #   --raw:  emit the markdown source verbatim
+    #   --full: pass full page (with header + footer) through the renderer
+    #   default (brief): extract title + Problematic + Correct + URL, render
+    _fetch_and_render() {
+        local code="$1"
+        if ! command -v curl >/dev/null 2>&1; then
+            _error "curl is required"
+            return 3
+        fi
+        local url;     url="$(_build_url "$code")"
+        local raw_url; raw_url="$(_build_raw_url "$code")"
+        local body_file
+        if ! body_file="$(mktemp -t scdef-body.XXXXXX)"; then
+            _error "mktemp failed"
+            return 1
+        fi
+
+        _fetch "$raw_url" "$body_file"
+        local rc=$?
+        if [ "$rc" -eq 2 ]; then
+            rm -f "$body_file"
+            _error "$code not found on the ShellCheck wiki ($url)"
+            return 5
+        fi
+        if [ "$rc" -ne 0 ]; then
+            rm -f "$body_file"
+            local reason
+            if [ "$_FETCH_CURL_RC" -ne 0 ]; then
+                reason="curl exit $_FETCH_CURL_RC"
+            else
+                reason="HTTP $_FETCH_HTTP"
+            fi
+            _error "Fetch failed ($reason) for $raw_url"
+            return 1
+        fi
+
+        if [ "$raw" = "1" ]; then
+            cat "$body_file"
+            rm -f "$body_file"
+            return 0
+        fi
+
+        local renderer; renderer="$(_pick_renderer)"
+        if [ "$full" = "1" ]; then
+            {
+                printf '# %s\n\n' "$code"
+                cat "$body_file"
+                printf '\n\n---\n%s\n' "$url"
+            } | _render "$renderer"
+        else
+            _extract_brief "$code" "$url" < "$body_file" | _render "$renderer"
+        fi
+        rm -f "$body_file"
+    }
+
+    # Help/exit fast path: do not require curl just to print help
+    case "$1" in
+        -h|--help) _show_help; return 0 ;;
+    esac
+
+    # Expand bundled/glued short opts and =-joined long opts
+    _expand_short_opts "s" "$@"
+    set -- "${_EXPANDED[@]}"; unset _EXPANDED
+
+    local raw=0
+    local full=0
+    local url_only=0
+    local open_in_browser=0
+    local search=0
+    local search_pattern=""
+    local list=0
+    local refresh=0
+    local args=()
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -h|--help)    _show_help; return 0 ;;
+            -r|--raw)     raw=1; shift ;;
+            --full)       full=1; shift ;;
+            -u|--url)     url_only=1; shift ;;
+            -o|--open)    open_in_browser=1; shift ;;
+            -l|--list)    list=1; shift ;;
+            --refresh)    refresh=1; shift ;;
+
+            -s|--search)
+                [ -n "${2-}" ] || { _error "--search requires a <pattern>. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                search=1; search_pattern="$2"; shift 2 ;;
+            --search=*)
+                search_pattern="${1#*=}"
+                [ -n "$search_pattern" ] || { _error "--search requires a <pattern>. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                search=1; shift ;;
+
+            --) shift; while [ $# -gt 0 ]; do args+=("$1"); shift; done ;;
+            -*) _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+            *)  args+=("$1"); shift ;;
+        esac
+    done
+
+    # Mode validation
+    local modes=$((url_only + open_in_browser + search + list))
+    if [ "$modes" -gt 1 ]; then
+        _error "-u, -o, -s, -l are mutually exclusive. Run \`$SCRIPT_NAME -h\` for usage"
+        return 2
+    fi
+    if [ "$raw" = "1" ] && [ "$full" = "1" ]; then
+        _error "--raw and --full are mutually exclusive. Run \`$SCRIPT_NAME -h\` for usage"
+        return 2
+    fi
+
+    # curl is gated per-path: _fetch_and_render needs it always; _ensure_index
+    # needs it only when refreshing. Each path checks for itself, so a fresh
+    # cache + missing curl can still serve --list/--search
+
+    # --list: dump cached index
+    if [ "$list" = "1" ]; then
+        local idx
+        if ! idx="$(_ensure_index "$refresh")"; then
+            return 1
+        fi
+        cat "$idx"
+        return 0
+    fi
+
+    # --search: substring match against descriptions
+    if [ "$search" = "1" ]; then
+        local idx
+        if ! idx="$(_ensure_index "$refresh")"; then
+            return 1
+        fi
+
+        local matches; matches="$(grep -iF -- "$search_pattern" "$idx")"
+        if [ -z "$matches" ]; then
+            _error "No matches for '$search_pattern'"
+            return 4
+        fi
+
+        local n; n="$(printf '%s\n' "$matches" | wc -l | tr -d '[:space:]')"
+        if [ "$n" = "1" ]; then
+            local hit_code; hit_code="$(printf '%s' "$matches" | awk -F'\t' '{print $1}')"
+            _info "1 match: $hit_code -- fetching wiki page"
+            _fetch_and_render "$hit_code"
+            return $?
+        fi
+
+        # Align columns for a terminal reader; preserve raw TSV when piped
+        # (so `| fzf`, `| awk`, etc. still work). Fall back to raw TSV if
+        # `column` is unavailable
+        if [ -t 1 ] && command -v column >/dev/null 2>&1; then
+            printf '%s\n' "$matches" | column -t -s "$(printf '\t')"
+        else
+            printf '%s\n' "$matches"
+        fi
+        return 0
+    fi
+
+    # Direct code lookup -- need exactly one positional
+    if [ "${#args[@]}" -eq 0 ]; then
+        _error "Must provide a code. Run \`$SCRIPT_NAME -h\` for usage"
+        return 2
+    fi
+    if [ "${#args[@]}" -gt 1 ]; then
+        _error "Too many arguments (expected 1, got ${#args[@]}). Run \`$SCRIPT_NAME -h\` for usage"
+        return 2
+    fi
+
+    local code
+    if ! code="$(_normalize "${args[0]}")"; then
+        _error "Invalid code '${args[0]}' (expected SC#### or ####). Run \`$SCRIPT_NAME -h\` for usage"
+        return 2
+    fi
+
+    local url; url="$(_build_url "$code")"
+
+    if [ "$url_only" = "1" ]; then
+        printf '%s\n' "$url"
+        return 0
+    fi
+
+    if [ "$open_in_browser" = "1" ]; then
+        if   command -v open     >/dev/null 2>&1; then open     "$url"
+        elif command -v xdg-open >/dev/null 2>&1; then xdg-open "$url"
+        else
+            _error "open or xdg-open is required"
+            printf '%s\n' "$url"
+            return 3
+        fi
+        return 0
+    fi
+
+    _fetch_and_render "$code"
+)
+
+_scdef "$@"
+__scdef_rc=$?
+unset -f _scdef
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __scdef_rc; return $__scdef_rc"
+fi
+eval "unset __scdef_rc; exit $__scdef_rc"
