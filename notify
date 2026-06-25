@@ -25,8 +25,16 @@ _notify() (
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="notify" ;; esac
 
-    _color() { [ -t 2 ] && [ -z "${NO_COLOR:-}" ] && printf '%s' "$1"; }
-    _error() { printf '%s[ERR][%s] %s%s\n' "$(_color $'\033[31m')" "$SCRIPT_NAME" "$*" "$(_color $'\033[0m')" >&2; }
+    # ANSI palette for diagnostics, computed once (no per-call _color subshell):
+    # empty unless stderr is a TTY and NO_COLOR is unset, so pipes/redirects and
+    # the test harness stay plain. https://no-color.org/
+    local C_ERR=""    # ERR severity: red
+    local C_RST=""
+    if [ -t 2 ] && [ -z "${NO_COLOR:-}" ]; then
+        C_ERR=$'\033[31m'
+        C_RST=$'\033[0m'
+    fi
+    _error() { printf '%s[ERR][%s] %s%s\n' "$C_ERR" "$SCRIPT_NAME" "$*" "$C_RST" >&2; }
 
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'

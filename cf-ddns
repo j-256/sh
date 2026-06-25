@@ -57,10 +57,22 @@ _cf_ddns() (
         echo "  Zone.Zone, Zone.DNS"
     }
 
-    _color() { [ -t 2 ] && [ -z "${NO_COLOR:-}" ] && printf '%s' "$1"; }
-    _error() { printf '%s[ERR][%s] %s%s\n' "$(_color $'\033[31m')" "$SCRIPT_NAME" "$*" "$(_color $'\033[0m')" >&2; }
-    _info()  { printf '%s[INF][%s] %s%s\n' "$(_color $'\033[2m')"  "$SCRIPT_NAME" "$*" "$(_color $'\033[0m')" >&2; }
-    _debug() { [ -z "$DDNS_DEBUG" ] && return 0; printf '%s[DBG][%s] %s%s\n' "$(_color $'\033[36m')" "$SCRIPT_NAME" "$*" "$(_color $'\033[0m')" >&2; }
+    # ANSI palette for diagnostics, computed once (no per-call _color subshell):
+    # empty unless stderr is a TTY and NO_COLOR is unset, so pipes/redirects and
+    # the test harness stay plain. https://no-color.org/
+    local C_ERR=""    # ERR severity: red
+    local C_INF=""    # INF severity: dim
+    local C_DBG=""    # DBG severity: cyan
+    local C_RST=""
+    if [ -t 2 ] && [ -z "${NO_COLOR:-}" ]; then
+        C_ERR=$'\033[31m'
+        C_INF=$'\033[2m'
+        C_DBG=$'\033[36m'
+        C_RST=$'\033[0m'
+    fi
+    _error() { printf '%s[ERR][%s] %s%s\n' "$C_ERR" "$SCRIPT_NAME" "$*" "$C_RST" >&2; }
+    _info()  { printf '%s[INF][%s] %s%s\n' "$C_INF" "$SCRIPT_NAME" "$*" "$C_RST" >&2; }
+    _debug() { [ -z "$DDNS_DEBUG" ] && return 0; printf '%s[DBG][%s] %s%s\n' "$C_DBG" "$SCRIPT_NAME" "$*" "$C_RST" >&2; }
 
     case "$1" in
         -h|--help) _show_help; return 0 ;;

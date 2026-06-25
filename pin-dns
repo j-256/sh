@@ -133,10 +133,22 @@ _pin_dns() (
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="pin-dns" ;; esac
 
-    _color() { [ -t 2 ] && [ -z "${NO_COLOR:-}" ] && printf '%s' "$1"; }
-    _error() { printf '%s[ERR][%s] %s%s\n' "$(_color $'\033[31m')" "$SCRIPT_NAME" "$*" "$(_color $'\033[0m')" >&2; }
-    _warn()  { [ -n "$quiet" ] && return 0; printf '%s[WRN][%s] %s%s\n' "$(_color $'\033[33m')" "$SCRIPT_NAME" "$*" "$(_color $'\033[0m')" >&2; }
-    _info()  { [ -n "$quiet" ] && return 0; printf '%s[INF][%s] %s%s\n' "$(_color $'\033[2m')"  "$SCRIPT_NAME" "$*" "$(_color $'\033[0m')" >&2; }
+    # ANSI palette for diagnostics, computed once (no per-call _color subshell):
+    # empty unless stderr is a TTY and NO_COLOR is unset, so pipes/redirects and
+    # the test harness stay plain. https://no-color.org/
+    local C_ERR=""    # ERR severity: red
+    local C_WRN=""    # WRN severity: yellow
+    local C_INF=""    # INF severity: dim
+    local C_RST=""
+    if [ -t 2 ] && [ -z "${NO_COLOR:-}" ]; then
+        C_ERR=$'\033[31m'
+        C_WRN=$'\033[33m'
+        C_INF=$'\033[2m'
+        C_RST=$'\033[0m'
+    fi
+    _error() { printf '%s[ERR][%s] %s%s\n' "$C_ERR" "$SCRIPT_NAME" "$*" "$C_RST" >&2; }
+    _warn()  { [ -n "$quiet" ] && return 0; printf '%s[WRN][%s] %s%s\n' "$C_WRN" "$SCRIPT_NAME" "$*" "$C_RST" >&2; }
+    _info()  { [ -n "$quiet" ] && return 0; printf '%s[INF][%s] %s%s\n' "$C_INF" "$SCRIPT_NAME" "$*" "$C_RST" >&2; }
 
     _print_help() {
         # Keep this closely aligned with the header comment
