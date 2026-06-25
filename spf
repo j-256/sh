@@ -43,11 +43,17 @@ _spf() (
         C_SRC=$'\033[32m'
         C_RST=$'\033[0m'
     fi
-    # Severity prefixes assembled once. The hued SEV token and cyan name stand
-    # out against dim brackets; the message (default fg) follows the reset.
-    local PFX_ERR="${C_BRK}[${C_ERR}ERR${C_BRK}][${C_NAME}${SCRIPT_NAME}${C_BRK}]${C_RST} "
-    local PFX_WRN="${C_BRK}[${C_WRN}WRN${C_BRK}][${C_NAME}${SCRIPT_NAME}${C_BRK}]${C_RST} "
-    local PFX_INF="${C_BRK}[${C_INF}INF${C_BRK}][${C_NAME}${SCRIPT_NAME}${C_BRK}]${C_RST} "
+    # Severity prefixes assembled once. The cyan name and the ERR/WRN SEV tokens
+    # stand out against the dim brackets; INF's token is itself dim (by design --
+    # routine -v trace recedes), so on those lines only the name carries color.
+    # The message (default fg) follows the reset.
+    # Each colored span is closed with C_RST before the next begins: SGR color and
+    # intensity are orthogonal and cumulative, so re-emitting C_BRK (dim) does NOT
+    # clear the prior span's color -- without the reset the SEV hue bleeds through
+    # the middle ][ brackets and the name. Every C_RST here is load-bearing.
+    local PFX_ERR="${C_BRK}[${C_RST}${C_ERR}ERR${C_RST}${C_BRK}][${C_RST}${C_NAME}${SCRIPT_NAME}${C_RST}${C_BRK}]${C_RST} "
+    local PFX_WRN="${C_BRK}[${C_RST}${C_WRN}WRN${C_RST}${C_BRK}][${C_RST}${C_NAME}${SCRIPT_NAME}${C_RST}${C_BRK}]${C_RST} "
+    local PFX_INF="${C_BRK}[${C_RST}${C_INF}INF${C_RST}${C_BRK}][${C_RST}${C_NAME}${SCRIPT_NAME}${C_RST}${C_BRK}]${C_RST} "
 
     # Trailing C_RST closes any unclosed color a message carries, so an accent
     # that runs to end-of-line can't bleed onto the next line. Empty when color
