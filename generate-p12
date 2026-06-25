@@ -88,7 +88,8 @@ _generate_p12() (
     _error() {
         local red_on=''
         local reset=''
-        if [ -t 2 ] && [ -z "${NO_COLOR:-}" ]; then
+        # color when stderr is a TTY or CLICOLOR_FORCE is set; NO_COLOR wins over both
+        if { [ -t 2 ] || [ -n "${CLICOLOR_FORCE:-}" ]; } && [ -z "${NO_COLOR:-}" ]; then
             red_on=$'\033[31m'
             reset=$'\033[0m'
         fi

@@ -134,13 +134,15 @@ _pin_dns() (
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="pin-dns" ;; esac
 
     # ANSI palette for diagnostics, computed once (no per-call _color subshell):
-    # empty unless stderr is a TTY and NO_COLOR is unset, so pipes/redirects and
-    # the test harness stay plain. https://no-color.org/
+    # empty unless stderr is a TTY (or CLICOLOR_FORCE is set) and NO_COLOR is
+    # unset, so pipes/redirects and the test harness stay plain by default while
+    # CLICOLOR_FORCE=1 lets a capture keep color. NO_COLOR wins when both are set.
+    # https://no-color.org/
     local C_ERR=""    # ERR severity: red
     local C_WRN=""    # WRN severity: yellow
     local C_INF=""    # INF severity: dim
     local C_RST=""
-    if [ -t 2 ] && [ -z "${NO_COLOR:-}" ]; then
+    if { [ -t 2 ] || [ -n "${CLICOLOR_FORCE:-}" ]; } && [ -z "${NO_COLOR:-}" ]; then
         C_ERR=$'\033[31m'
         C_WRN=$'\033[33m'
         C_INF=$'\033[2m'

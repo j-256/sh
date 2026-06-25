@@ -25,8 +25,10 @@ _spf() (
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="spf" ;; esac
 
     # ANSI palette for diagnostics, computed once (no per-call _color subshell):
-    # empty unless stderr is a TTY and NO_COLOR is unset, so pipes/redirects and
-    # the test harness stay plain. https://no-color.org/
+    # empty unless stderr is a TTY (or CLICOLOR_FORCE is set) and NO_COLOR is
+    # unset, so pipes/redirects and the test harness stay plain by default while
+    # CLICOLOR_FORCE=1 lets a capture keep color. NO_COLOR wins when both are set.
+    # https://no-color.org/
     local C_BRK=""    # brackets: dim, so the punctuation recedes
     local C_INF=""    # INF severity token: dim
     local C_WRN=""    # WRN severity token: yellow
@@ -34,7 +36,7 @@ _spf() (
     local C_NAME=""   # script name: cyan
     local C_SRC=""    # trace subject (the domain being resolved): green
     local C_RST=""
-    if [ -t 2 ] && [ -z "${NO_COLOR:-}" ]; then
+    if { [ -t 2 ] || [ -n "${CLICOLOR_FORCE:-}" ]; } && [ -z "${NO_COLOR:-}" ]; then
         C_BRK=$'\033[2m'
         C_INF=$'\033[2m'
         C_WRN=$'\033[33m'
