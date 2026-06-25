@@ -23,9 +23,37 @@ _spf() (
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="spf" ;; esac
 
-    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
-    _warn()  { if [ "$VERBOSITY" -ge 1 ]; then echo "[WRN][$SCRIPT_NAME] $*" >&2; fi; }
-    _info()  { if [ "$VERBOSITY" -ge 2 ]; then echo "[INF][$SCRIPT_NAME] $*" >&2; fi; }
+    # ANSI palette for diagnostics, computed once (no per-call _color subshell):
+    # empty unless stderr is a TTY and NO_COLOR is unset, so pipes/redirects and
+    # the test harness stay plain. https://no-color.org/
+    local C_BRK=""    # brackets: dim, so the punctuation recedes
+    local C_INF=""    # INF severity token: dim
+    local C_WRN=""    # WRN severity token: yellow
+    local C_ERR=""    # ERR severity token: red
+    local C_NAME=""   # script name: cyan
+    local C_SRC=""    # trace subject (the domain being resolved): green
+    local C_RST=""
+    if [ -t 2 ] && [ -z "${NO_COLOR:-}" ]; then
+        C_BRK=$'\033[2m'
+        C_INF=$'\033[2m'
+        C_WRN=$'\033[33m'
+        C_ERR=$'\033[31m'
+        C_NAME=$'\033[36m'
+        C_SRC=$'\033[32m'
+        C_RST=$'\033[0m'
+    fi
+    # Severity prefixes assembled once. The hued SEV token and cyan name stand
+    # out against dim brackets; the message (default fg) follows the reset.
+    local PFX_ERR="${C_BRK}[${C_ERR}ERR${C_BRK}][${C_NAME}${SCRIPT_NAME}${C_BRK}]${C_RST} "
+    local PFX_WRN="${C_BRK}[${C_WRN}WRN${C_BRK}][${C_NAME}${SCRIPT_NAME}${C_BRK}]${C_RST} "
+    local PFX_INF="${C_BRK}[${C_INF}INF${C_BRK}][${C_NAME}${SCRIPT_NAME}${C_BRK}]${C_RST} "
+
+    # Trailing C_RST closes any unclosed color a message carries, so an accent
+    # that runs to end-of-line can't bleed onto the next line. Empty when color
+    # is off, so plain output is unchanged.
+    _error() { printf '%s%s%s\n' "$PFX_ERR" "$*" "$C_RST" >&2; }
+    _warn()  { if [ "$VERBOSITY" -ge 1 ]; then printf '%s%s%s\n' "$PFX_WRN" "$*" "$C_RST" >&2; fi; }
+    _info()  { if [ "$VERBOSITY" -ge 2 ]; then printf '%s%s%s\n' "$PFX_INF" "$*" "$C_RST" >&2; fi; }
 
     # _show_help [verb] -- top-level menu when no (or unknown) verb; per-verb detail otherwise.
     _show_help() {
@@ -267,7 +295,7 @@ _spf() (
         local src="$2"
         local depth="$3"
         local ancestors="$4"
-        _info "$src: $record"
+        _info "${C_SRC}${src}${C_RST}: $record"
 
         local token
         local qual
@@ -310,7 +338,7 @@ _spf() (
         if [ "$parent_depth" -ge 20 ]; then return 0; fi          # depth cap
         local sub; sub="$(_dig_txt "$target")"
         [ "$sub" ] || {
-            _info "no SPF record for $target"
+            _info "no SPF record for ${C_SRC}${target}${C_RST}"
             # void lookup: a queried name returned no SPF record. check counts these
             _ir_row "$((parent_depth + 1))" "$target" "+" void "$target" 0
             return 0
