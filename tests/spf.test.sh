@@ -428,6 +428,31 @@ test_flatten_raw_record_via_stdin() {
     assert_rc "stdin flatten exits 0" 0
     assert_stdout_contains "emits ip from stdin" "198.51.100.0/24"
 }
+test_stdin_normalizes_multi_string_dig_output() {
+    # raw `dig +short TXT` output for a long record: quoted, character-strings
+    # joined by '" "'. The stdin path must reassemble it like the domain path,
+    # not feed quoted garbage to the tokenizer (a trailing-quote bug pre-fix).
+    printf '"v=spf1 ip4:198.51.100.0/24" " ip4:203.0.113.0/24 -all"\n' | run_script flatten -
+    assert_rc "multi-string stdin exits 0" 0
+    assert_stdout_contains "first chunk ip is clean" "198.51.100.0/24"
+    assert_stdout_contains "second chunk ip is clean" "203.0.113.0/24"
+    # the bug emitted 198.51.100.0/24" (trailing quote glued on) -- assert it is gone
+    assert_stdout_not_contains "no trailing quote on the ip" '24"'
+}
+test_stdin_selects_spf_among_other_txt() {
+    # dig output can carry non-SPF TXT (verification tokens). The reassembly
+    # keeps only the v=spf1 record, same as the domain path's grep.
+    printf '"google-site-verification=xyz"\n"v=spf1 ip4:192.0.2.0/24 -all"\n' | run_script flatten -
+    assert_rc "mixed-txt stdin exits 0" 0
+    assert_stdout_contains "picks the spf record" "192.0.2.0/24"
+}
+test_stdin_quoted_single_string_dequoted() {
+    # a single quoted character-string (short record) still gets its quotes stripped
+    printf '"v=spf1 ip4:198.51.100.0/24 -all"\n' | run_script flatten -
+    assert_rc "quoted single-string stdin exits 0" 0
+    assert_stdout_contains "ip is clean" "198.51.100.0/24"
+    assert_stdout_not_contains "no quotes survive" '"'
+}
 
 # --- __ip4 / _ip4_in_cidr tests ---
 

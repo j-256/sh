@@ -263,22 +263,32 @@ _spf() (
 
     # --- resolver engine ---
 
+    # Reassemble dig TXT output into a single SPF record: join the " " boundaries
+    # between character-strings (a string caps at 255 bytes, so long records are
+    # split), drop the surrounding quotes, keep only the v=spf1 record. Reads
+    # stdin, writes one line. A record with no quotes (already-clean input) passes
+    # the sed through unchanged, so this is safe to apply to bare records too.
+    _normalize_txt() {
+        sed 's/" "//g; s/"//g' \
+          | grep -i '^v=spf1' \
+          | head -n1
+    }
+
     _dig_txt() {
         local name="$1"
         local tcp; [ "$USE_TCP" ] && tcp="+tcp"
-        # join character-strings, drop quotes, keep only the v=spf1 record
         # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- $tcp expands to +tcp or empty; the split is intentional
-        dig @"$SERVER" $tcp +short TXT "$name" 2>/dev/null \
-          | sed 's/" "//g; s/"//g' \
-          | grep -i '^v=spf1' \
-          | head -n1
+        dig @"$SERVER" $tcp +short TXT "$name" 2>/dev/null | _normalize_txt
     }
 
     _spf_input() {
         local a="$1"
         case "$a" in
             "v=spf1"*) printf '%s\n' "$a" ;;
-            -)         local line; IFS= read -r line; printf '%s\n' "$line" ;;
+            # stdin: normalize like the domain path, so piping raw `dig +short TXT`
+            # output (quoted, possibly multi-string) into any verb works the same
+            # as a domain lookup. A clean record passes through untouched.
+            -)         _normalize_txt ;;
             *)         _dig_txt "$a" ;;
         esac
     }

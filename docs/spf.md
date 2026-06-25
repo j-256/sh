@@ -288,6 +288,17 @@ $ echo 'v=spf1 ip4:10.0.0.0/8 ~all' | spf flatten -
 10.0.0.0/8
 ```
 
+Stdin also accepts raw `dig +short TXT` output directly -- the same reassembly the domain path applies (joining 255-byte character-strings, stripping quotes, selecting the `v=spf1` record among other TXT records) runs on stdin too. So you can resolve with a `dig` invocation `spf` does not expose (a specific transport, `+trace`, DNSSEC) and pipe the result straight in:
+
+```
+$ dig +short TXT _spf.google.com | spf flatten -
+74.125.0.0/16
+209.85.128.0/17
+...
+```
+
+A record already on one clean line passes through unchanged, so both forms work.
+
 If the record contains `%{d}` macros, anchor them with `-d`/`--domain`:
 
 ```bash
