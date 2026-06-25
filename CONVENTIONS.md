@@ -361,19 +361,31 @@ This is the shape for every script unless it has a specific need to disambiguate
 
 ### Colored variant
 
-A small number of scripts drive `curl`, `dig`, `openssl`, or spawn other tools whose output interleaves with theirs. These may use ANSI color to make diagnostic output visually distinct, guarded by a TTY check and respecting `NO_COLOR`. Two shapes, chosen by how much diagnostic output the script emits.
+A small number of scripts drive `curl`, `dig`, `openssl`, or spawn other tools whose output interleaves with theirs. These may use ANSI color to make diagnostic output visually distinct, guarded by a TTY check and respecting `NO_COLOR`. Both forms below compute the palette **once** at function entry -- gate the escapes on `[ -t 2 ] && [ -z "${NO_COLOR:-}" ]`, store them in `local` vars (empty when color is off), and reference those vars from the helpers. No per-call subshell. They differ only in **appearance**, so pick by how you want the output to read, not by cost.
 
-**Whole-line tint** -- the entire `[SEV][name] message` line takes the severity color. Simplest; the right default for scripts that emit only occasional diagnostics:
+**Whole-line tint** -- the entire `[SEV][name] message` line takes the severity color. The simplest form and the right default:
 
 ```bash
-_color() { [ -t 2 ] && [ -z "${NO_COLOR:-}" ] && printf '%s' "$1"; }
-_error() { printf '%s[ERR][%s] %s%s\n' "$(_color $'\033[31m')" "$SCRIPT_NAME" "$*" "$(_color $'\033[0m')" >&2; }
-_warn()  { printf '%s[WRN][%s] %s%s\n' "$(_color $'\033[33m')" "$SCRIPT_NAME" "$*" "$(_color $'\033[0m')" >&2; }
-_info()  { printf '%s[INF][%s] %s%s\n' "$(_color $'\033[2m')"  "$SCRIPT_NAME" "$*" "$(_color $'\033[0m')" >&2; }
-_debug() { printf '%s[DBG][%s] %s%s\n' "$(_color $'\033[36m')" "$SCRIPT_NAME" "$*" "$(_color $'\033[0m')" >&2; }
+# Empty unless stderr is a TTY and NO_COLOR is unset, so pipes/redirects stay plain.
+local C_ERR=""    # ERR severity: red
+local C_WRN=""    # WRN severity: yellow
+local C_INF=""    # INF severity: dim
+local C_DBG=""    # DBG severity: cyan
+local C_RST=""
+if [ -t 2 ] && [ -z "${NO_COLOR:-}" ]; then
+    C_ERR=$'\033[31m'
+    C_WRN=$'\033[33m'
+    C_INF=$'\033[2m'
+    C_DBG=$'\033[36m'
+    C_RST=$'\033[0m'
+fi
+_error() { printf '%s[ERR][%s] %s%s\n' "$C_ERR" "$SCRIPT_NAME" "$*" "$C_RST" >&2; }
+_warn()  { printf '%s[WRN][%s] %s%s\n' "$C_WRN" "$SCRIPT_NAME" "$*" "$C_RST" >&2; }
+_info()  { printf '%s[INF][%s] %s%s\n' "$C_INF" "$SCRIPT_NAME" "$*" "$C_RST" >&2; }
+_debug() { printf '%s[DBG][%s] %s%s\n' "$C_DBG" "$SCRIPT_NAME" "$*" "$C_RST" >&2; }
 ```
 
-**Structured prefix** -- colors the prefix pieces distinctly (dim brackets, hued `SEV` token, cyan name) and leaves the message in the default fg, so the line structure reads at a glance and the message body can carry its own accent. It precomputes the prefixes once at function entry instead of forking two `$(_color ...)` subshells on every call, so it stays cheap when a script emits many lines -- the right shape for a trace-heavy `-v` mode that prints one `[INF]` line per record. This is what `spf` uses:
+**Structured prefix** -- colors the prefix pieces distinctly (dim brackets, hued `SEV` token, cyan name) and leaves the message in the default fg, so the line structure reads at a glance and the message body can carry its own accent. Best when a script emits enough diagnostics that the prefix structure (and a colored subject within the message) earns its keep -- e.g. a trace-heavy `-v` mode that prints one `[INF]` line per record. This is what `spf` uses:
 
 ```bash
 # Empty unless stderr is a TTY and NO_COLOR is unset, so pipes/redirects stay plain.
@@ -401,7 +413,7 @@ _warn()  { printf '%s%s%s\n' "$PFX_WRN" "$*" "$C_RST" >&2; }
 _info()  { printf '%s%s%s\n' "$PFX_INF" "$*" "$C_RST" >&2; }
 ```
 
-The trailing `$C_RST` closes any unclosed color the message itself carries, so a caller that ends a message in an accent (`_info "$C_SRC$host"`) can't bleed color onto the next line. It is empty when color is off, so plain output is byte-identical. This mirrors the whole-line form's trailing `$(_color $'\033[0m')`. A self-closing in-message accent (`"${C_SRC}${x}${C_RST}: tail"`) doesn't depend on it, but the trailing reset makes the helper safe regardless of how the caller colors the message.
+The trailing `$C_RST` closes any unclosed color the message itself carries, so a caller that ends a message in an accent (`_info "$C_SRC$host"`) can't bleed color onto the next line. It is empty when color is off, so plain output is byte-identical. The whole-line form's trailing `$C_RST` does the same job. A self-closing in-message accent (`"${C_SRC}${x}${C_RST}: tail"`) doesn't depend on it, but the trailing reset makes the helper safe regardless of how the caller colors the message.
 
 The `C_SRC` accent is applied at the call site by wrapping the subject inside the message. The vars are empty when color is off, so the plain output is byte-identical:
 
@@ -409,7 +421,7 @@ The `C_SRC` accent is applied at the call site by wrapping the subject inside th
 _info "${C_SRC}${src}${C_RST}: $record"   # subject pops in green; the rest stays default fg
 ```
 
-Palette: `[ERR]` red (`\033[31m`), `[WRN]` yellow (`\033[33m`), `[INF]` dim (`\033[2m`), `[DBG]` cyan (`\033[36m`); the structured prefix adds dim brackets (`\033[2m`), cyan name (`\033[36m`), and an optional green in-message accent (`\033[32m`). Palette is color-only -- no `\033[1m` (bold) or other weight changes. Mechanism: raw ANSI escapes, not `tput`. TTY guard uses `[ -t 2 ]` since helpers write to stderr. `NO_COLOR` respected per https://no-color.org/. Define only the helpers a script actually uses. Source-only scripts using the whole-line form must include `_color` in `__<script>__unset`; the structured form defines no helper function, so its `local` palette/prefix vars are auto-scoped with nothing to unset.
+Palette: `[ERR]` red (`\033[31m`), `[WRN]` yellow (`\033[33m`), `[INF]` dim (`\033[2m`), `[DBG]` cyan (`\033[36m`); the structured prefix adds dim brackets (`\033[2m`), cyan name (`\033[36m`), and an optional green in-message accent (`\033[32m`). Palette is color-only -- no `\033[1m` (bold) or other weight changes. Mechanism: raw ANSI escapes, not `tput`. TTY guard uses `[ -t 2 ]` since helpers write to stderr. `NO_COLOR` respected per https://no-color.org/. Define only the helpers a script actually uses, and only the palette vars those helpers reference. The palette is `local` vars, not a helper function, so there is nothing extra for a source-only script's `__<script>__unset` to clean up.
 
 Default to the plain variant. Only reach for a colored variant when output disambiguation genuinely matters.
 
