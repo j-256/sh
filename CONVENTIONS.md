@@ -361,18 +361,19 @@ This is the shape for every script unless it has a specific need to disambiguate
 
 ### Colored variant
 
-A small number of scripts drive `curl`, `dig`, `openssl`, or spawn other tools whose output interleaves with theirs. These may use ANSI color to make diagnostic output visually distinct, guarded by a TTY check and respecting `NO_COLOR`. Both forms below compute the palette **once** at function entry -- gate the escapes on `[ -t 2 ] && [ -z "${NO_COLOR:-}" ]`, store them in `local` vars (empty when color is off), and reference those vars from the helpers. No per-call subshell. They differ only in **appearance**, so pick by how you want the output to read, not by cost.
+A small number of scripts drive `curl`, `dig`, `openssl`, or spawn other tools whose output interleaves with theirs. These may use ANSI color to make diagnostic output visually distinct, guarded by a TTY check and respecting both `NO_COLOR` (force off) and `CLICOLOR_FORCE` (force on). Both forms below compute the palette **once** at function entry -- gate the escapes on `{ [ -t 2 ] || [ -n "${CLICOLOR_FORCE:-}" ]; } && [ -z "${NO_COLOR:-}" ]`, store them in `local` vars (empty when color is off), and reference those vars from the helpers. No per-call subshell. They differ only in **appearance**, so pick by how you want the output to read, not by cost.
 
 **Whole-line tint** -- the entire `[SEV][name] message` line takes the severity color. The simplest form and the right default:
 
 ```bash
-# Empty unless stderr is a TTY and NO_COLOR is unset, so pipes/redirects stay plain.
+# Empty unless stderr is a TTY (or CLICOLOR_FORCE is set) and NO_COLOR is unset,
+# so pipes/redirects stay plain by default; CLICOLOR_FORCE=1 keeps color in a capture.
 local C_ERR=""    # ERR severity: red
 local C_WRN=""    # WRN severity: yellow
 local C_INF=""    # INF severity: dim
 local C_DBG=""    # DBG severity: cyan
 local C_RST=""
-if [ -t 2 ] && [ -z "${NO_COLOR:-}" ]; then
+if { [ -t 2 ] || [ -n "${CLICOLOR_FORCE:-}" ]; } && [ -z "${NO_COLOR:-}" ]; then
     C_ERR=$'\033[31m'
     C_WRN=$'\033[33m'
     C_INF=$'\033[2m'
@@ -388,7 +389,8 @@ _debug() { printf '%s[DBG][%s] %s%s\n' "$C_DBG" "$SCRIPT_NAME" "$*" "$C_RST" >&2
 **Structured prefix** -- colors the prefix pieces distinctly (dim brackets, hued `SEV` token, cyan name) and leaves the message in the default fg, so the line structure reads at a glance and the message body can carry its own accent. Best when a script emits enough diagnostics that the prefix structure (and a colored subject within the message) earns its keep -- e.g. a trace-heavy `-v` mode that prints one `[INF]` line per record. This is what `spf` uses:
 
 ```bash
-# Empty unless stderr is a TTY and NO_COLOR is unset, so pipes/redirects stay plain.
+# Empty unless stderr is a TTY (or CLICOLOR_FORCE is set) and NO_COLOR is unset,
+# so pipes/redirects stay plain by default; CLICOLOR_FORCE=1 keeps color in a capture.
 local C_BRK=""    # brackets: dim
 local C_INF=""    # INF token: dim
 local C_WRN=""    # WRN token: yellow
@@ -396,7 +398,7 @@ local C_ERR=""    # ERR token: red
 local C_NAME=""   # script name: cyan
 local C_SRC=""    # optional in-message accent (e.g. a trace's subject): green
 local C_RST=""
-if [ -t 2 ] && [ -z "${NO_COLOR:-}" ]; then
+if { [ -t 2 ] || [ -n "${CLICOLOR_FORCE:-}" ]; } && [ -z "${NO_COLOR:-}" ]; then
     C_BRK=$'\033[2m'
     C_INF=$'\033[2m'
     C_WRN=$'\033[33m'
@@ -425,7 +427,7 @@ The `C_SRC` accent is applied at the call site by wrapping the subject inside th
 _info "${C_SRC}${src}${C_RST}: $record"   # subject pops in green; the rest stays default fg
 ```
 
-Palette: `[ERR]` red (`\033[31m`), `[WRN]` yellow (`\033[33m`), `[INF]` dim (`\033[2m`), `[DBG]` cyan (`\033[36m`); the structured prefix adds dim brackets (`\033[2m`), cyan name (`\033[36m`), and an optional green in-message accent (`\033[32m`). Palette is color-only -- no `\033[1m` (bold) or other weight changes. Mechanism: raw ANSI escapes, not `tput`. TTY guard uses `[ -t 2 ]` since helpers write to stderr. `NO_COLOR` respected per https://no-color.org/. Define only the helpers a script actually uses, and only the palette vars those helpers reference. The palette is `local` vars, not a helper function, so there is nothing extra for a source-only script's `__<script>__unset` to clean up.
+Palette: `[ERR]` red (`\033[31m`), `[WRN]` yellow (`\033[33m`), `[INF]` dim (`\033[2m`), `[DBG]` cyan (`\033[36m`); the structured prefix adds dim brackets (`\033[2m`), cyan name (`\033[36m`), and an optional green in-message accent (`\033[32m`). Palette is color-only -- no `\033[1m` (bold) or other weight changes. Mechanism: raw ANSI escapes, not `tput`. TTY guard uses `[ -t 2 ]` since helpers write to stderr. `NO_COLOR` respected per https://no-color.org/; `CLICOLOR_FORCE` (BSD/macOS idiom) forces color on for a non-TTY capture, with `NO_COLOR` winning when both are set. Define only the helpers a script actually uses, and only the palette vars those helpers reference. The palette is `local` vars, not a helper function, so there is nothing extra for a source-only script's `__<script>__unset` to clean up.
 
 Default to the plain variant. Only reach for a colored variant when output disambiguation genuinely matters.
 
