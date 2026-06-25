@@ -55,13 +55,25 @@ _generate_p12() (
         echo "  openssl"
     }
 
-    # Text formatting control characters for later use - by convention wrapped in {} when used below, for legibility
-    local teal=$'\033[36m'
+    # Text formatting control characters for later use - by convention wrapped in {} when used below, for legibility.
+    # Empty unless stdout is a TTY (or CLICOLOR_FORCE is set) and NO_COLOR is unset,
+    # so pipes/redirects and the test harness stay plain by default; CLICOLOR_FORCE=1
+    # keeps color in a capture. NO_COLOR wins when both are set. These helpers all
+    # write to stdout, so the guard is [ -t 1 ] (unlike _error's stderr [ -t 2 ]).
+    # https://no-color.org/
+    local teal=""
+    local bold=""        # start bolding text
+    local smul=""        # start underlining text
+    local rmul=""        # stop underlining text
+    local reset=""       # reset all formatting to terminal default
+    if { [ -t 1 ] || [ -n "${CLICOLOR_FORCE:-}" ]; } && [ -z "${NO_COLOR:-}" ]; then
+        teal=$'\033[36m'
+        bold=$'\033[1m'
+        smul=$'\033[4m'
+        rmul=$'\033[24m'
+        reset=$'\033[0m'
+    fi
     local default_color="$teal"
-    local bold=$'\033[1m' # start bolding text
-    local smul=$'\033[4m' # start underlining text
-    local rmul=$'\033[24m' # stop underlining text
-    local reset=$'\033[0m' # reset all formatting to terminal default
     # Applies provided formatting (typically color) to output
     _color() {
         local color="$1"
