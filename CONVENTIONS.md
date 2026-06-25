@@ -405,9 +405,13 @@ if [ -t 2 ] && [ -z "${NO_COLOR:-}" ]; then
     C_SRC=$'\033[32m'
     C_RST=$'\033[0m'
 fi
-local PFX_ERR="${C_BRK}[${C_ERR}ERR${C_BRK}][${C_NAME}${SCRIPT_NAME}${C_BRK}]${C_RST} "
-local PFX_WRN="${C_BRK}[${C_WRN}WRN${C_BRK}][${C_NAME}${SCRIPT_NAME}${C_BRK}]${C_RST} "
-local PFX_INF="${C_BRK}[${C_INF}INF${C_BRK}][${C_NAME}${SCRIPT_NAME}${C_BRK}]${C_RST} "
+# Each colored span is closed with C_RST before the next opens. SGR color and
+# intensity are orthogonal and cumulative: re-emitting C_BRK (dim) adds dim but
+# does NOT clear the prior span's color, so without these resets the SEV hue
+# bleeds through the middle ][ brackets and the name. Every C_RST is load-bearing.
+local PFX_ERR="${C_BRK}[${C_RST}${C_ERR}ERR${C_RST}${C_BRK}][${C_RST}${C_NAME}${SCRIPT_NAME}${C_RST}${C_BRK}]${C_RST} "
+local PFX_WRN="${C_BRK}[${C_RST}${C_WRN}WRN${C_RST}${C_BRK}][${C_RST}${C_NAME}${SCRIPT_NAME}${C_RST}${C_BRK}]${C_RST} "
+local PFX_INF="${C_BRK}[${C_RST}${C_INF}INF${C_RST}${C_BRK}][${C_RST}${C_NAME}${SCRIPT_NAME}${C_RST}${C_BRK}]${C_RST} "
 _error() { printf '%s%s%s\n' "$PFX_ERR" "$*" "$C_RST" >&2; }
 _warn()  { printf '%s%s%s\n' "$PFX_WRN" "$*" "$C_RST" >&2; }
 _info()  { printf '%s%s%s\n' "$PFX_INF" "$*" "$C_RST" >&2; }
