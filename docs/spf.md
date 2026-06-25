@@ -2,7 +2,7 @@
 
 [View script](../spf)
 
-Recursively resolve and inspect SPF DNS records. `spf` walks the full `include:` tree for a domain and answers the common inspection questions: is this IP authorized (`find`), what are all the authorized addresses (`flatten`), is the record healthy (`check`), what does the full delegation tree look like (`tree`), is a specific mechanism token present anywhere in the tree (`has`), and what does the raw resolver output look like for piping into other tools (`ir`).
+Recursively resolve and inspect SPF DNS records. `spf` walks the full `include:` tree for a domain and answers the common inspection questions: what record is published (`show`), is this IP authorized (`find`), what are all the authorized addresses (`flatten`), is the record healthy (`check`), what does the full delegation tree look like (`tree`), is a specific mechanism token present anywhere in the tree (`has`), and what does the raw resolver output look like for piping into other tools (`ir`).
 
 SPF authorization is often buried three or four levels of `include:` directives deep. A single TXT lookup rarely gives you the full picture -- `spf` follows every include recursively, counts DNS lookups against the RFC 7208 limit, and surfaces problems that would cause silent delivery failures in production.
 
@@ -16,6 +16,41 @@ $ spf find mailchimp.com 205.201.128.1
 ```
 
 Exit 0 means the IP is authorized; exit 4 means it was not found.
+
+## Print the published record (`show`)
+
+The simplest question is "what SPF record does this domain actually publish?" `show` answers it: it does a single TXT lookup, reassembles the record, strips the quotes, and prints it on one line.
+
+```
+$ spf show github.com
+v=spf1 ip4:192.30.252.0/22 include:spf.protection.outlook.com include:_netblocks.google.com ... ~all
+```
+
+A bare `spf <domain>` with no verb is shorthand for `spf show <domain>` -- the common case is the shortest to type:
+
+```
+$ spf github.com
+v=spf1 ip4:192.30.252.0/22 include:spf.protection.outlook.com include:_netblocks.google.com ... ~all
+```
+
+`show` prints the record **as published** -- it does not follow `include:` directives. To expand the delegation tree, use `tree`; to enumerate every authorized address, use `flatten`.
+
+A long SPF record is published as multiple 255-byte "character-strings" within a single TXT record; `dig` shows these as adjacent quoted tokens. `show` joins them back into one record. Pass `-v` to note when this happened:
+
+```
+$ spf show _spf.google.com -v
+[INF][spf] published as 2 character-strings
+v=spf1 ip4:74.125.0.0/16 ip4:209.85.128.0/17 ip6:2001:4860:4864::/56 ... ~all
+```
+
+If a domain publishes more than one `v=spf1` record -- an RFC 7208 `permerror` -- `show` prints the first and warns about the rest on stderr. When no SPF record exists at all, `show` exits 1:
+
+```
+$ spf show example.org
+[ERR][spf] No SPF record found for example.org
+```
+
+Unlike the other verbs, `show` takes a domain only: it fetches what is *published*, so a raw `v=spf1 …` record or `-` stdin has nothing to look up. To vet a record you already have in hand, use `check`.
 
 ## Common examples
 
@@ -293,7 +328,7 @@ Verbosity levels (last flag wins when both are given):
 
 | Code | Meaning |
 |---|---|
-| `0` | Success: IP covered (`find`), output emitted (`flatten`), record clean (`check`), tree rendered (`tree`), token found (`has`) |
+| `0` | Success: record printed (`show`), IP covered (`find`), output emitted (`flatten`), record clean (`check`), tree rendered (`tree`), token found (`has`) |
 | `1` | Runtime failure: no SPF record found, DNS error, or unexpected dig output |
 | `2` | Usage error: missing argument, unknown flag, or bad flag value |
 | `3` | `dig` is not installed |

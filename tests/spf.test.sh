@@ -131,6 +131,12 @@ case "$qtype:$name" in
     # has: a -include: (negative qualifier) to prove qualifier reporting
     TXT:negq.example)         printf '%s\n' '"v=spf1 -include:blocked.negq.example -all"' ;;
     TXT:blocked.negq.example) printf '%s\n' '"v=spf1 -all"' ;;
+    # show: record published as two character-strings (>255B split), one TXT RR
+    TXT:multi.example)        printf '%s\n' '"v=spf1 ip4:198.51.100.0/24" " ip4:203.0.113.0/24 ~all"' ;;
+    # show: TWO published v=spf1 RRs (RFC 7208 permerror) -- two output lines
+    TXT:dup.example)          printf '%s\n' '"v=spf1 ip4:198.51.100.0/24 ~all"'; printf '%s\n' '"v=spf1 ip4:203.0.113.0/24 -all"' ;;
+    # show: domain with a non-SPF TXT only (verification record, no v=spf1)
+    TXT:txtonly.example)      printf '%s\n' '"google-site-verification=abc123"' ;;
 esac
 exit 0
 SHIM
@@ -163,10 +169,10 @@ test_top_help() {
 
 # --- per-subcommand help (Task 8) ---
 
-test_top_help_lists_six_verbs() {
+test_top_help_lists_verbs() {
     run_script -h
     assert_rc "top help exits 0" 0
-    for v in find flatten check tree has ir; do
+    for v in show find flatten check tree has ir; do
         assert_stdout_contains "top help lists $v" "$v"
     done
 }
@@ -199,6 +205,107 @@ test_unknown_verb_is_usage_error() {
     run_script bogus example.com
     assert_rc "unknown verb exits 2" 2
     assert_stderr_contains "echoes the bad verb" "bogus"
+}
+
+# --- show + bare-domain shorthand ---
+
+test_show_prints_record() {
+    run_script show example.com
+    assert_rc "show exits 0" 0
+    assert_stdout_contains "prints the published record" "v=spf1 ip4:198.51.100.0/24 include:_spf.example.net ~all"
+}
+test_show_is_not_resolved_tree() {
+    # show prints the PUBLISHED record only -- it must NOT recurse the include
+    # (the nested _spf.example.net ip4 belongs to tree/flatten, not show).
+    run_script show example.com
+    assert_rc "show exits 0" 0
+    assert_stdout_not_contains "does not expand the include" "203.0.113.0/24"
+}
+test_bare_domain_is_show() {
+    # `spf <domain>` with no verb is shorthand for `spf show <domain>`
+    run_script example.com
+    assert_rc "bare domain exits 0" 0
+    assert_stdout_contains "bare domain prints the record" "v=spf1 ip4:198.51.100.0/24 include:_spf.example.net ~all"
+}
+test_show_reassembles_multi_string() {
+    # a record split across two character-strings comes back as one clean line
+    run_script show multi.example
+    assert_rc "multi-string exits 0" 0
+    assert_stdout_contains "joins the strings" "v=spf1 ip4:198.51.100.0/24 ip4:203.0.113.0/24 ~all"
+    assert_stdout_not_contains "no embedded quotes survive" '"'
+}
+test_show_verbose_notes_char_strings() {
+    # -v notes the wire-format split; default does not
+    run_script show multi.example -v
+    assert_rc "multi-string -v exits 0" 0
+    assert_stderr_contains "notes the string count" "2 character-strings"
+}
+test_show_default_quiet_on_char_strings() {
+    run_script show multi.example
+    assert_rc "multi-string exits 0" 0
+    assert_stderr_not_contains "no INF note at default verbosity" "character-strings"
+}
+test_show_verbose_single_string_still_exit0() {
+    # regression: a single-string record under -v must still exit 0. The char-
+    # string note is a trailing `if`; an `&&` there would leak the false test's
+    # status (1) as the rc even though the record printed fine.
+    run_script show example.com -v
+    assert_rc "single-string -v exits 0" 0
+    assert_stdout_contains "still prints the record" "v=spf1 ip4:198.51.100.0/24 include:_spf.example.net ~all"
+    assert_stderr_not_contains "no char-string note for single string" "character-strings"
+}
+test_show_multiple_records_warns_shows_first() {
+    # two published v=spf1 RRs: permerror; show the first, warn about the rest
+    run_script show dup.example
+    assert_rc "dup records still exits 0" 0
+    assert_stdout_contains "shows the first record" "v=spf1 ip4:198.51.100.0/24 ~all"
+    assert_eq "exactly one line on stdout" "$(get_stdout | grep -c .)" "1"
+    assert_stderr_contains "warns about multiple records" "multiple published SPF records"
+}
+test_show_no_record_runtime_error() {
+    run_script show nospf.example
+    assert_rc "no SPF record exits 1" 1
+    assert_stderr_contains "says no record" "No SPF record"
+}
+test_show_non_spf_txt_is_not_a_record() {
+    # a domain with only a non-SPF TXT (verification token) has no v=spf1 record
+    run_script show txtonly.example
+    assert_rc "no v=spf1 exits 1" 1
+    assert_stderr_contains "says no record" "No SPF record"
+}
+test_show_missing_domain_usage_error() {
+    run_script show
+    assert_rc "missing domain exits 2" 2
+    assert_stderr_contains "asks for a domain" "domain"
+}
+test_show_rejects_raw_record() {
+    # show fetches a PUBLISHED record; a raw record has nothing to fetch -> steer to check
+    run_script show 'v=spf1 ip4:192.0.2.0/24 ~all'
+    assert_rc "raw record to show is usage error" 2
+    assert_stderr_contains "redirects to check" "check"
+}
+test_show_rejects_stdin() {
+    printf 'v=spf1 ip4:192.0.2.0/24 ~all\n' | run_script show -
+    assert_rc "stdin to show is usage error" 2
+    assert_stderr_contains "redirects to check" "check"
+}
+test_show_two_positionals_suggests_find() {
+    # `spf example.com 1.2.3.4` (no verb) looks like a find query -> steer there
+    run_script example.com 198.51.100.42
+    assert_rc "two positionals is usage error" 2
+    assert_stderr_contains "suggests find" "find"
+}
+test_show_help_via_verb_flag() {
+    run_script show -h
+    assert_rc "show -h exits 0" 0
+    assert_stdout_contains "shows show detail" "published SPF record"
+    assert_stdout_not_contains "not the top menu" "flatten"
+}
+test_unknown_bare_token_is_usage_error() {
+    # a no-dot, non-record token is far likelier a mistyped verb than a domain
+    run_script chekc
+    assert_rc "unknown bare token exits 2" 2
+    assert_stderr_contains "echoes the bad token" "chekc"
 }
 
 test_dig_missing_exits_3() {

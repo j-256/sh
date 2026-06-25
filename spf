@@ -2,6 +2,7 @@
 # spf - Resolve and inspect SPF DNS records
 #
 # Usage:
+#   spf [options] show    <domain>                  Print the published SPF record (or just: spf <domain>)
 #   spf [options] find    <domain> {<ip>|a:<host>}  Is an IP covered, or an a:<host> present? (and how)
 #   spf [options] has     <domain> <token>          Is a token present in the expanded record? (and where)
 #   spf [options] flatten <domain>                  Print all IPs authorized by an SPF record
@@ -61,6 +62,25 @@ _spf() (
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
         case "$verb" in
+            show)
+                echo "NAME"
+                echo "  $SCRIPT_NAME show - print the published SPF record"
+                echo "SYNOPSIS"
+                echo "  $SCRIPT_NAME show ${s}domain${r}"
+                echo "  $SCRIPT_NAME ${s}domain${r}"
+                echo "DESCRIPTION"
+                echo "  Fetches the domain's TXT records and prints the published v=spf1"
+                echo "  record verbatim: character-strings reassembled, quotes stripped, on a"
+                echo "  single line. This is the record as published, NOT the recursively"
+                echo "  resolved tree -- use the tree verb to expand the includes. A bare"
+                echo "  $SCRIPT_NAME ${s}domain${r} (no verb) is shorthand for $SCRIPT_NAME show ${s}domain${r}."
+                echo "  Pass -v to note when the record spans multiple character-strings."
+                echo "EXIT STATUS"
+                echo "  0  Record printed"
+                echo "  1  Runtime failure / no SPF record found"
+                echo "  2  Usage error"
+                echo "  3  dig is not installed"
+                ;;
             find)
                 echo "NAME"
                 echo "  $SCRIPT_NAME find - check whether an IP is covered or an a:<host> directive is present"
@@ -163,15 +183,19 @@ _spf() (
                 echo "NAME"
                 echo "  $SCRIPT_NAME - resolve and inspect SPF DNS records"
                 echo "SYNOPSIS"
+                echo "  $SCRIPT_NAME [${s}options${r}] show    ${s}domain${r}"
                 echo "  $SCRIPT_NAME [${s}options${r}] find    ${s}domain${r} {${s}ip${r}|a:${s}host${r}}"
                 echo "  $SCRIPT_NAME [${s}options${r}] has     ${s}domain${r} ${s}token${r}"
                 echo "  $SCRIPT_NAME [${s}options${r}] flatten ${s}domain${r}"
                 echo "  $SCRIPT_NAME [${s}options${r}] check   ${s}domain${r}"
                 echo "  $SCRIPT_NAME [${s}options${r}] tree    ${s}domain${r}"
                 echo "  $SCRIPT_NAME [${s}options${r}] ir      ${s}domain${r}"
+                echo "  $SCRIPT_NAME ${s}domain${r}"
                 echo "  $SCRIPT_NAME ${s}verb${r} -h"
                 echo "DESCRIPTION"
-                echo "  Fetches and recursively resolves SPF TXT records. Verbs:"
+                echo "  Fetches and recursively resolves SPF TXT records. A bare"
+                echo "  $SCRIPT_NAME ${s}domain${r} (no verb) prints the published record (show). Verbs:"
+                echo "    show     print the published SPF record verbatim"
                 echo "    find     is an IP covered, or an a:host directive present? (and how)"
                 echo "    has      is a token present in the expanded record? (and where)"
                 echo "    flatten  print all authorized IPs/CIDRs"
@@ -548,6 +572,70 @@ EOF
         return 4
     }
 
+    _cmd_show() {
+        local input=""
+        local extra=""
+        local arg
+        for arg in "$@"; do
+            case "$arg" in
+                -)  if [ -z "$input" ]; then input="$arg"; else extra="$arg"; fi ;;  # stdin sentinel: keep it, so show's raw/stdin guard can reject it
+                -*) ;;   # global opts already consumed; ignore strays
+                *)  if [ -z "$input" ]; then input="$arg"; else extra="$arg"; fi ;;
+            esac
+        done
+        if [ -z "$input" ]; then
+            _error "Must provide a domain. Run \`$SCRIPT_NAME -h\` for usage"
+            return 2
+        fi
+        # A second positional is almost certainly a find query (spf domain ip);
+        # show takes exactly one domain, so steer to the verb they likely meant.
+        if [ -n "$extra" ]; then
+            _error "show takes a single domain. Did you mean \`$SCRIPT_NAME find $input $extra\`? Run \`$SCRIPT_NAME -h\` for usage"
+            return 2
+        fi
+        # show prints what is *published*; a raw record or stdin has nothing to
+        # fetch. Redirect to check, which exists to vet a record in hand.
+        case "$input" in
+            "v=spf1"*|-)
+                _error "show fetches a published record; pass a domain, not a record (to vet a record, use \`$SCRIPT_NAME check\`). Run \`$SCRIPT_NAME -h\` for usage"
+                return 2 ;;
+        esac
+
+        local tcp; [ "$USE_TCP" ] && tcp="+tcp"
+        local raw
+        # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- $tcp expands to +tcp or empty; the split is intentional
+        raw="$(dig @"$SERVER" $tcp +short TXT "$input" 2>/dev/null)"
+
+        # Reassemble: join multi-string boundaries, strip quotes, keep v=spf1
+        # records (same transform _dig_txt applies; inlined here so the quoted
+        # raw form survives for the -v character-string count below).
+        local records
+        records="$(printf '%s\n' "$raw" | sed 's/" "//g; s/"//g' | grep -i '^v=spf1')"
+        if [ -z "$records" ]; then
+            _error "No SPF record found for $input"
+            return 1
+        fi
+
+        # Multiple published v=spf1 records are an RFC 7208 permerror; the old
+        # function merged them into one mangled line. Show the first, flag the rest.
+        local n; n="$(printf '%s\n' "$records" | grep -c .)"
+        [ "$n" -gt 1 ] && _warn "multiple published SPF records (RFC 7208 permerror); showing the first"
+
+        printf '%s\n' "$records" | head -n1
+
+        # -v: note when the record was published as multiple character-strings (a
+        # string caps at 255 bytes, so long records are split). The reassembled
+        # form hides this; count quotes on the raw quoted line to recover it.
+        if [ "$VERBOSITY" -ge 2 ]; then
+            local rawline
+            rawline="$(printf '%s\n' "$raw" | grep -i '^"v=spf1' | head -n1)"
+            local nstr
+            nstr=$(( $(printf '%s' "$rawline" | tr -dc '"' | wc -c) / 2 ))
+            # if (not &&): a false test as the function's last statement would
+            # leak exit status 1 even though the record printed fine
+            if [ "$nstr" -gt 1 ]; then _info "published as $nstr character-strings"; fi
+        fi
+    }
     _cmd_find() {
         local input=""
         local ip=""
@@ -882,7 +970,7 @@ EOF
                 # defer: a verb may follow (spf -h find) or precede (spf find -h).
                 # acting now would show top-level help before the verb is read.
                 case "${2-}" in
-                    find|has|flatten|check|tree|ir) _show_help "$2"; return 0 ;;
+                    show|find|has|flatten|check|tree|ir) _show_help "$2"; return 0 ;;
                     *) WANT_HELP=1; shift ;;
                 esac ;;
             -s|--server)
@@ -927,10 +1015,11 @@ EOF
     fi
     if [ -z "$verb" ]; then
         if [ -n "$WANT_HELP" ]; then _show_help; return 0; fi
-        _error "Must provide a verb (find|has|flatten|check|tree|ir). Run \`$SCRIPT_NAME -h\` for usage"
+        _error "Must provide a verb (show|find|has|flatten|check|tree|ir) or a domain. Run \`$SCRIPT_NAME -h\` for usage"
         return 2
     fi
     case "$verb" in
+        show)    _cmd_show    "${rest[@]}" ;;
         find)    _cmd_find    "${rest[@]}" ;;
         has)     _cmd_has     "${rest[@]}" ;;
         flatten) _cmd_flatten "${rest[@]}" ;;
@@ -939,6 +1028,15 @@ EOF
         ir)      _resolve     "${rest[@]}" ;;
         # __ip4: test-only -- exercises _ip4_in_cidr directly
         __ip4)   _ip4_in_cidr "${rest[@]}"; return $? ;;
+        # Bare `spf <domain>` (no verb) is shorthand for `spf show <domain>`.
+        # Route to show when the lone arg looks like an SPF *subject* -- a domain
+        # (has a dot), a raw record (v=spf1...), or stdin (-) -- so plain
+        # `spf example.com` works, and a bare raw/stdin call still reaches show's
+        # redirect-to-check message instead of a bare "Unknown argument". A token
+        # that is none of these is far likelier a mistyped verb, so keep the sharp
+        # error. The whole arg (verb + rest) is forwarded so `spf domain ip` lands
+        # in show's two-positional guard ("did you mean find").
+        *.*|v=spf1*|-) _cmd_show "$verb" "${rest[@]}" ;;
         *) _error "Unknown argument '$verb'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
     esac
 )
