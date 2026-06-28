@@ -15,7 +15,7 @@
 #   -s, --server <ip>   DNS server to query (default: 8.8.8.8)
 #   -d, --domain <dom>  Anchor %{d} macros when input is a raw record
 #   --tcp               Force TCP instead of UDP for dig queries
-#   -q, --quiet         Errors only (suppress warnings and trace)
+#   -q, --quiet         Errors only (suppress warnings)
 #   -v, --verbose       Show the resolution trace
 #   -h, --help          Show help message (or per-verb: spf <verb> -h)
 
@@ -214,7 +214,7 @@ _spf() (
                 echo "  -s, --server ${s}ip${r}   DNS server to query (default: 8.8.8.8)"
                 echo "  -d, --domain ${s}dom${r}  Anchor %{d} macros when input is a raw record"
                 echo "  --tcp             Force TCP instead of UDP for dig queries"
-                echo "  -q, --quiet       Errors only (suppress warnings and trace)"
+                echo "  -q, --quiet       Errors only (suppress warnings)"
                 echo "  -v, --verbose     Show the resolution trace ([INF] lines)"
                 echo "  -h, --help        Show this help message (or per-verb: $SCRIPT_NAME ${s}verb${r} -h)"
                 echo "DEPENDENCIES"
@@ -499,7 +499,7 @@ except ValueError:
         printf '%s\n' "$s"
     }
 
-    # --- command stubs (implemented in later tasks) ---
+    # --- verb implementations and their helpers ---
 
     # _resolve_one <host> <fam:4|6> -- first A (fam 4) or AAAA (fam 6) address of host, or empty.
     _resolve_one() {
@@ -634,8 +634,8 @@ EOF
             return 1
         fi
 
-        # Multiple published v=spf1 records are an RFC 7208 permerror; the old
-        # function merged them into one mangled line. Show the first, flag the rest.
+        # Multiple published v=spf1 records are an RFC 7208 permerror. Show the
+        # first and flag the rest, rather than merging them into one mangled line.
         local n; n="$(printf '%s\n' "$records" | grep -c .)"
         [ "$n" -gt 1 ] && _warn "multiple published SPF records (RFC 7208 permerror); showing the first"
 
