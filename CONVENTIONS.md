@@ -168,6 +168,8 @@ _foo() {
 
 The path-based pre-check is deliberate: matching on the full path (`/dev/*`) rather than the basename (which could be `63`, `stdin`, etc.) avoids fragile globs that could misfire on legitimate filenames starting with a digit or literally named `stdin`. The post-basename case only handles the stdin-pipe shape, where basename is `bash` or empty. Real-file invocations pass through both cases untouched, so rename/symlink tracking still works. The canonical name is the one non-user-visible place besides the header comment where the literal filename appears.
 
+Enforced by `tests/meta-curl-pipe.test.sh`, which runs every script through all four pipe/procsub shapes with `--help` and asserts the help output names the script (never `bash` or a `/dev/fd` digit) (see TESTING.md).
+
 ## Cleanup Trap
 
 Source-only scripts use a `{ ... }` wrapper body, so any inner functions and `local` vars live in the caller's shell during the call. A RETURN trap calls an `__unset` helper to remove them when the wrapper returns, so the caller's namespace is left clean. (Executable scripts use a `( ... )` wrapper body and don't need this -- the subshell evaporates everything on return.)
@@ -183,6 +185,8 @@ trap '__prompt__unset || echo "'"$__prompt__name"' trap failed!" >&2; trap - RET
 - `'"$__prompt__name"'` embeds the value at definition time via quote-exit-expand-reenter
 - Place after inner function definitions, before main logic
 - The trailing `trap - RETURN` is load-bearing: it empties the trap slot before the function returns, which keeps the caller's pre-existing RETURN trap intact. See below.
+
+Enforced by `tests/meta-cleanup-on-source.test.sh`, which sources every script with `--help` and asserts no functions or variables leak into the caller's shell (see TESTING.md).
 
 ### Why `trap - RETURN` at the end of the handler
 

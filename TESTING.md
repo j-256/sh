@@ -239,8 +239,8 @@ Most test files target one script: `<name>.test.sh` exercises `../<name>`, and d
 
 | File | Asserts |
 | --- | --- |
-| `meta-cleanup-on-source.test.sh` | Sourcing any script with `--help` leaks no functions or variables into the caller's shell |
-| `meta-curl-pipe.test.sh` | Every script works when piped or process-substituted (`curl \| bash`, `bash <(...)`, `. <(...)`) |
+| `meta-cleanup-on-source.test.sh` | Sourcing any script with `--help` leaks no functions or variables into the caller's shell (CONVENTIONS Cleanup Trap / Source-only scripts) |
+| `meta-curl-pipe.test.sh` | Every script works when piped or process-substituted (`curl \| bash`, `bash <(...)`, `. <(...)`) (CONVENTIONS "Use `$SCRIPT_NAME`") |
 | `meta-coverage.test.sh` | The script↔test bijection holds: every bash script has a test, and every non-`meta-` test has a matching script |
 | `meta-comment-style.test.sh` | No comment ends in a trailing `.` or `!` (CONVENTIONS Style rule); internal sentence-separating periods in a multi-line block are allowed |
 
