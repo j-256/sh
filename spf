@@ -52,19 +52,19 @@ _spf() (
     # Each colored span is closed with C_RST before the next begins: SGR color and
     # intensity are orthogonal and cumulative, so re-emitting C_BRK (dim) does NOT
     # clear the prior span's color -- without the reset the SEV hue bleeds through
-    # the middle ][ brackets and the name. Every C_RST here is load-bearing.
+    # the middle ][ brackets and the name. Every C_RST here is load-bearing
     local PFX_ERR="${C_BRK}[${C_RST}${C_ERR}ERR${C_RST}${C_BRK}][${C_RST}${C_NAME}${SCRIPT_NAME}${C_RST}${C_BRK}]${C_RST} "
     local PFX_WRN="${C_BRK}[${C_RST}${C_WRN}WRN${C_RST}${C_BRK}][${C_RST}${C_NAME}${SCRIPT_NAME}${C_RST}${C_BRK}]${C_RST} "
     local PFX_INF="${C_BRK}[${C_RST}${C_INF}INF${C_RST}${C_BRK}][${C_RST}${C_NAME}${SCRIPT_NAME}${C_RST}${C_BRK}]${C_RST} "
 
     # Trailing C_RST closes any unclosed color a message carries, so an accent
     # that runs to end-of-line can't bleed onto the next line. Empty when color
-    # is off, so plain output is unchanged.
+    # is off, so plain output is unchanged
     _error() { printf '%s%s%s\n' "$PFX_ERR" "$*" "$C_RST" >&2; }
     _warn()  { if [ "$VERBOSITY" -ge 1 ]; then printf '%s%s%s\n' "$PFX_WRN" "$*" "$C_RST" >&2; fi; }
     _info()  { if [ "$VERBOSITY" -ge 2 ]; then printf '%s%s%s\n' "$PFX_INF" "$*" "$C_RST" >&2; fi; }
 
-    # _show_help [verb] -- top-level menu when no (or unknown) verb; per-verb detail otherwise.
+    # _show_help [verb] -- top-level menu when no (or unknown) verb; per-verb detail otherwise
     _show_help() {
         local verb="$1"
         local s; [ -t 1 ] && s=$'\033[4m'
@@ -267,7 +267,7 @@ _spf() (
     # between character-strings (a string caps at 255 bytes, so long records are
     # split), drop the surrounding quotes, keep only the v=spf1 record. Reads
     # stdin, writes one line. A record with no quotes (already-clean input) passes
-    # the sed through unchanged, so this is safe to apply to bare records too.
+    # the sed through unchanged, so this is safe to apply to bare records too
     _normalize_txt() {
         sed 's/" "//g; s/"//g' \
           | grep -i '^v=spf1' \
@@ -287,16 +287,16 @@ _spf() (
             "v=spf1"*) printf '%s\n' "$a" ;;
             # stdin: normalize like the domain path, so piping raw `dig +short TXT`
             # output (quoted, possibly multi-string) into any verb works the same
-            # as a domain lookup. A clean record passes through untouched.
+            # as a domain lookup. A clean record passes through untouched
             -)         _normalize_txt ;;
             *)         _dig_txt "$a" ;;
         esac
     }
 
-    # Print one IR row.
+    # Print one IR row
     _ir_row() { printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5" "$6"; }
 
-    # Print a host's A then AAAA addresses, one per line (empty if none).
+    # Print a host's A then AAAA addresses, one per line (empty if none)
     _resolve_host() {
         local host="$1"
         local tcp; [ "$USE_TCP" ] && tcp="+tcp"
@@ -448,7 +448,7 @@ except ValueError:
     sys.exit(2)' "$ip" "$cidr"
     }
 
-    # _find_hit <ip> <src> <qual> <mech> <value> -- print a mechanism-appropriate match line.
+    # _find_hit <ip> <src> <qual> <mech> <value> -- print a mechanism-appropriate match line
     _find_hit() {
         local ip="$1"
         local src="$2"
@@ -471,7 +471,7 @@ except ValueError:
         printf '%s %s %s:%s in %s (qualifier: %s)\n' "$ip" "$verb" "$mech" "$val" "$src" "$qual"
     }
 
-    # Expand IP/domain-derivable macros. Returns 1 if an unsupported macro appears.
+    # Expand IP/domain-derivable macros. Returns 1 if an unsupported macro appears
     _expand_macro() {
         local s="$1"
         local qip="$2"
@@ -501,7 +501,7 @@ except ValueError:
 
     # --- verb implementations and their helpers ---
 
-    # _resolve_one <host> <fam:4|6> -- first A (fam 4) or AAAA (fam 6) address of host, or empty.
+    # _resolve_one <host> <fam:4|6> -- first A (fam 4) or AAAA (fam 6) address of host, or empty
     _resolve_one() {
         local host="$1"
         local fam="$2"
@@ -512,7 +512,7 @@ except ValueError:
     }
 
     # _find_a_host <ir> <host> <input-domain> -- evaluate an a:<host> query.
-    # exit 0 literal present / 5 fragile (covered by range or other directive) / 4 absent.
+    # exit 0 literal present / 5 fragile (covered by range or other directive) / 4 absent
     _find_a_host() {
         local ir="$1"
         local host="$2"
@@ -606,13 +606,13 @@ EOF
             return 2
         fi
         # A second positional is almost certainly a find query (spf domain ip);
-        # show takes exactly one domain, so steer to the verb they likely meant.
+        # show takes exactly one domain, so steer to the verb they likely meant
         if [ -n "$extra" ]; then
             _error "show takes a single domain. Did you mean \`$SCRIPT_NAME find $input $extra\`? Run \`$SCRIPT_NAME -h\` for usage"
             return 2
         fi
         # show prints what is *published*; a raw record or stdin has nothing to
-        # fetch. Redirect to check, which exists to vet a record in hand.
+        # fetch. Redirect to check, which exists to vet a record in hand
         case "$input" in
             "v=spf1"*|-)
                 _error "show fetches a published record; pass a domain, not a record (to vet a record, use \`$SCRIPT_NAME check\`). Run \`$SCRIPT_NAME -h\` for usage"
@@ -626,7 +626,7 @@ EOF
 
         # Reassemble: join multi-string boundaries, strip quotes, keep v=spf1
         # records (same transform _dig_txt applies; inlined here so the quoted
-        # raw form survives for the -v character-string count below).
+        # raw form survives for the -v character-string count below)
         local records
         records="$(printf '%s\n' "$raw" | sed 's/" "//g; s/"//g' | grep -i '^v=spf1')"
         if [ -z "$records" ]; then
@@ -635,7 +635,7 @@ EOF
         fi
 
         # Multiple published v=spf1 records are an RFC 7208 permerror. Show the
-        # first and flag the rest, rather than merging them into one mangled line.
+        # first and flag the rest, rather than merging them into one mangled line
         local n; n="$(printf '%s\n' "$records" | grep -c .)"
         [ "$n" -gt 1 ] && _warn "multiple published SPF records (RFC 7208 permerror); showing the first"
 
@@ -643,7 +643,7 @@ EOF
 
         # -v: note when the record was published as multiple character-strings (a
         # string caps at 255 bytes, so long records are split). The reassembled
-        # form hides this; count quotes on the raw quoted line to recover it.
+        # form hides this; count quotes on the raw quoted line to recover it
         if [ "$VERBOSITY" -ge 2 ]; then
             local rawline
             rawline="$(printf '%s\n' "$raw" | grep -i '^"v=spf1' | head -n1)"
@@ -689,7 +689,7 @@ EOF
         local family; case "$ip" in *:*) family=6 ;; *) family=4 ;; esac
         local warned_py=""
 
-        # Walk rows in order; first containing CIDR wins.
+        # Walk rows in order; first containing CIDR wins
         local depth
         local src
         local qual
@@ -836,7 +836,7 @@ EOF
         # per-source false-flags a clean diamond: a single-all record reached
         # via two parents emits two identical all rows, and the frozen IR can't
         # tell that from a genuine two-all record. Depth 0 is walked once, so
-        # it's unambiguous -- it's the record actually being checked.
+        # it's unambiguous -- it's the record actually being checked
         local root_alln; root_alln="$(printf '%s\n' "$ir" | awk -F'\t' '$1=="0" && $4=="all"' | grep -c .)"
         [ "$root_alln" -gt 1 ] && { printf '  PROBLEM: multiple all mechanisms in the record\n'; problems=1; }
         # ptr present: deprecated by RFC 7208 (SHOULD NOT be used)
@@ -986,7 +986,7 @@ EOF
         case "$1" in
             -h|--help)
                 # defer: a verb may follow (spf -h find) or precede (spf find -h).
-                # acting now would show top-level help before the verb is read.
+                # acting now would show top-level help before the verb is read
                 case "${2-}" in
                     show|find|has|flatten|check|tree|ir) _show_help "$2"; return 0 ;;
                     *) WANT_HELP=1; shift ;;
@@ -1022,7 +1022,7 @@ EOF
     local -a rest; rest=("${args[@]:1}")
 
     # help routing: per-verb help if a verb is in play, else top-level.
-    # -h among a verb's own args (spf find -h) is treated as "show my help".
+    # -h among a verb's own args (spf find -h) is treated as "show my help"
     local a
     local verb_help=""
     for a in "${rest[@]}"; do
@@ -1053,7 +1053,7 @@ EOF
         # redirect-to-check message instead of a bare "Unknown argument". A token
         # that is none of these is far likelier a mistyped verb, so keep the sharp
         # error. The whole arg (verb + rest) is forwarded so `spf domain ip` lands
-        # in show's two-positional guard ("did you mean find").
+        # in show's two-positional guard ("did you mean find")
         *.*|v=spf1*|-) _cmd_show "$verb" "${rest[@]}" ;;
         *) _error "Unknown argument '$verb'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
     esac

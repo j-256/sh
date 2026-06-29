@@ -214,7 +214,7 @@ _dkim_pubkey() (
 
         echo "$pubkey"
         if [ -z "$quiet" ]; then
-            # Parse "Public-Key: (2048 bit)" / "RSA Public-Key:" / "ED25519 Public-Key:" etc.
+            # Parse the key-type/size summary line, e.g. "Public-Key: (2048 bit)", "RSA Public-Key:", "ED25519 Public-Key:"
             local key_summary
             key_summary="$(printf '%s' "$pkey_text" | grep -m1 -iE 'public-key' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
             [ -z "$key_summary" ] && key_summary="public key"

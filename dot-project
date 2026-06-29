@@ -8,7 +8,7 @@
 # Creates a .project XML file in each subdirectory of the given directory
 # (or the current directory), allowing them to be recognized as Salesforce
 # B2C Commerce (Demandware) cartridges by Eclipse/UX Studio/Prophet Debugger.
-# Each .project file uses the subdirectory name as the project name.
+# Each .project file uses the subdirectory name as the project name
 
 _dot_project() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"

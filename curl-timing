@@ -328,7 +328,7 @@ _curl_timing() (
         fi
     fi
 
-    # Per-URL log filenames. Single URL: curl-timing.txt. Multiple: curl-timing-1.txt, -2.txt, ...
+    # Per-URL log filenames: one URL gets curl-timing.txt, multiple get curl-timing-1.txt, curl-timing-2.txt, and so on
     local -a files=()
     if [ "${#urls[@]}" -eq 1 ]; then
         files=("curl-timing.txt")
