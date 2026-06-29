@@ -242,6 +242,7 @@ Most test files target one script: `<name>.test.sh` exercises `../<name>`, and d
 | `meta-cleanup-on-source.test.sh` | Sourcing any script with `--help` leaks no functions or variables into the caller's shell |
 | `meta-curl-pipe.test.sh` | Every script works when piped or process-substituted (`curl \| bash`, `bash <(...)`, `. <(...)`) |
 | `meta-coverage.test.sh` | The script↔test bijection holds: every bash script has a test, and every non-`meta-` test has a matching script |
+| `meta-comment-style.test.sh` | No comment ends in a trailing `.` or `!` (CONVENTIONS Style rule); internal sentence-separating periods in a multi-line block are allowed |
 
 Conventions for a meta-test:
 
@@ -250,6 +251,19 @@ Conventions for a meta-test:
 - **Reuse the `_is_bash_script` filter** when iterating the repo, so node scripts (`render-md`) and non-script `.sh`/`.md`/`.json` files are excluded consistently. `meta-cleanup-on-source.test.sh` and `meta-coverage.test.sh` carry identical copies.
 
 Meta-tests are discovered and run exactly like any other file: `test-runner.sh` globs `*.test.sh`, and `run_tests` finds the `test_*` functions inside. Run one in isolation with `test-runner.sh meta-coverage`.
+
+## Pre-commit hook
+
+A meta-test only fires when someone runs the suite, so a convention it polices can still be violated by a commit that never runs it. The tracked pre-commit hook closes that gap for the *fast, static* checks. Activate it once per clone:
+
+```bash
+tests/hooks/install        # points core.hooksPath at tests/hooks/
+tests/hooks/install --uninstall   # restore the default
+```
+
+The hook (`tests/hooks/pre-commit`) runs only the static, no-script-execution meta-tests listed in its `STATIC_METATESTS` variable (currently `meta-comment-style`), so it stays sub-second and there is no incentive to skip it. The slower fleet meta-tests and per-script suites are **not** run by the hook -- run those with `test-runner.sh` before pushing.
+
+The hook is a convenience gate, not a guarantee: `git commit --no-verify` bypasses it, and a clone that never runs `install` has no hook at all. Server-side CI is the only unskippable enforcement; until this repo has it, the hook plus a periodic full `test-runner.sh` run are the backstop.
 
 ## What to Test
 

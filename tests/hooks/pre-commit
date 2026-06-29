@@ -1,0 +1,38 @@
+#!/bin/bash
+# pre-commit - Block commits that violate fast, static repo conventions
+#
+# Tracked hook (activated by tests/hooks/install, which points git's
+# core.hooksPath here). Runs only the *static* convention meta-tests -- pure
+# text checks, no script execution -- so it stays sub-second and never tempts a
+# bypass. The slower whole-fleet meta-tests (curl-pipe, cleanup-on-source) and
+# per-script suites are NOT run here; run those via tests/test-runner.sh.
+#
+# Bypass for a single commit with: git commit --no-verify
+# That bypass is why this is a fast local gate, not the last line of defense --
+# server-side CI (if/when added) is the only truly unskippable enforcement.
+
+# Resolve the repo root from the hook's own location, so it works regardless of
+# the cwd git invokes the hook from, and regardless of core.hooksPath value
+hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+tests_dir="$(cd "$hook_dir/.." && pwd)"
+
+# Static convention meta-tests to gate on. Add fast (no-script-execution)
+# checks here as they are written; keep slow/executing tests out of the hook
+STATIC_METATESTS="meta-comment-style"
+
+rc=0
+for t in $STATIC_METATESTS; do
+    f="$tests_dir/$t.test.sh"
+    [ -f "$f" ] || continue
+    if ! out="$(/bin/bash "$f" 2>&1)"; then
+        printf '%s\n' "$out" >&2
+        rc=1
+    fi
+done
+
+if [ "$rc" -ne 0 ]; then
+    echo "" >&2
+    echo "pre-commit: convention check failed (see above)." >&2
+    echo "Fix the comments, or bypass with: git commit --no-verify" >&2
+fi
+exit "$rc"

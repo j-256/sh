@@ -226,7 +226,7 @@ This ensures:
 ## Style
 
 - Single space before inline comments: `cmd # comment`
-- No trailing `.` or `!` on comments, even on multi-sentence ones. Same rule as error messages.
+- No trailing `.` or `!` on comments, even on multi-sentence ones. Same rule as error messages. Only the *trailing* terminator is banned: in a multi-line comment, an internal line may end in `.` to separate sentences (the block is one message, like `"X failed. Run -h"`); just the block's last line must not. Enforced by `tests/meta-comment-style.test.sh` and the pre-commit hook (see TESTING.md).
 - No trailing `:` on comments that sit directly above code -- the colon adds no signal there, since "introduces follow-on output" is trivially true.
 - Trailing `:` IS load-bearing on comments that introduce more *comments*: header sections (`# Usage:`, `# Options:`, `# Dependencies:`, `# Environment:`, `# Examples:`, `# References:`), in-block list intros (`# Validate bracket syntax early:`, `# Accepts:`, `# Outputs:`, `# update BOTH:`), and any line whose subsequent comment lines are an indented list/sample/URL block. Keep the colon -- without it the reader can't see where the introducing sentence ends and the list begins.
 - `$(...)` for command substitution, not backticks
