@@ -1,6 +1,8 @@
 {
   "private": true,
   "scripts": {
-    "test": "/bin/bash ./tests/test-runner.sh"
+    "test": "/bin/bash ./tests/test-runner.sh",
+    "setup": "/bin/bash ./tests/install-hooks.sh",
+    "prepare": "/bin/bash ./tests/install-hooks.sh"
   }
 }

@@ -2,24 +2,25 @@
 
 A mixed collection of small shell utilities I've written over the years to make my own life easier. Some are broadly useful; plenty are niche to my own workflow. Every script has a doc, and every bash script has a test.
 
-- Browse the catalog: [INDEX.md](INDEX.md) — rendered at <https://toolio.sh>
+- Browse the catalog: [INDEX.md](INDEX.md) – rendered at <https://toolio.sh>
 - Rendered docs: `https://toolio.sh/<script>.md.html` (e.g. [tsd](https://toolio.sh/tsd.md.html))
+- Contributing: [CONTRIBUTING.md](CONTRIBUTING.md) – setup, conventions, and tests
 - Conventions: [CONVENTIONS.md](CONVENTIONS.md), [DOCS.md](DOCS.md), [TESTING.md](TESTING.md)
 
 ## Some picks
 
 A few that might be worth a look before you scroll the catalog. These are mostly the ones where the script does something non-obvious or solves a recurring annoyance.
 
-- [`prompt`](docs/prompt.md?html) ([script](prompt)) — sourced interactive prompt with default value and placeholder
-- [`tsd`](docs/tsd.md?html) ([script](tsd)) — paste any number, get back a timestamp or a duration
-- [`inflate`](docs/inflate.md?html) ([script](inflate)) — historical USD amounts adjusted for inflation
-- [`curl-timing`](docs/curl-timing.md?html) ([script](curl-timing)) — time HTTP requests and compare URLs head-to-head
-- [`pin-dns`](docs/pin-dns.md?html) ([script](pin-dns)) — curl wrapper that overrides DNS without touching `/etc/hosts`
-- [`explode`](docs/explode.md?html) ([script](explode)) — move a directory's contents up one level after a nested-folder unzip
+- [`prompt`](docs/prompt.md?html) ([script](prompt)) – sourced interactive prompt with default value and placeholder
+- [`tsd`](docs/tsd.md?html) ([script](tsd)) – paste any number, get back a timestamp or a duration
+- [`inflate`](docs/inflate.md?html) ([script](inflate)) – historical USD amounts adjusted for inflation
+- [`curl-timing`](docs/curl-timing.md?html) ([script](curl-timing)) – time HTTP requests and compare URLs head-to-head
+- [`pin-dns`](docs/pin-dns.md?html) ([script](pin-dns)) – curl wrapper that overrides DNS without touching `/etc/hosts`
+- [`explode`](docs/explode.md?html) ([script](explode)) – move a directory's contents up one level after a nested-folder unzip
 
 ## Usage
 
-Every script is a one-liner away — no install step. Pipe it straight into bash:
+Every script is a one-liner away – no install step. Pipe it straight into bash:
 
     curl -fsS https://toolio.sh/tsd | bash -s -- 1800
     curl -fsS https://toolio.sh/inflate | bash -s -- 150 1970

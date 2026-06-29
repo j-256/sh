@@ -255,11 +255,12 @@ Meta-tests are discovered and run exactly like any other file: `test-runner.sh` 
 
 ## Pre-commit hook
 
-A meta-test only fires when someone runs the suite, so a convention it polices can still be violated by a commit that never runs it. The tracked pre-commit hook closes that gap for the *fast, static* checks. Activate it once per clone:
+A meta-test only fires when someone runs the suite, so a convention it polices can still be violated by a commit that never runs it. The tracked pre-commit hook closes that gap for the *fast, static* checks. It is installed automatically by `npm install` (via the `prepare` script); activate it manually with:
 
 ```bash
-tests/hooks/install        # points core.hooksPath at tests/hooks/
-tests/hooks/install --uninstall   # restore the default
+npm run setup                      # or, without npm:
+tests/install-hooks.sh             # points core.hooksPath at tests/hooks/
+tests/install-hooks.sh --uninstall # restore the default
 ```
 
 The hook (`tests/hooks/pre-commit`) runs only the static, no-script-execution meta-tests listed in its `STATIC_METATESTS` variable (currently `meta-comment-style`), so it stays sub-second and there is no incentive to skip it. The slower fleet meta-tests and per-script suites are **not** run by the hook -- run those with `test-runner.sh` before pushing.

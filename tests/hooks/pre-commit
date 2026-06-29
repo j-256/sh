@@ -1,7 +1,7 @@
 #!/bin/bash
 # pre-commit - Block commits that violate fast, static repo conventions
 #
-# Tracked hook (activated by tests/hooks/install, which points git's
+# Tracked hook (activated by tests/install-hooks.sh, which points git's
 # core.hooksPath here). Runs only the *static* convention meta-tests -- pure
 # text checks, no script execution -- so it stays sub-second and never tempts a
 # bypass. The slower whole-fleet meta-tests (curl-pipe, cleanup-on-source) and
