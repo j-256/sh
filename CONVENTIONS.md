@@ -4,6 +4,8 @@ Standards for scripts in this repository.
 
 **See also:** [`DOCS.md`](DOCS.md) for how to write a `<script>.md` doc; [`TESTING.md`](TESTING.md) for how to write a `<script>.test.sh` test file.
 
+When a rule here is enforced by a meta-test (`tests/meta-*.test.sh`), the rule names its test and the test's row in the `TESTING.md` table names the rule, so the prose and its enforcement are reachable from each other. See [Meta-tests](TESTING.md#meta-tests) for the convention.
+
 ## File Structure
 
 ```bash

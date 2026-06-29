@@ -249,6 +249,7 @@ Conventions for a meta-test:
 - **Name it `meta-<topic>.test.sh`.** This is the signal. `meta-coverage.test.sh` keys off the prefix to exempt meta-tests from its "every test has a script" check -- a meta-test without the prefix would be flagged as an orphan (a test for a script that doesn't exist).
 - **No `UNDER_TEST`.** There is no single script under test. Walk `"$REPO_DIR"/*` (or `tests/*.test.sh`) instead.
 - **Reuse the `_is_bash_script` filter** when iterating the repo, so node scripts (`render-md`) and non-script `.sh`/`.md`/`.json` files are excluded consistently. `meta-cleanup-on-source.test.sh` and `meta-coverage.test.sh` carry identical copies.
+- **Cross-link it with the rule it enforces.** When a meta-test guards a prose rule in `CONVENTIONS.md`, name the test in that rule and name the rule's section in this file's meta-test table, so neither can be found without finding the other. (`meta-coverage` is the exception: its rule lives here, not in `CONVENTIONS.md`, so it links only within `TESTING.md`.) This linkage is a prose convention, not a checked one -- whether a link points at the *right* rule, and whether a convention even warrants a test, are judgment calls a script can't make.
 
 Meta-tests are discovered and run exactly like any other file: `test-runner.sh` globs `*.test.sh`, and `run_tests` finds the `test_*` functions inside. Run one in isolation with `test-runner.sh meta-coverage`.
 
