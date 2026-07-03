@@ -1,14 +1,17 @@
 #!/bin/bash
-# pwa-prereqs - check or install PWA development prerequisites (Xcode CLT, Homebrew, nvm, Node LTS)
+# pwa-prereqs - check or install PWA development prerequisites (Xcode CLT, nvm, Node LTS)
 #
 # Usage:
-#   pwa-prereqs              # check-only: report which components are installed
-#   pwa-prereqs --install    # install any missing components
+#   pwa-prereqs                    # check-only: report which components are installed
+#   pwa-prereqs --install          # install any missing components
+#   pwa-prereqs --install --shell both
 #   pwa-prereqs -h
 #
 # Options:
-#   --install     Install missing components (default is check-only)
-#   -h, --help    Show help message
+#   -i, --install     Install missing components (default is check-only)
+#   -s, --shell WHICH Which shell's startup file(s) to wire up: auto|bash|zsh|both|none
+#                     (default auto -- detect from $SHELL; none writes nothing)
+#   -h, --help        Show help message
 
 _pwa_prereqs() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
@@ -16,6 +19,7 @@ _pwa_prereqs() (
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="pwa-prereqs" ;; esac
 
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+    _warn()  { echo "[WRN][$SCRIPT_NAME] $*" >&2; }
 
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
@@ -28,10 +32,9 @@ _pwa_prereqs() (
         echo "DESCRIPTION"
         echo "  Checks or installs the prerequisites for Salesforce PWA Kit"
         echo "  development on macOS:"
-        echo "    1. Xcode Command Line Tools (required for Homebrew)"
-        echo "    2. Homebrew"
-        echo "    3. nvm (Node Version Manager)"
-        echo "    4. Latest LTS Node.js (via \`nvm install --lts\`)"
+        echo "    1. Xcode Command Line Tools (required by nvm's installer)"
+        echo "    2. nvm (Node Version Manager)"
+        echo "    3. Latest LTS Node.js (via \`nvm install --lts\`)"
         echo ""
         echo "  Default (no flags): check-only mode. Reports [ok] or [missing]"
         echo "  for each component and exits 0 if all are present, 1 otherwise."
@@ -39,11 +42,23 @@ _pwa_prereqs() (
         echo "  With --install: actually installs any missing components."
         echo "  Skips anything already present. The Xcode CLT install is a"
         echo "  GUI flow (Apple's dialog); when missing, this script triggers"
-        echo "  the installer and exits so you can re-run once CLT is in"
-        echo "  place. Requires sudo access during the Homebrew install step."
+        echo "  the installer and exits so you can re-run once CLT is in place."
+        echo ""
+        echo "  Shell startup wiring: nvm only works in new terminals after its"
+        echo "  setup lines are added to a shell startup file, and nvm's own"
+        echo "  installer only edits a file that already exists -- so on a fresh"
+        echo "  Mac nvm often vanishes when the terminal is closed. This script"
+        echo "  writes the setup lines itself, idempotently, creating the startup"
+        echo "  file if needed. Use --shell to choose which shell(s) to wire up,"
+        echo "  or --shell none to touch no files (it prints the lines instead,"
+        echo "  for those who manage their own dotfiles)."
         echo "OPTIONS"
-        echo "  --install     Install missing components (default is check-only)"
-        echo "  -h, --help    Show this help message"
+        echo "  -i, --install      Install missing components (default is check-only)"
+        echo "  -s, --shell ${s}which${r}   Shell startup file(s) to wire up:"
+        echo "                     auto (default), bash, zsh, both, or none"
+        echo "  -h, --help         Show this help message"
+        echo "ENVIRONMENT"
+        echo "  SHELL  Consulted by --shell auto to pick the target startup file"
         echo "EXIT STATUS"
         echo "  0  All prerequisites present (check mode) or installed (install mode)"
         echo "  1  Missing prerequisites (check mode) or installation failed (install mode)"
@@ -86,15 +101,102 @@ _pwa_prereqs() (
         done
     }
 
-    local mode="check"
+    # Resolve --shell auto by inspecting $SHELL (the login shell both installers
+    # key off). Echoes one of: bash zsh other. "other" means an unrecognized
+    # shell, handled by wiring ~/.profile as a best-effort fallback
+    _detect_shell() {
+        case "${SHELL##*/}" in
+            *bash*) echo "bash" ;;
+            *zsh*)  echo "zsh" ;;
+            *)      echo "other" ;;
+        esac
+    }
 
-    _expand_short_opts "" "$@"
+    # Map a shell name to the startup file this script wires up:
+    #   zsh   -> ~/.zshrc        read by every interactive zsh (login and not)
+    #   bash  -> ~/.bash_profile macOS login-shell target (Terminal.app opens login shells)
+    #   other -> ~/.profile      POSIX fallback for unrecognized shells
+    # These match what nvm's installer targets for macOS, chosen so a freshly
+    # opened Terminal window actually sources the file
+    _rc_file_for() {
+        case "$1" in
+            zsh)  echo "$HOME/.zshrc" ;;
+            bash) echo "$HOME/.bash_profile" ;;
+            *)    echo "$HOME/.profile" ;;
+        esac
+    }
+
+    # Idempotently append a labeled block to a startup file, creating the file
+    # (and its parent dir) if missing. A block is skipped when its marker line is
+    # already present, so re-running --install never duplicates entries.
+    # Args: $1 = component label (names the block in messages), $2 = rc file path,
+    #       $3 = grep marker (fixed string), $4 = block text
+    _ensure_rc_block() {
+        local label="$1"
+        local rc="$2"
+        local marker="$3"
+        local block="$4"
+
+        mkdir -p "$(dirname "$rc")" 2>/dev/null || :
+        if [ -f "$rc" ] && grep -qF "$marker" "$rc" 2>/dev/null; then
+            echo "  $label already wired in $rc"
+            return 0
+        fi
+        if printf '\n%s\n' "$block" >>"$rc"; then
+            echo "  $label wired into $rc"
+        else
+            _error "Failed to write $label setup lines to $rc"
+            return 1
+        fi
+    }
+
+    # Write the nvm setup lines into every target startup file. Called even when
+    # nvm was already present, so a re-run repairs a startup file that never got
+    # the lines. Wiring is keyed off NVM_DIR/HOME; returns nonzero on write failure
+    _wire_shell_startup() {
+        # nvm's canonical three-line block, matching what its own installer writes
+        local nvm_block
+        # shellcheck disable=SC2016 # "Expressions don't expand in single quotes, use double quotes for that." -- $NVM_DIR/$HOME must land in the rc file literally so they expand at the user's shell-startup time, not now
+        nvm_block="$(printf '%s\n%s\n%s' \
+            'export NVM_DIR="$HOME/.nvm"' \
+            '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm' \
+            '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion')"
+
+        # --shell none: touch no files. Print the block so a self-managing user
+        # can add it wherever they keep their shell setup
+        if [ "${#RC_TARGETS[@]}" -eq 0 ]; then
+            echo "Skipping shell startup wiring (--shell none)."
+            echo "To enable nvm in new shells yourself, add these lines to your shell startup file:"
+            # Indent every line of the block by replacing each newline with
+            # newline+2spaces; the leading "  " handles the first line
+            echo "  ${nvm_block//$'\n'/$'\n  '}"
+            return 0
+        fi
+
+        local rc
+        for rc in "${RC_TARGETS[@]}"; do
+            echo "Wiring shell startup: $rc"
+            _ensure_rc_block "nvm" "$rc" 'NVM_DIR/nvm.sh' "$nvm_block" || return 1
+        done
+    }
+
+    local mode="check"
+    local shell_choice="auto"
+
+    _expand_short_opts "s" "$@"
     set -- "${_EXPANDED[@]}"; unset _EXPANDED
 
     while [ $# -gt 0 ]; do
         case "$1" in
             -h|--help) _show_help; return 0 ;;
-            --install) mode="install"; shift ;;
+            -i|--install) mode="install"; shift ;;
+            -s|--shell)
+                [ -n "${2-}" ] || { _error "--shell requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                shell_choice="$2"; shift 2 ;;
+            --shell=*)
+                shell_choice="${1#*=}"
+                [ -n "$shell_choice" ] || { _error "--shell requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                shift ;;
             -*)
                 _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"
                 return 2
@@ -105,6 +207,14 @@ _pwa_prereqs() (
                 ;;
         esac
     done
+
+    case "$shell_choice" in
+        auto|bash|zsh|both|none) ;;
+        *)
+            _error "Invalid --shell '$shell_choice' (valid: auto|bash|zsh|both|none). Run \`$SCRIPT_NAME -h\` for usage"
+            return 2
+            ;;
+    esac
 
     # Platform check: macOS only
     local platform; platform="$(uname -s)"
@@ -125,19 +235,12 @@ _pwa_prereqs() (
             all_ok=1
         fi
 
-        # Homebrew
-        if command -v brew >/dev/null 2>&1; then
-            echo "[ok]      Homebrew"
-        else
-            echo "[missing] Homebrew"
-            all_ok=1
-        fi
-
-        # nvm: command in PATH, or sourceable ~/.nvm/nvm.sh
+        # nvm is a shell function (not a PATH binary) and isn't inherited by this
+        # child process, so `command -v nvm` can't detect it -- a sourceable
+        # ~/.nvm/nvm.sh is the authoritative signal. Source it and confirm the
+        # function appears
         local nvm_present=1
-        if command -v nvm >/dev/null 2>&1; then
-            nvm_present=0
-        elif [ -s "$HOME/.nvm/nvm.sh" ]; then
+        if [ -s "$HOME/.nvm/nvm.sh" ]; then
             # NVM_DIR must be exported -- nvm.sh reads it from the environment
             export NVM_DIR="$HOME/.nvm"
             # shellcheck disable=SC1091 # "Not following: $NVM_DIR/nvm.sh was not specified as input (see shellcheck -x)." -- nvm.sh is installed at runtime and not present at lint time; nothing to follow statically
@@ -169,6 +272,37 @@ _pwa_prereqs() (
     fi
 
     # --- install mode ---
+
+    # Resolve which startup file(s) to wire. `auto` follows $SHELL; `both`
+    # targets bash and zsh so the tools work no matter which shell is launched;
+    # `none` wires nothing (RC_TARGETS stays empty) for self-managed dotfiles
+    local -a RC_TARGETS=()
+    local detected; detected="$(_detect_shell)"
+    case "$shell_choice" in
+        auto)
+            RC_TARGETS+=("$(_rc_file_for "$detected")")
+            [ "$detected" = "other" ] && _warn "Unrecognized \$SHELL '$SHELL'; wiring $HOME/.profile as a fallback"
+            ;;
+        bash) RC_TARGETS+=("$(_rc_file_for bash)") ;;
+        zsh)  RC_TARGETS+=("$(_rc_file_for zsh)") ;;
+        both)
+            RC_TARGETS+=("$(_rc_file_for bash)")
+            RC_TARGETS+=("$(_rc_file_for zsh)")
+            ;;
+        none) ;; # leave RC_TARGETS empty; nvm's installer is opted out below too
+    esac
+
+    # PROFILE tells nvm's installer which file to append its own block to. Point
+    # it at our primary target so nvm and this script agree; grep-guarded writes
+    # keep the two from duplicating. For --shell none, /dev/null is nvm's
+    # documented opt-out ("do NOT touch my profile"), so neither we nor nvm write
+    local nvm_profile
+    if [ "$shell_choice" = "none" ]; then
+        nvm_profile="/dev/null"
+    else
+        nvm_profile="${RC_TARGETS[0]}"
+    fi
+
     echo "--- START xcode ---"
     if xcode-select -p >/dev/null 2>&1; then
         echo "Xcode Command Line Tools already installed."
@@ -183,68 +317,69 @@ _pwa_prereqs() (
         return 1
     fi
 
-    echo "--- START brew ---"
-    if command -v brew >/dev/null 2>&1; then
-        echo "Homebrew is already installed."
-    else
-        echo "Installing Homebrew..."
-        if /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; then
-            echo "Homebrew installed successfully."
-        else
-            _error "Homebrew installation failed"
-            return 1
-        fi
-    fi
-    echo "--- FINISH brew ---"
-
+    # NVM_DIR must be exported -- nvm.sh and its child processes read it from the
+    # environment (CONVENTIONS allows export for genuinely env-needed vars)
+    export NVM_DIR="$HOME/.nvm"
     echo "--- START nvm ---"
-    if command -v nvm >/dev/null 2>&1; then
+    # `nvm` is a shell function, not a binary, and functions are NOT inherited by
+    # a child process -- so `command -v nvm` is always false here in the executed
+    # / `curl | bash` path. The authoritative "installed?" signal is a sourceable
+    # nvm.sh; we source it into THIS process below either way so `nvm install`
+    # works now (the startup-file wiring is what makes it persist for the user)
+    if [ -s "$NVM_DIR/nvm.sh" ]; then
         echo "nvm is already installed."
-    elif [ -d "$HOME/.nvm" ]; then
-        echo "nvm directory exists, but nvm command is not found. Attempting to source nvm..."
-        # NVM_DIR must be exported -- nvm.sh and its child processes read it from
-        # the environment (CONVENTIONS allows export for genuinely env-needed vars)
-        export NVM_DIR="$HOME/.nvm"
-        if [ -s "$NVM_DIR/nvm.sh" ]; then
-            # shellcheck disable=SC1091 # "Not following: $NVM_DIR/nvm.sh was not specified as input (see shellcheck -x)." -- nvm.sh is installed at runtime and not present at lint time; nothing to follow statically
-            . "$NVM_DIR/nvm.sh"
-            echo "nvm sourced successfully."
-        else
-            echo "nvm script not found in $NVM_DIR. Reinstalling nvm..."
-            if curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash; then
-                echo "nvm reinstalled successfully."
-            else
-                _error "nvm reinstallation failed"
-                return 1
-            fi
-        fi
     else
-        if curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash; then
+        # PROFILE steers nvm's installer to our target startup file. It must sit
+        # on `bash` (right of the pipe), where the installer runs -- a prefix on
+        # `curl` sets it only for curl and the installer never sees it
+        if curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | PROFILE="$nvm_profile" bash; then
             echo "nvm installed successfully."
-            export NVM_DIR="$HOME/.nvm"
-            if [ -s "$NVM_DIR/nvm.sh" ]; then
-                # shellcheck disable=SC1091 # "Not following: $NVM_DIR/nvm.sh was not specified as input (see shellcheck -x)." -- nvm.sh is installed at runtime and not present at lint time; nothing to follow statically
-                . "$NVM_DIR/nvm.sh"
-            else
-                _error "nvm script not found in $NVM_DIR after install"
-                return 1
-            fi
         else
             _error "nvm installation failed"
             return 1
         fi
+        if [ ! -s "$NVM_DIR/nvm.sh" ]; then
+            _error "nvm script not found in $NVM_DIR after install"
+            return 1
+        fi
+    fi
+    # Load nvm into this process. Sourcing nvm.sh defines the `nvm` function here;
+    # verify it took, since `nvm install --lts` below depends on it
+    # shellcheck disable=SC1091 # "Not following: $NVM_DIR/nvm.sh was not specified as input (see shellcheck -x)." -- nvm.sh is installed at runtime and not present at lint time; nothing to follow statically
+    . "$NVM_DIR/nvm.sh"
+    if ! command -v nvm >/dev/null 2>&1; then
+        _error "nvm not available after sourcing $NVM_DIR/nvm.sh"
+        return 1
     fi
     echo "--- FINISH nvm ---"
 
     echo "--- START node/npm ---"
     echo "Installing latest Long-Term Support (LTS) Node.js..."
-    if nvm install --lts; then # automatically runs `nvm use --lts`
+    if nvm install --lts; then # automatically runs `nvm use --lts` and sets the default alias
         echo "Node.js installed successfully."
     else
         _error "Node.js installation failed"
         return 1
     fi
     echo "--- FINISH node/npm ---"
+
+    # Wire startup files last, once everything is installed. Runs even when
+    # components were already present, so a re-run repairs a startup file that is
+    # missing the setup lines
+    echo "--- START shell-startup ---"
+    _wire_shell_startup || return 1
+    echo "--- FINISH shell-startup ---"
+
+    echo ""
+    if [ "$shell_choice" = "none" ]; then
+        echo "All set. Shell startup was not modified (--shell none); add the lines"
+        echo "above to your own setup so node and npm load in new shells."
+    else
+        echo "All set. node and npm are ready in NEW terminal windows."
+        echo "To use them in THIS window right now, reload your shell:"
+        echo "    exec \"\$SHELL\" -l"
+        echo "or just close this terminal and open a new one."
+    fi
 )
 
 _pwa_prereqs "$@"
