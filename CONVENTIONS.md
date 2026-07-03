@@ -90,27 +90,37 @@ A plain comment block immediately after the shebang. Includes the script name, a
 
 ## --help
 
-Every script supports `-h` and `--help`. The help function uses raw ANSI SGR escapes (`\033[4m`/`\033[24m`) for underlined parameter placeholders, guarded by `[ -t 1 ]` (only when stdout is a terminal):
+Every script supports `-h` and `--help`. The help body is a single `cat <<EOF` heredoc, not a run of `echo` lines -- the block edits as plain text, so multi-line changes don't fight per-line `echo "` wrappers and their escaped inner quotes. It uses raw ANSI SGR escapes (`\033[4m`/`\033[24m`) for underlined parameter placeholders, guarded by `[ -t 1 ]` (only when stdout is a terminal):
 
 ```bash
 _show_help() {
     local s; [ -t 1 ] && s=$'\033[4m'
     local r; [ -t 1 ] && r=$'\033[24m'
-    echo "NAME"
-    echo "  $SCRIPT_NAME - short description"
-    echo "SYNOPSIS"
-    echo "  $SCRIPT_NAME [${s}options${r}] <${s}arg${r}>"
-    echo "DESCRIPTION"
-    echo "  What it does and why you'd use it."
-    echo "OPTIONS"
-    echo "  -v, --verbose  Enable verbose output"
-    echo "  -h, --help     Show this help message"
-    echo "DEPENDENCIES"
-    echo "  jq, curl"
+    cat <<EOF
+NAME
+  $SCRIPT_NAME - short description
+SYNOPSIS
+  $SCRIPT_NAME [${s}options${r}] <${s}arg${r}>
+DESCRIPTION
+  What it does and why you'd use it.
+OPTIONS
+  -v, --verbose  Enable verbose output
+  -h, --help     Show this help message
+DEPENDENCIES
+  jq, curl
+EOF
 }
 ```
 
 Sections (use what's relevant): NAME, SYNOPSIS, DESCRIPTION, OPTIONS, ENVIRONMENT, DEPENDENCIES, EXAMPLES, EXIT STATUS, SEE ALSO, CAVEATS.
+
+The heredoc has three constraints worth stating outright:
+
+- **Unquoted delimiter (`<<EOF`, never `<<'EOF'`).** The body must expand `$SCRIPT_NAME` and the `${s}`/`${r}` underline markers. A quoted delimiter suppresses all expansion and would break the `$SCRIPT_NAME`-not-literal rule (see [Use `$SCRIPT_NAME`, not the literal filename](#use-script_name-not-the-literal-filename)).
+- **Body and closing `EOF` sit flush-left at column 0.** A non-dash heredoc can't strip leading whitespace, and `<<-` only strips *tabs* while this repo is space-indented -- so the body cannot follow the surrounding function's indentation. The `cat <<EOF` opener keeps the function's indent; only the body and terminator go flush-left. This is the one place inside a function where content dedents to column 0, and it's expected.
+- **`\$`, backticks, and `\\` still need escaping.** An unquoted heredoc processes them exactly as a double-quoted `echo` string does, so a literal `$` in an EXAMPLES line is `\$` and a literal backtick is `` \` ``. The heredoc removes the `echo "`/`"` wrapping and the escaped inner `\"` quotes; it does not remove `$`/backtick escaping.
+
+**Exception -- `printf` for column alignment.** A script whose help needs tab-stop column alignment across rows (rather than the hand-spaced columns the sections above use) may use `printf '\t...'` per line instead of a heredoc. `tsd` is the sole current example: its OPTIONS/EXAMPLES render through `printf '\t%s\t%s\n'` for tab-aligned columns, which a heredoc's literal text can't reproduce. This is a deliberate, documented divergence -- reach for it only when tab alignment is the point, not to avoid a heredoc. Note that a lone literal `\t` inside descriptive text does *not* justify `printf`: a heredoc keeps `\t` literal for free (the SC2028 "backslash in echo" lint is `echo`-specific and never fires on heredoc bodies), so an example like `awk -F'\t'` belongs inline in the heredoc.
 
 ### Periods in help text
 
