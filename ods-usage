@@ -61,39 +61,41 @@ _ods_usage() (
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
-        echo "NAME"
-        echo "  $SCRIPT_NAME - calculate On-Demand Sandbox credits used from an ODS API response"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME [${s}api_response${r}]"
-        echo "  $SCRIPT_NAME -h"
-        echo "DESCRIPTION"
-        echo "  Parses a getRealmUsage JSON response from the Salesforce B2C Commerce"
-        echo "  On-Demand Sandbox (ODS) API and summarizes sandbox counts, uptime/"
-        echo "  downtime by profile, and credits used. Credit multipliers:"
-        echo "    medium=1, large=2, xlarge=4 (per minute up)"
-        echo "    stopped=0.3 (per minute down, all profiles)"
-        echo ""
-        echo "  Primary workflow: copy the JSON response from the ODS API Swagger UI"
-        echo "  (https://admin.dx.commercecloud.salesforce.com/#/Realms/getRealmUsage),"
-        echo "  then run \`$SCRIPT_NAME\` with no arguments -- it will read JSON from"
-        echo "  the clipboard via pbpaste. You can also pass the JSON as an argument."
-        echo "INPUT"
-        echo "  Expects JSON with these required fields under .data:"
-        echo "    createdSandboxes, activeSandboxes, deletedSandboxes,"
-        echo "    minutesUp, minutesDown, minutesUpByProfile[]"
-        echo "OPTIONS"
-        echo "  ${s}api_response${r}   JSON response (if omitted, read from clipboard via pbpaste)"
-        echo "  -h, --help     Show this help message"
-        echo "DEPENDENCIES"
-        echo "  jq, pbpaste (macOS clipboard; required for clipboard mode)"
-        echo "EXAMPLES"
-        echo "  $SCRIPT_NAME '{\"data\":{\"createdSandboxes\":9,...}}'"
-        echo "  $SCRIPT_NAME                 # reads JSON from clipboard (macOS)"
-        echo "  pbpaste | xargs -0 $SCRIPT_NAME   # explicit clipboard pipe"
-        echo "EXIT STATUS"
-        echo "  0  Success"
-        echo "  2  Usage error (invalid JSON, missing required fields, no input)"
-        echo "  3  Dependency error (jq missing; pbpaste missing in clipboard mode)"
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - calculate On-Demand Sandbox credits used from an ODS API response
+SYNOPSIS
+  $SCRIPT_NAME [${s}api_response${r}]
+  $SCRIPT_NAME -h
+DESCRIPTION
+  Parses a getRealmUsage JSON response from the Salesforce B2C Commerce
+  On-Demand Sandbox (ODS) API and summarizes sandbox counts, uptime/
+  downtime by profile, and credits used. Credit multipliers:
+    medium=1, large=2, xlarge=4 (per minute up)
+    stopped=0.3 (per minute down, all profiles)
+
+  Primary workflow: copy the JSON response from the ODS API Swagger UI
+  (https://admin.dx.commercecloud.salesforce.com/#/Realms/getRealmUsage),
+  then run \`$SCRIPT_NAME\` with no arguments -- it will read JSON from
+  the clipboard via pbpaste. You can also pass the JSON as an argument.
+INPUT
+  Expects JSON with these required fields under .data:
+    createdSandboxes, activeSandboxes, deletedSandboxes,
+    minutesUp, minutesDown, minutesUpByProfile[]
+OPTIONS
+  ${s}api_response${r}   JSON response (if omitted, read from clipboard via pbpaste)
+  -h, --help     Show this help message
+DEPENDENCIES
+  jq, pbpaste (macOS clipboard; required for clipboard mode)
+EXAMPLES
+  $SCRIPT_NAME '{"data":{"createdSandboxes":9,...}}'
+  $SCRIPT_NAME                 # reads JSON from clipboard (macOS)
+  pbpaste | xargs -0 $SCRIPT_NAME   # explicit clipboard pipe
+EXIT STATUS
+  0  Success
+  2  Usage error (invalid JSON, missing required fields, no input)
+  3  Dependency error (jq missing; pbpaste missing in clipboard mode)
+EOF
     }
 
     case "$1" in

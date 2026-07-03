@@ -18,41 +18,43 @@ _generate_p12() (
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
-        echo "NAME"
-        echo "  $SCRIPT_NAME - generate a PKCS#12 client certificate for SFCC mTLS code uploads"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME [${s}cert_bundle_directory${r}]"
-        echo "  $SCRIPT_NAME -h"
-        echo "DESCRIPTION"
-        echo "  Generates a PKCS#12 (.p12) client certificate for Salesforce"
-        echo "  Commerce Cloud (SFCC) B2C Commerce. The generated .p12 is used"
-        echo "  for mutual-TLS (mTLS) client authentication when uploading code"
-        echo "  to staging instances."
-        echo ""
-        echo "  Note: 'MFA' in SFCC parlance refers to mTLS client-certificate"
-        echo "  auth, not two-factor authentication."
-        echo ""
-        echo "  Interactive. Run from the directory the cert bundle was unzipped"
-        echo "  to, or provide that path as an argument. Prompts for: hostname,"
-        echo "  cert expiration, CSR fields, and an export password to encrypt"
-        echo "  the .p12 file."
-        echo "PRECONDITIONS"
-        echo "  Requires a CA cert bundle downloaded from Salesforce Business"
-        echo "  Manager (Global Preferences -> Keys & Certificates -> MFA"
-        echo "  Certificates). The bundle should contain files of the form:"
-        echo "    <hostname>_NN.crt   CA certificate"
-        echo "    <hostname>_NN.key   CA private key"
-        echo "    <hostname>_NN.txt   CA password"
-        echo "    <hostname>.srl      CA serial number"
-        echo "  where NN is a two-digit suffix (_01, _02, ...). The highest"
-        echo "  complete suffix is selected automatically."
-        echo "EXIT STATUS"
-        echo "  0  Success"
-        echo "  1  Runtime failure (bundle files missing, openssl step failed)"
-        echo "  2  Usage error (directory arg is not accessible)"
-        echo "  3  Dependency error (openssl missing)"
-        echo "DEPENDENCIES"
-        echo "  openssl"
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - generate a PKCS#12 client certificate for SFCC mTLS code uploads
+SYNOPSIS
+  $SCRIPT_NAME [${s}cert_bundle_directory${r}]
+  $SCRIPT_NAME -h
+DESCRIPTION
+  Generates a PKCS#12 (.p12) client certificate for Salesforce
+  Commerce Cloud (SFCC) B2C Commerce. The generated .p12 is used
+  for mutual-TLS (mTLS) client authentication when uploading code
+  to staging instances.
+
+  Note: 'MFA' in SFCC parlance refers to mTLS client-certificate
+  auth, not two-factor authentication.
+
+  Interactive. Run from the directory the cert bundle was unzipped
+  to, or provide that path as an argument. Prompts for: hostname,
+  cert expiration, CSR fields, and an export password to encrypt
+  the .p12 file.
+PRECONDITIONS
+  Requires a CA cert bundle downloaded from Salesforce Business
+  Manager (Global Preferences -> Keys & Certificates -> MFA
+  Certificates). The bundle should contain files of the form:
+    <hostname>_NN.crt   CA certificate
+    <hostname>_NN.key   CA private key
+    <hostname>_NN.txt   CA password
+    <hostname>.srl      CA serial number
+  where NN is a two-digit suffix (_01, _02, ...). The highest
+  complete suffix is selected automatically.
+EXIT STATUS
+  0  Success
+  1  Runtime failure (bundle files missing, openssl step failed)
+  2  Usage error (directory arg is not accessible)
+  3  Dependency error (openssl missing)
+DEPENDENCIES
+  openssl
+EOF
     }
 
     # Text formatting control characters for later use - by convention wrapped in {} when used below, for legibility.

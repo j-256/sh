@@ -23,53 +23,55 @@ _chrome_ua() (
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
-        echo "NAME"
-        echo "  $SCRIPT_NAME - print a realistic Chrome User-Agent string"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME [--platform mac|win|linux] [--app ${s}path${r}]"
-        echo "  $SCRIPT_NAME --latest [--platform mac|win|linux]"
-        echo "  $SCRIPT_NAME -h"
-        echo "DESCRIPTION"
-        echo "  Emits a Chrome UA string. By default, reads the installed Chrome's"
-        echo "  major version from its Info.plist (macOS only) and formats a UA"
-        echo "  matching Chrome's reduced-UA policy (major version only, frozen"
-        echo "  platform string per OS family)."
-        echo ""
-        echo "  With --latest, fetches the current stable Chrome major version"
-        echo "  from Google's Version History API instead -- no local install"
-        echo "  required, no platform restriction."
-        echo ""
-        echo "  Default platform shape is Mac. Override with --platform to emit"
-        echo "  a Windows or Linux UA shape (and, with --latest, to fetch that"
-        echo "  platform's current version from the API)."
-        echo ""
-        echo "  Fallback chain for the default mode:"
-        echo "    1. Read local Chrome (via \`defaults\`, macOS)"
-        echo "    2. If that fails and curl is available, auto-fetch latest"
-        echo "       (unless CHROME_UA_OFFLINE is set)"
-        echo "    3. If that also fails or is blocked, use a pinned major"
-        echo "       version (goes stale over time; update periodically)"
-        echo ""
-        echo "  Useful for bot-filtered endpoints:"
-        echo "    curl -A \"\$($SCRIPT_NAME)\" https://example.com"
-        echo "OPTIONS"
-        echo "  --latest                     Fetch the latest stable Chrome version from Google's API"
-        echo "  --platform ${s}mac${r}|${s}win${r}|${s}linux${r}   UA shape and (with --latest) API path (default: mac)"
-        echo "  --app ${s}path${r}                   Path to Chrome.app for local mode"
-        echo "                               (default: /Applications/Google Chrome.app)"
-        echo "  -h, --help                   Show this help message"
-        echo "ENVIRONMENT"
-        echo "  CHROME_UA_OFFLINE  If set (any non-empty value), disables the"
-        echo "                        automatic network fallback when local read"
-        echo "                        fails. Does NOT affect explicit --latest."
-        echo "EXIT STATUS"
-        echo "  0   Success (always, when flags are valid -- the script always"
-        echo "      emits something, falling back to a pinned version with a"
-        echo "      warning if needed)"
-        echo "  2   Usage error"
-        echo "DEPENDENCIES"
-        echo "  defaults (macOS, for local mode), curl (for --latest or auto"
-        echo "  network fallback), jq (for --latest or auto network fallback)"
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - print a realistic Chrome User-Agent string
+SYNOPSIS
+  $SCRIPT_NAME [--platform mac|win|linux] [--app ${s}path${r}]
+  $SCRIPT_NAME --latest [--platform mac|win|linux]
+  $SCRIPT_NAME -h
+DESCRIPTION
+  Emits a Chrome UA string. By default, reads the installed Chrome's
+  major version from its Info.plist (macOS only) and formats a UA
+  matching Chrome's reduced-UA policy (major version only, frozen
+  platform string per OS family).
+
+  With --latest, fetches the current stable Chrome major version
+  from Google's Version History API instead -- no local install
+  required, no platform restriction.
+
+  Default platform shape is Mac. Override with --platform to emit
+  a Windows or Linux UA shape (and, with --latest, to fetch that
+  platform's current version from the API).
+
+  Fallback chain for the default mode:
+    1. Read local Chrome (via \`defaults\`, macOS)
+    2. If that fails and curl is available, auto-fetch latest
+       (unless CHROME_UA_OFFLINE is set)
+    3. If that also fails or is blocked, use a pinned major
+       version (goes stale over time; update periodically)
+
+  Useful for bot-filtered endpoints:
+    curl -A "\$($SCRIPT_NAME)" https://example.com
+OPTIONS
+  --latest                     Fetch the latest stable Chrome version from Google's API
+  --platform ${s}mac${r}|${s}win${r}|${s}linux${r}   UA shape and (with --latest) API path (default: mac)
+  --app ${s}path${r}                   Path to Chrome.app for local mode
+                               (default: /Applications/Google Chrome.app)
+  -h, --help                   Show this help message
+ENVIRONMENT
+  CHROME_UA_OFFLINE  If set (any non-empty value), disables the
+                        automatic network fallback when local read
+                        fails. Does NOT affect explicit --latest.
+EXIT STATUS
+  0   Success (always, when flags are valid -- the script always
+      emits something, falling back to a pinned version with a
+      warning if needed)
+  2   Usage error
+DEPENDENCIES
+  defaults (macOS, for local mode), curl (for --latest or auto
+  network fallback), jq (for --latest or auto network fallback)
+EOF
     }
 
     # Pinned fallback major version -- used when both local read and network

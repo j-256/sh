@@ -18,32 +18,34 @@ _baseconv() (
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
-        echo "NAME"
-        echo "  $SCRIPT_NAME - convert a number between numeral bases (binary, octal, decimal, hexadecimal)"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME ${s}from${r} ${s}to${r} ${s}number${r}"
-        echo "  $SCRIPT_NAME -h"
-        echo "DESCRIPTION"
-        echo "  Converts ${s}number${r} from base ${s}from${r} to base ${s}to${r}. Each base can"
-        echo "  be given as a name, a single-letter abbreviation, or its numeric value:"
-        echo "    Binary:      bin, b, 2"
-        echo "    Octal:       oct, o, 8"
-        echo "    Decimal:     dec, d, 10"
-        echo "    Hexadecimal: hex, h, x, 16"
-        echo "  Hex digits in ${s}number${r} are case-insensitive on input and uppercased on output."
-        echo "OPTIONS"
-        echo "  -h, --help  Show this help message"
-        echo "EXAMPLES"
-        echo "  $SCRIPT_NAME hex dec ff           # 255"
-        echo "  $SCRIPT_NAME dec hex 255          # FF"
-        echo "  $SCRIPT_NAME bin hex 11111111     # FF"
-        echo "  $SCRIPT_NAME 16 2 deadbeef        # 11011110101011011011111011101111"
-        echo "EXIT STATUS"
-        echo "  0  Success"
-        echo "  2  Usage error (missing arg, invalid base, invalid digit for base)"
-        echo "  3  Dependency error (bc missing)"
-        echo "DEPENDENCIES"
-        echo "  bc"
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - convert a number between numeral bases (binary, octal, decimal, hexadecimal)
+SYNOPSIS
+  $SCRIPT_NAME ${s}from${r} ${s}to${r} ${s}number${r}
+  $SCRIPT_NAME -h
+DESCRIPTION
+  Converts ${s}number${r} from base ${s}from${r} to base ${s}to${r}. Each base can
+  be given as a name, a single-letter abbreviation, or its numeric value:
+    Binary:      bin, b, 2
+    Octal:       oct, o, 8
+    Decimal:     dec, d, 10
+    Hexadecimal: hex, h, x, 16
+  Hex digits in ${s}number${r} are case-insensitive on input and uppercased on output.
+OPTIONS
+  -h, --help  Show this help message
+EXAMPLES
+  $SCRIPT_NAME hex dec ff           # 255
+  $SCRIPT_NAME dec hex 255          # FF
+  $SCRIPT_NAME bin hex 11111111     # FF
+  $SCRIPT_NAME 16 2 deadbeef        # 11011110101011011011111011101111
+EXIT STATUS
+  0  Success
+  2  Usage error (missing arg, invalid base, invalid digit for base)
+  3  Dependency error (bc missing)
+DEPENDENCIES
+  bc
+EOF
     }
 
     _resolve_base() {

@@ -20,22 +20,24 @@ _dot_project() (
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
-        echo "NAME"
-        echo "  $SCRIPT_NAME - generate .project files for B2C Commerce cartridges"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME [${s}code_version_directory${r}]"
-        echo "  $SCRIPT_NAME -h"
-        echo "DESCRIPTION"
-        echo "  Creates a .project XML file in each subdirectory of the given directory"
-        echo "  (or the current directory), allowing them to be recognized as Salesforce"
-        echo "  B2C Commerce (Demandware) cartridges by Eclipse/UX Studio/Prophet Debugger."
-        echo "  Each .project file uses the subdirectory name as the project name."
-        echo "OPTIONS"
-        echo "  -h, --help    Show this help message"
-        echo "EXIT STATUS"
-        echo "  0  Success (includes no-op cases: nonexistent dir, write errors"
-        echo "     per-file logged to stderr but not propagated)"
-        echo "  2  Usage error (unknown flag, multiple directories)"
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - generate .project files for B2C Commerce cartridges
+SYNOPSIS
+  $SCRIPT_NAME [${s}code_version_directory${r}]
+  $SCRIPT_NAME -h
+DESCRIPTION
+  Creates a .project XML file in each subdirectory of the given directory
+  (or the current directory), allowing them to be recognized as Salesforce
+  B2C Commerce (Demandware) cartridges by Eclipse/UX Studio/Prophet Debugger.
+  Each .project file uses the subdirectory name as the project name.
+OPTIONS
+  -h, --help    Show this help message
+EXIT STATUS
+  0  Success (includes no-op cases: nonexistent dir, write errors
+     per-file logged to stderr but not propagated)
+  2  Usage error (unknown flag, multiple directories)
+EOF
     }
 
     _expand_short_opts() {

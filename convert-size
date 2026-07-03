@@ -15,30 +15,32 @@ _convert_size() (
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
-        echo "NAME"
-        echo "  $SCRIPT_NAME - convert file sizes between SI (1000) and binary (1024) systems"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME -t ${s}system${r} [-u ${s}unit${r}] ${s}size${r}"
-        echo "  $SCRIPT_NAME -h"
-        echo "OPTIONS"
-        echo "  -t, --to ${s}system${r}   Target number system. Values:"
-        echo "                     SI:     mac, macos, si, unix, nix"
-        echo "                     Binary: win, windows, bin, binary"
-        echo "  -u, --unit ${s}unit${r}   Override the unit suffix on ${s}size${r} (B, K, M, G, T)"
-        echo "  -h, --help         Show this help message"
-        echo "EXAMPLES"
-        echo "  $SCRIPT_NAME -t binary 500G    # 500 GB -> binary GiB"
-        echo "  $SCRIPT_NAME -t binary 500 GB  # same, space-separated unit"
-        echo "  $SCRIPT_NAME -t si 256M        # 256 MiB -> SI MB"
-        echo "  $SCRIPT_NAME -t win -u G 1000  # 1000 (forced to G) -> binary GiB"
-        echo "CAVEATS"
-        echo "  ${s}size${r} must be a positive integer (4700M is OK; 4.7G is not -- use 4700M instead)."
-        echo "EXIT STATUS"
-        echo "  0  Success"
-        echo "  2  Usage error (bad/missing arg, duplicate flag, multiple sizes)"
-        echo "  3  Dependency error (bc missing)"
-        echo "DEPENDENCIES"
-        echo "  bc"
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - convert file sizes between SI (1000) and binary (1024) systems
+SYNOPSIS
+  $SCRIPT_NAME -t ${s}system${r} [-u ${s}unit${r}] ${s}size${r}
+  $SCRIPT_NAME -h
+OPTIONS
+  -t, --to ${s}system${r}   Target number system. Values:
+                     SI:     mac, macos, si, unix, nix
+                     Binary: win, windows, bin, binary
+  -u, --unit ${s}unit${r}   Override the unit suffix on ${s}size${r} (B, K, M, G, T)
+  -h, --help         Show this help message
+EXAMPLES
+  $SCRIPT_NAME -t binary 500G    # 500 GB -> binary GiB
+  $SCRIPT_NAME -t binary 500 GB  # same, space-separated unit
+  $SCRIPT_NAME -t si 256M        # 256 MiB -> SI MB
+  $SCRIPT_NAME -t win -u G 1000  # 1000 (forced to G) -> binary GiB
+CAVEATS
+  ${s}size${r} must be a positive integer (4700M is OK; 4.7G is not -- use 4700M instead).
+EXIT STATUS
+  0  Success
+  2  Usage error (bad/missing arg, duplicate flag, multiple sizes)
+  3  Dependency error (bc missing)
+DEPENDENCIES
+  bc
+EOF
     }
 
     local unit

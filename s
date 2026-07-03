@@ -16,47 +16,49 @@ _s() (
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
-        echo "NAME"
-        echo "  $SCRIPT_NAME - sfcc-ci wrapper with shortcuts and enhanced output"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME ${s}subcommand${r} [${s}args${r}...]"
-        echo "  $SCRIPT_NAME -h"
-        echo "DESCRIPTION"
-        echo "  Thin wrapper around the official sfcc-ci CLI that adds convenience"
-        echo "  subcommands, human-readable output for common queries, and"
-        echo "  translates 'sbx:' prefixes to 'sandbox:'. Any subcommand the"
-        echo "  wrapper doesn't recognize falls through to sfcc-ci."
-        echo ""
-        echo "  With no args, prints sfcc-ci's own help (help is the natural default)."
-        echo "SUBCOMMANDS"
-        echo "  a, auth                  Authenticate (client credentials) and print"
-        echo "                           token expiration in local and UTC time"
-        echo "  sbx, sandbox, box ${s}inst${r}   Human-readable single-sandbox details"
-        echo "                           (accepts zzzz_001 or zzzz-001)"
-        echo "  sbx:json, sandbox:json   Raw JSON for a single sandbox"
-        echo "  list, sandboxes, boxes   Tabular sandbox list (host/state/id/creator)"
-        echo "  list:json, ...           Same list as JSON"
-        echo "  eol                      List sandboxes with a TTL (auto-delete date)"
-        echo "  token, jwt               Decode the JWT payload of the current token"
-        echo "  token:exp, token:expiry  Show token expiration (local+UTC) vs. now"
-        echo "  start ${s}inst${r}               Start a sandbox synchronously"
-        echo "  stop ${s}inst${r}                Stop a sandbox synchronously"
-        echo "  restart, reboot ${s}inst${r}     Stop then start a sandbox synchronously"
-        echo "  env, environment         Print SFCC_* env vars and their values"
-        echo "  sbx:${s}anything${r}             Shorthand for sandbox:${s}anything${r}"
-        echo "  (anything else)          Passed through to sfcc-ci unchanged"
-        echo "  -h, --help               Show this help message"
-        echo "ENVIRONMENT"
-        echo "  Inherits sfcc-ci's configuration (dw.json, SFCC_OAUTH_*, SFCC_LOGIN_URL,"
-        echo "  SFCC_SANDBOX_API_HOST, SFCC_SCAPI_*, DEBUG, etc.). Run \`$SCRIPT_NAME env\`"
-        echo "  to see all recognized variables and their current values."
-        echo "EXIT STATUS"
-        echo "  3  Dependency error (sfcc-ci or jq not installed)"
-        echo "  *  Pass-through from sfcc-ci (or jq, for subcommands that parse JSON)"
-        echo "DEPENDENCIES"
-        echo "  sfcc-ci, jq"
-        echo "SEE ALSO"
-        echo "  sfcc-ci --help"
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - sfcc-ci wrapper with shortcuts and enhanced output
+SYNOPSIS
+  $SCRIPT_NAME ${s}subcommand${r} [${s}args${r}...]
+  $SCRIPT_NAME -h
+DESCRIPTION
+  Thin wrapper around the official sfcc-ci CLI that adds convenience
+  subcommands, human-readable output for common queries, and
+  translates 'sbx:' prefixes to 'sandbox:'. Any subcommand the
+  wrapper doesn't recognize falls through to sfcc-ci.
+
+  With no args, prints sfcc-ci's own help (help is the natural default).
+SUBCOMMANDS
+  a, auth                  Authenticate (client credentials) and print
+                           token expiration in local and UTC time
+  sbx, sandbox, box ${s}inst${r}   Human-readable single-sandbox details
+                           (accepts zzzz_001 or zzzz-001)
+  sbx:json, sandbox:json   Raw JSON for a single sandbox
+  list, sandboxes, boxes   Tabular sandbox list (host/state/id/creator)
+  list:json, ...           Same list as JSON
+  eol                      List sandboxes with a TTL (auto-delete date)
+  token, jwt               Decode the JWT payload of the current token
+  token:exp, token:expiry  Show token expiration (local+UTC) vs. now
+  start ${s}inst${r}               Start a sandbox synchronously
+  stop ${s}inst${r}                Stop a sandbox synchronously
+  restart, reboot ${s}inst${r}     Stop then start a sandbox synchronously
+  env, environment         Print SFCC_* env vars and their values
+  sbx:${s}anything${r}             Shorthand for sandbox:${s}anything${r}
+  (anything else)          Passed through to sfcc-ci unchanged
+  -h, --help               Show this help message
+ENVIRONMENT
+  Inherits sfcc-ci's configuration (dw.json, SFCC_OAUTH_*, SFCC_LOGIN_URL,
+  SFCC_SANDBOX_API_HOST, SFCC_SCAPI_*, DEBUG, etc.). Run \`$SCRIPT_NAME env\`
+  to see all recognized variables and their current values.
+EXIT STATUS
+  3  Dependency error (sfcc-ci or jq not installed)
+  *  Pass-through from sfcc-ci (or jq, for subcommands that parse JSON)
+DEPENDENCIES
+  sfcc-ci, jq
+SEE ALSO
+  sfcc-ci --help
+EOF
     }
 
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }

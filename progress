@@ -30,42 +30,44 @@ _progress() (
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m' || s=""
         local r; [ -t 1 ] && r=$'\033[24m' || r=""
-        echo "NAME"
-        echo "  $SCRIPT_NAME - render a single-line progress bar with percentage completion"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME [${s}options${r}] ${s}current${r} ${s}max${r}"
-        echo "  $SCRIPT_NAME -h"
-        echo "DESCRIPTION"
-        echo "  Renders a single-line progress bar showing ${s}current${r}/${s}max${r} as a"
-        echo "  percentage. Designed for shell loops. Output defaults to stderr so"
-        echo "  stdout stays clean for pipelines. In a TTY, the bar redraws in place"
-        echo "  via carriage return; in a non-TTY context, only the 100% completion"
-        echo "  line is emitted."
-        echo ""
-        echo "  The bar width is automatically clamped to fit the terminal so the"
-        echo "  rendered line never wraps. Terminal width is detected in this order:"
-        echo "  stty size, \$COLUMNS, falling back to 80 columns."
-        echo "OPTIONS"
-        echo "  CURRENT                   Current progress value (integer, clamped to 0..MAX)"
-        echo "  MAX                       Maximum value representing 100% (positive integer)"
-        echo "  -w, --width ${s}N${r}             Bar width in characters (default 50)"
-        echo "  -p, --progress-char ${s}C${r}    Character for the completed portion (default #)"
-        echo "  -r, --remaining-char ${s}C${r}   Character for the remaining portion (default space)"
-        echo "  --stderr                  Force output to stderr"
-        echo "  --stdout                  Force output to stdout"
-        echo "  -h, --help                Show this help message"
-        echo "EXAMPLES"
-        echo "  for i in {1..10}; do $SCRIPT_NAME \"\$i\" 10; sleep 0.1; done"
-        echo "  $SCRIPT_NAME --width 30 --progress-char '=' --remaining-char '.' 50 100"
-        echo "  $SCRIPT_NAME --stdout 100 100"
-        echo "CAVEATS"
-        echo "  In non-TTY contexts, output is suppressed until ${s}current${r} == ${s}max${r}"
-        echo "  to avoid spamming logs or pipelines."
-        echo "EXIT STATUS"
-        echo "  0  Success"
-        echo "  2  Usage error (missing/invalid arg, bad flag value)"
-        echo "DEPENDENCIES"
-        echo "  stty"
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - render a single-line progress bar with percentage completion
+SYNOPSIS
+  $SCRIPT_NAME [${s}options${r}] ${s}current${r} ${s}max${r}
+  $SCRIPT_NAME -h
+DESCRIPTION
+  Renders a single-line progress bar showing ${s}current${r}/${s}max${r} as a
+  percentage. Designed for shell loops. Output defaults to stderr so
+  stdout stays clean for pipelines. In a TTY, the bar redraws in place
+  via carriage return; in a non-TTY context, only the 100% completion
+  line is emitted.
+
+  The bar width is automatically clamped to fit the terminal so the
+  rendered line never wraps. Terminal width is detected in this order:
+  stty size, \$COLUMNS, falling back to 80 columns.
+OPTIONS
+  CURRENT                   Current progress value (integer, clamped to 0..MAX)
+  MAX                       Maximum value representing 100% (positive integer)
+  -w, --width ${s}N${r}             Bar width in characters (default 50)
+  -p, --progress-char ${s}C${r}    Character for the completed portion (default #)
+  -r, --remaining-char ${s}C${r}   Character for the remaining portion (default space)
+  --stderr                  Force output to stderr
+  --stdout                  Force output to stdout
+  -h, --help                Show this help message
+EXAMPLES
+  for i in {1..10}; do $SCRIPT_NAME "\$i" 10; sleep 0.1; done
+  $SCRIPT_NAME --width 30 --progress-char '=' --remaining-char '.' 50 100
+  $SCRIPT_NAME --stdout 100 100
+CAVEATS
+  In non-TTY contexts, output is suppressed until ${s}current${r} == ${s}max${r}
+  to avoid spamming logs or pipelines.
+EXIT STATUS
+  0  Success
+  2  Usage error (missing/invalid arg, bad flag value)
+DEPENDENCIES
+  stty
+EOF
     }
 
     _expand_short_opts() {

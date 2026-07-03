@@ -26,33 +26,35 @@ _pkce() (
     }
 
     _show_help() {
-        echo "NAME"
-        echo "  $SCRIPT_NAME - generate PKCE code verifier and challenge"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME [-n | --newline]"
-        echo "  $SCRIPT_NAME -h"
-        echo "DESCRIPTION"
-        echo "  Generates a 128-character PKCE code verifier and its S256 code"
-        echo "  challenge per RFC 7636. By default the two values are separated"
-        echo "  by a tab; use -n to separate with a newline instead."
-        echo ""
-        echo "  Reference: https://datatracker.ietf.org/doc/html/rfc7636"
-        echo "OPTIONS"
-        echo "  -n, --newline    Separate verifier and challenge with a newline"
-        echo "                   instead of a tab"
-        echo "  -h, --help       Show this help message"
-        echo "EXAMPLES"
-        echo "  codes=\"\$($SCRIPT_NAME)\""
-        echo "  verifier=\"\$(echo \"\$codes\" | cut -f1)\""
-        echo "  challenge=\"\$(echo \"\$codes\" | cut -f2)\""
-        echo ""
-        echo "  { read -r verifier; read -r challenge; } < <($SCRIPT_NAME -n)"
-        echo "EXIT STATUS"
-        echo "  0  Success"
-        echo "  2  Usage error (unknown option)"
-        echo "  3  Dependency error (openssl missing)"
-        echo "DEPENDENCIES"
-        echo "  openssl"
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - generate PKCE code verifier and challenge
+SYNOPSIS
+  $SCRIPT_NAME [-n | --newline]
+  $SCRIPT_NAME -h
+DESCRIPTION
+  Generates a 128-character PKCE code verifier and its S256 code
+  challenge per RFC 7636. By default the two values are separated
+  by a tab; use -n to separate with a newline instead.
+
+  Reference: https://datatracker.ietf.org/doc/html/rfc7636
+OPTIONS
+  -n, --newline    Separate verifier and challenge with a newline
+                   instead of a tab
+  -h, --help       Show this help message
+EXAMPLES
+  codes="\$($SCRIPT_NAME)"
+  verifier="\$(echo "\$codes" | cut -f1)"
+  challenge="\$(echo "\$codes" | cut -f2)"
+
+  { read -r verifier; read -r challenge; } < <($SCRIPT_NAME -n)
+EXIT STATUS
+  0  Success
+  2  Usage error (unknown option)
+  3  Dependency error (openssl missing)
+DEPENDENCIES
+  openssl
+EOF
     }
 
     _expand_short_opts() {

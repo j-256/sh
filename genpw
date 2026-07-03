@@ -33,26 +33,28 @@ _genpw() (
         # Only underline if stdout is a terminal
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
-        echo "NAME"
-        echo "  $SCRIPT_NAME - generate a random password"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME [-l|--length ${s}length${r}] [-c|--charset ${s}charset${r}] [-e|--exclude ${s}charset${r}] [${s}length${r}]"
-        echo "  $SCRIPT_NAME -h"
-        echo "DESCRIPTION"
-        echo "  Prints a random password built from the given charset (minus any"
-        echo "  excluded characters) to stdout."
-        echo "OPTIONS"
-        echo "  -l, --length   Generate a password with ${s}length${r} characters.             Default: $length"
-        echo "  -c, --charset  Define the \`tr\` charset used to generate the password.  Default: [:alnum:][:punct:]"
-        echo "  -e, --exclude  Define the \`tr\` charset to exclude from the password.   Default: (None)"
-        echo "  -h, --help     Show this help message"
-        echo "CAVEATS"
-        echo "  Reads from /dev/random for entropy. May block on low-entropy systems."
-        echo "EXIT STATUS"
-        echo "  0  Success"
-        echo "  2  Usage error (missing flag value, unknown option)"
-        echo "  4  Empty charset after applying exclusions"
-        echo "  5  Invalid charset (malformed bracket expression or POSIX class)"
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - generate a random password
+SYNOPSIS
+  $SCRIPT_NAME [-l|--length ${s}length${r}] [-c|--charset ${s}charset${r}] [-e|--exclude ${s}charset${r}] [${s}length${r}]
+  $SCRIPT_NAME -h
+DESCRIPTION
+  Prints a random password built from the given charset (minus any
+  excluded characters) to stdout.
+OPTIONS
+  -l, --length   Generate a password with ${s}length${r} characters.             Default: $length
+  -c, --charset  Define the \`tr\` charset used to generate the password.  Default: [:alnum:][:punct:]
+  -e, --exclude  Define the \`tr\` charset to exclude from the password.   Default: (None)
+  -h, --help     Show this help message
+CAVEATS
+  Reads from /dev/random for entropy. May block on low-entropy systems.
+EXIT STATUS
+  0  Success
+  2  Usage error (missing flag value, unknown option)
+  4  Empty charset after applying exclusions
+  5  Invalid charset (malformed bracket expression or POSIX class)
+EOF
     }
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
     _warn()  { echo "[WRN][$SCRIPT_NAME] $*" >&2; }

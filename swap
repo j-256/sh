@@ -15,27 +15,29 @@ _swap() (
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
-        echo "NAME"
-        echo "  $SCRIPT_NAME - swap two files by renaming"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME ${s}file1${r} ${s}file2${r}"
-        echo "  $SCRIPT_NAME -h"
-        echo "DESCRIPTION"
-        echo "  Atomically swaps two files using mv and a temp file at"
-        echo "  /tmp/temp-swap-${s}basename${r} (falls back to"
-        echo "  /tmp/temp-swap-${s}basename${r}-\$\$-\$RANDOM on collision)."
-        echo "  Directories are not supported. On partial failure,"
-        echo "  attempts to restore the original state (see EXIT STATUS)."
-        echo "EXIT STATUS"
-        echo "  0   Success"
-        echo "  2   Not enough arguments (usage error)"
-        echo "  4   First file does not exist"
-        echo "  5   First file is a directory"
-        echo "  6   Second file does not exist"
-        echo "  7   Second file is a directory"
-        echo "  8   Failed to move first file to temp (no restore needed: files untouched)"
-        echo "  9   Failed to move second file to first (restore attempted: temp -> first)"
-        echo "  10  Failed to move temp to second (no restore attempted: second already moved)"
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - swap two files by renaming
+SYNOPSIS
+  $SCRIPT_NAME ${s}file1${r} ${s}file2${r}
+  $SCRIPT_NAME -h
+DESCRIPTION
+  Atomically swaps two files using mv and a temp file at
+  /tmp/temp-swap-${s}basename${r} (falls back to
+  /tmp/temp-swap-${s}basename${r}-\$\$-\$RANDOM on collision).
+  Directories are not supported. On partial failure,
+  attempts to restore the original state (see EXIT STATUS).
+EXIT STATUS
+  0   Success
+  2   Not enough arguments (usage error)
+  4   First file does not exist
+  5   First file is a directory
+  6   Second file does not exist
+  7   Second file is a directory
+  8   Failed to move first file to temp (no restore needed: files untouched)
+  9   Failed to move second file to first (restore attempted: temp -> first)
+  10  Failed to move temp to second (no restore attempted: second already moved)
+EOF
     }
 
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }

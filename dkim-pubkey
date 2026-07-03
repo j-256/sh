@@ -26,39 +26,41 @@ _dkim_pubkey() (
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
-        echo "NAME"
-        echo "  $SCRIPT_NAME - print base64-encoded DKIM public key for a domain"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME [${s}options${r}] ${s}selector${r} ${s}domain${r} [@${s}server${r}]"
-        echo "  $SCRIPT_NAME -h"
-        echo "DESCRIPTION"
-        echo "  Queries DNS TXT record at ${s}selector${r}._domainkey.${s}domain${r},"
-        echo "  prints the raw response to stderr, and extracts the base64"
-        echo "  public key (the p= value) to stdout."
-        echo "OPTIONS"
-        echo "  -s, --server ${s}host${r}  Query ${s}host${r} instead of the system resolver (also @${s}host${r})"
-        echo "  -V, --validate     Verify the extracted key is a well-formed public key"
-        echo "  -q, --quiet        Suppress dig command echo, DNS response body, and validation success info (errors still surface)"
-        echo "  -h, --help         Show this help message"
-        echo "EXAMPLE"
-        echo "  $SCRIPT_NAME dkim-prd gmail.com"
-        echo "  $SCRIPT_NAME --validate s1 github.com"
-        echo "  $SCRIPT_NAME s1 github.com @8.8.8.8           # Google DNS"
-        echo "  $SCRIPT_NAME --server 1.1.1.1 s1 github.com   # Cloudflare DNS"
-        echo "  $SCRIPT_NAME -q s1 github.com > key.txt       # Just the key, no stderr noise"
-        echo "CAVEATS"
-        echo "  Selector must be known in advance; check SPF/DMARC records,"
-        echo "  email headers, or the domain's DNS provider."
-        echo "EXIT STATUS"
-        echo "  0  Success (key printed)"
-        echo "  1  Runtime failure (DNS response empty)"
-        echo "  2  Usage error (missing selector or domain)"
-        echo "  3  Dependency error (dig missing, or openssl missing with --validate)"
-        echo "  4  Domain-specific (record found but p= value missing)"
-        echo "  5  Validation failed (with --validate)"
-        echo "DEPENDENCIES"
-        echo "  dig"
-        echo "  openssl (required only for --validate)"
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - print base64-encoded DKIM public key for a domain
+SYNOPSIS
+  $SCRIPT_NAME [${s}options${r}] ${s}selector${r} ${s}domain${r} [@${s}server${r}]
+  $SCRIPT_NAME -h
+DESCRIPTION
+  Queries DNS TXT record at ${s}selector${r}._domainkey.${s}domain${r},
+  prints the raw response to stderr, and extracts the base64
+  public key (the p= value) to stdout.
+OPTIONS
+  -s, --server ${s}host${r}  Query ${s}host${r} instead of the system resolver (also @${s}host${r})
+  -V, --validate     Verify the extracted key is a well-formed public key
+  -q, --quiet        Suppress dig command echo, DNS response body, and validation success info (errors still surface)
+  -h, --help         Show this help message
+EXAMPLE
+  $SCRIPT_NAME dkim-prd gmail.com
+  $SCRIPT_NAME --validate s1 github.com
+  $SCRIPT_NAME s1 github.com @8.8.8.8           # Google DNS
+  $SCRIPT_NAME --server 1.1.1.1 s1 github.com   # Cloudflare DNS
+  $SCRIPT_NAME -q s1 github.com > key.txt       # Just the key, no stderr noise
+CAVEATS
+  Selector must be known in advance; check SPF/DMARC records,
+  email headers, or the domain's DNS provider.
+EXIT STATUS
+  0  Success (key printed)
+  1  Runtime failure (DNS response empty)
+  2  Usage error (missing selector or domain)
+  3  Dependency error (dig missing, or openssl missing with --validate)
+  4  Domain-specific (record found but p= value missing)
+  5  Validation failed (with --validate)
+DEPENDENCIES
+  dig
+  openssl (required only for --validate)
+EOF
     }
 
     _expand_short_opts() {

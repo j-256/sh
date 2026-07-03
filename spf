@@ -71,162 +71,175 @@ _spf() (
         local r; [ -t 1 ] && r=$'\033[24m'
         case "$verb" in
             show)
-                echo "NAME"
-                echo "  $SCRIPT_NAME show - print the published SPF record"
-                echo "SYNOPSIS"
-                echo "  $SCRIPT_NAME show ${s}domain${r}"
-                echo "  $SCRIPT_NAME ${s}domain${r}"
-                echo "DESCRIPTION"
-                echo "  Fetches the domain's TXT records and prints the published v=spf1"
-                echo "  record verbatim: character-strings reassembled, quotes stripped, on a"
-                echo "  single line. This is the record as published, NOT the recursively"
-                echo "  resolved tree -- use the tree verb to expand the includes. A bare"
-                echo "  $SCRIPT_NAME ${s}domain${r} (no verb) is shorthand for $SCRIPT_NAME show ${s}domain${r}."
-                echo "  Pass -v to note when the record spans multiple character-strings."
-                echo "EXIT STATUS"
-                echo "  0  Record printed"
-                echo "  1  Runtime failure / no SPF record found"
-                echo "  2  Usage error"
-                echo "  3  dig is not installed"
+                cat <<EOF
+NAME
+  $SCRIPT_NAME show - print the published SPF record
+SYNOPSIS
+  $SCRIPT_NAME show ${s}domain${r}
+  $SCRIPT_NAME ${s}domain${r}
+DESCRIPTION
+  Fetches the domain's TXT records and prints the published v=spf1
+  record verbatim: character-strings reassembled, quotes stripped, on a
+  single line. This is the record as published, NOT the recursively
+  resolved tree -- use the tree verb to expand the includes. A bare
+  $SCRIPT_NAME ${s}domain${r} (no verb) is shorthand for $SCRIPT_NAME show ${s}domain${r}.
+  Pass -v to note when the record spans multiple character-strings.
+EXIT STATUS
+  0  Record printed
+  1  Runtime failure / no SPF record found
+  2  Usage error
+  3  dig is not installed
+EOF
                 ;;
             find)
-                echo "NAME"
-                echo "  $SCRIPT_NAME find - check whether an IP is covered or an a:<host> directive is present"
-                echo "SYNOPSIS"
-                echo "  $SCRIPT_NAME find ${s}domain${r} ${s}ip${r}"
-                echo "  $SCRIPT_NAME find ${s}domain${r} a:${s}host${r}"
-                echo "DESCRIPTION"
-                echo "  With an IP: reports whether it is covered/listed by the record and how."
-                echo "  With a:${s}host${r}: reports whether the directive is present literally"
-                echo "  (expected), only as a covering range or other directive (fragile), or"
-                echo "  absent. Resolves ${s}host${r} via dig."
-                echo "EXIT STATUS"
-                echo "  0  IP covered, or a:host present literally"
-                echo "  1  Runtime failure"
-                echo "  2  Usage error"
-                echo "  3  dig is not installed"
-                echo "  4  Not found / absent"
-                echo "  5  a:host present only as covered-by-range or via another directive (fragile)"
+                cat <<EOF
+NAME
+  $SCRIPT_NAME find - check whether an IP is covered or an a:<host> directive is present
+SYNOPSIS
+  $SCRIPT_NAME find ${s}domain${r} ${s}ip${r}
+  $SCRIPT_NAME find ${s}domain${r} a:${s}host${r}
+DESCRIPTION
+  With an IP: reports whether it is covered/listed by the record and how.
+  With a:${s}host${r}: reports whether the directive is present literally
+  (expected), only as a covering range or other directive (fragile), or
+  absent. Resolves ${s}host${r} via dig.
+EXIT STATUS
+  0  IP covered, or a:host present literally
+  1  Runtime failure
+  2  Usage error
+  3  dig is not installed
+  4  Not found / absent
+  5  a:host present only as covered-by-range or via another directive (fragile)
+EOF
                 ;;
             has)
-                echo "NAME"
-                echo "  $SCRIPT_NAME has - is a mechanism token present in the expanded record?"
-                echo "SYNOPSIS"
-                echo "  $SCRIPT_NAME has ${s}domain${r} ${s}token${r}"
-                echo "DESCRIPTION"
-                echo "  Recursively resolves the record and reports every occurrence of the"
-                echo "  exact ${s}token${r} (e.g. include:_spf.example.com) with its source record,"
-                echo "  depth, and qualifier. Token-aware: include:site.com does not match"
-                echo "  include:site.com.attacker.example. For a:${s}host${r}, find is the richer check."
-                echo "EXIT STATUS"
-                echo "  0  Present"
-                echo "  1  Runtime failure"
-                echo "  2  Usage error"
-                echo "  3  dig is not installed"
-                echo "  4  Absent"
+                cat <<EOF
+NAME
+  $SCRIPT_NAME has - is a mechanism token present in the expanded record?
+SYNOPSIS
+  $SCRIPT_NAME has ${s}domain${r} ${s}token${r}
+DESCRIPTION
+  Recursively resolves the record and reports every occurrence of the
+  exact ${s}token${r} (e.g. include:_spf.example.com) with its source record,
+  depth, and qualifier. Token-aware: include:site.com does not match
+  include:site.com.attacker.example. For a:${s}host${r}, find is the richer check.
+EXIT STATUS
+  0  Present
+  1  Runtime failure
+  2  Usage error
+  3  dig is not installed
+  4  Absent
+EOF
                 ;;
             ir)
-                echo "NAME"
-                echo "  $SCRIPT_NAME ir - print the raw resolver IR (tab-delimited)"
-                echo "SYNOPSIS"
-                echo "  $SCRIPT_NAME ir ${s}domain${r}"
-                echo "DESCRIPTION"
-                echo "  Emits one row per mechanism: depth, source_domain, qualifier,"
-                echo "  mechanism, value, lookup_cost (tab-separated). Stable column layout"
-                # printf (not echo) so the literal backslash-t survives without SC2028;
-                # %s carries SCRIPT_NAME, the single-quoted format keeps awk's $4 intact
-                # shellcheck disable=SC2016 # "Expressions don't expand in single quotes, use double quotes for that." -- $4 is awk's field ref, intentionally literal
-                printf '  for piping: %s ir example.com | awk -F'\''\\t'\'' '\''$4=="include"'\''\n' "$SCRIPT_NAME"
-                echo "EXIT STATUS"
-                echo "  0  Rendered"
-                echo "  1  Runtime failure"
-                echo "  2  Usage error"
-                echo "  3  dig is not installed"
+                cat <<EOF
+NAME
+  $SCRIPT_NAME ir - print the raw resolver IR (tab-delimited)
+SYNOPSIS
+  $SCRIPT_NAME ir ${s}domain${r}
+DESCRIPTION
+  Emits one row per mechanism: depth, source_domain, qualifier,
+  mechanism, value, lookup_cost (tab-separated). Stable column layout
+  for piping: $SCRIPT_NAME ir example.com | awk -F'\t' '\$4=="include"'
+EXIT STATUS
+  0  Rendered
+  1  Runtime failure
+  2  Usage error
+  3  dig is not installed
+EOF
                 ;;
             flatten)
-                echo "NAME"
-                echo "  $SCRIPT_NAME flatten - print every IP/CIDR the record authorizes"
-                echo "SYNOPSIS"
-                echo "  $SCRIPT_NAME flatten ${s}domain${r} [--record]"
-                echo "DESCRIPTION"
-                echo "  Resolves the full include tree and prints each ip4/ip6 address, sorted"
-                echo "  and deduped, one per line. --record emits a single quoted TXT record"
-                echo "  string instead. See $SCRIPT_NAME -h for the staleness caveat."
-                echo "EXIT STATUS"
-                echo "  0  Rendered"
-                echo "  1  Runtime failure"
-                echo "  2  Usage error"
-                echo "  3  dig is not installed"
+                cat <<EOF
+NAME
+  $SCRIPT_NAME flatten - print every IP/CIDR the record authorizes
+SYNOPSIS
+  $SCRIPT_NAME flatten ${s}domain${r} [--record]
+DESCRIPTION
+  Resolves the full include tree and prints each ip4/ip6 address, sorted
+  and deduped, one per line. --record emits a single quoted TXT record
+  string instead. See $SCRIPT_NAME -h for the staleness caveat.
+EXIT STATUS
+  0  Rendered
+  1  Runtime failure
+  2  Usage error
+  3  dig is not installed
+EOF
                 ;;
             check)
-                echo "NAME"
-                echo "  $SCRIPT_NAME check - RFC 7208 health report"
-                echo "SYNOPSIS"
-                echo "  $SCRIPT_NAME check ${s}domain${r}"
-                echo "DESCRIPTION"
-                echo "  Counts DNS lookups (limit 10) and void lookups (limit 2), and flags"
-                echo "  +all, multiple all in the record, and deprecated ptr usage."
-                echo "EXIT STATUS"
-                echo "  0  Clean"
-                echo "  1  Runtime failure"
-                echo "  2  Usage error"
-                echo "  3  dig is not installed"
-                echo "  4  Problems found"
+                cat <<EOF
+NAME
+  $SCRIPT_NAME check - RFC 7208 health report
+SYNOPSIS
+  $SCRIPT_NAME check ${s}domain${r}
+DESCRIPTION
+  Counts DNS lookups (limit 10) and void lookups (limit 2), and flags
+  +all, multiple all in the record, and deprecated ptr usage.
+EXIT STATUS
+  0  Clean
+  1  Runtime failure
+  2  Usage error
+  3  dig is not installed
+  4  Problems found
+EOF
                 ;;
             tree)
-                echo "NAME"
-                echo "  $SCRIPT_NAME tree - indented structural view of the include tree"
-                echo "SYNOPSIS"
-                echo "  $SCRIPT_NAME tree ${s}domain${r}"
-                echo "DESCRIPTION"
-                echo "  Prints each mechanism indented by include depth, so delegation"
-                echo "  boundaries and nesting are visible at a glance."
-                echo "EXIT STATUS"
-                echo "  0  Rendered"
-                echo "  1  Runtime failure"
-                echo "  2  Usage error"
-                echo "  3  dig is not installed"
+                cat <<EOF
+NAME
+  $SCRIPT_NAME tree - indented structural view of the include tree
+SYNOPSIS
+  $SCRIPT_NAME tree ${s}domain${r}
+DESCRIPTION
+  Prints each mechanism indented by include depth, so delegation
+  boundaries and nesting are visible at a glance.
+EXIT STATUS
+  0  Rendered
+  1  Runtime failure
+  2  Usage error
+  3  dig is not installed
+EOF
                 ;;
             *)
-                echo "NAME"
-                echo "  $SCRIPT_NAME - resolve and inspect SPF DNS records"
-                echo "SYNOPSIS"
-                echo "  $SCRIPT_NAME [${s}options${r}] show    ${s}domain${r}"
-                echo "  $SCRIPT_NAME [${s}options${r}] find    ${s}domain${r} {${s}ip${r}|a:${s}host${r}}"
-                echo "  $SCRIPT_NAME [${s}options${r}] has     ${s}domain${r} ${s}token${r}"
-                echo "  $SCRIPT_NAME [${s}options${r}] flatten ${s}domain${r}"
-                echo "  $SCRIPT_NAME [${s}options${r}] check   ${s}domain${r}"
-                echo "  $SCRIPT_NAME [${s}options${r}] tree    ${s}domain${r}"
-                echo "  $SCRIPT_NAME [${s}options${r}] ir      ${s}domain${r}"
-                echo "  $SCRIPT_NAME ${s}domain${r}"
-                echo "  $SCRIPT_NAME ${s}verb${r} -h"
-                echo "DESCRIPTION"
-                echo "  Fetches and recursively resolves SPF TXT records. A bare"
-                echo "  $SCRIPT_NAME ${s}domain${r} (no verb) prints the published record (show). Verbs:"
-                echo "    show     print the published SPF record verbatim"
-                echo "    find     is an IP covered, or an a:host directive present? (and how)"
-                echo "    has      is a token present in the expanded record? (and where)"
-                echo "    flatten  print all authorized IPs/CIDRs"
-                echo "    check    RFC 7208 health report"
-                echo "    tree     indented structural view"
-                echo "    ir       raw tab-delimited resolver output"
-                echo "OPTIONS"
-                echo "  -s, --server ${s}ip${r}   DNS server to query (default: 8.8.8.8)"
-                echo "  -d, --domain ${s}dom${r}  Anchor %{d} macros when input is a raw record"
-                echo "  --tcp             Force TCP instead of UDP for dig queries"
-                echo "  -q, --quiet       Errors only (suppress warnings)"
-                echo "  -v, --verbose     Show the resolution trace ([INF] lines)"
-                echo "  -h, --help        Show this help message (or per-verb: $SCRIPT_NAME ${s}verb${r} -h)"
-                echo "DEPENDENCIES"
-                echo "  dig"
-                echo "  python3 (IPv6 matching only)"
-                echo "EXIT STATUS"
-                echo "  0  Success (affirmative)"
-                echo "  1  Runtime failure (network error, dig returned unexpected output)"
-                echo "  2  Usage error (missing arg, unknown flag, bad flag value)"
-                echo "  3  dig is not installed"
-                echo "  4  Negative predicate result (not found / problems found)"
-                echo "  5  find a:host present only as covered-by-range (fragile)"
+                cat <<EOF
+NAME
+  $SCRIPT_NAME - resolve and inspect SPF DNS records
+SYNOPSIS
+  $SCRIPT_NAME [${s}options${r}] show    ${s}domain${r}
+  $SCRIPT_NAME [${s}options${r}] find    ${s}domain${r} {${s}ip${r}|a:${s}host${r}}
+  $SCRIPT_NAME [${s}options${r}] has     ${s}domain${r} ${s}token${r}
+  $SCRIPT_NAME [${s}options${r}] flatten ${s}domain${r}
+  $SCRIPT_NAME [${s}options${r}] check   ${s}domain${r}
+  $SCRIPT_NAME [${s}options${r}] tree    ${s}domain${r}
+  $SCRIPT_NAME [${s}options${r}] ir      ${s}domain${r}
+  $SCRIPT_NAME ${s}domain${r}
+  $SCRIPT_NAME ${s}verb${r} -h
+DESCRIPTION
+  Fetches and recursively resolves SPF TXT records. A bare
+  $SCRIPT_NAME ${s}domain${r} (no verb) prints the published record (show). Verbs:
+    show     print the published SPF record verbatim
+    find     is an IP covered, or an a:host directive present? (and how)
+    has      is a token present in the expanded record? (and where)
+    flatten  print all authorized IPs/CIDRs
+    check    RFC 7208 health report
+    tree     indented structural view
+    ir       raw tab-delimited resolver output
+OPTIONS
+  -s, --server ${s}ip${r}   DNS server to query (default: 8.8.8.8)
+  -d, --domain ${s}dom${r}  Anchor %{d} macros when input is a raw record
+  --tcp             Force TCP instead of UDP for dig queries
+  -q, --quiet       Errors only (suppress warnings)
+  -v, --verbose     Show the resolution trace ([INF] lines)
+  -h, --help        Show this help message (or per-verb: $SCRIPT_NAME ${s}verb${r} -h)
+DEPENDENCIES
+  dig
+  python3 (IPv6 matching only)
+EXIT STATUS
+  0  Success (affirmative)
+  1  Runtime failure (network error, dig returned unexpected output)
+  2  Usage error (missing arg, unknown flag, bad flag value)
+  3  dig is not installed
+  4  Negative predicate result (not found / problems found)
+  5  find a:host present only as covered-by-range (fragile)
+EOF
                 ;;
         esac
     }

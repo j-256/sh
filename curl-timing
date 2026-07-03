@@ -26,37 +26,39 @@ _curl_timing() (
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
-        echo "NAME"
-        echo "  $SCRIPT_NAME - time HTTP requests and report summary statistics"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME [${s}options${r}] <${s}url${r}> [${s}url${r}...]"
-        echo "  $SCRIPT_NAME -h"
-        echo "DESCRIPTION"
-        echo "  Sends N requests to each URL with curl, measures response time in"
-        echo "  milliseconds, and prints count/total/average/range plus outliers"
-        echo "  detected via IQR. Useful for spot-checking endpoint latency,"
-        echo "  comparing URLs head-to-head, or tracking performance regressions."
-        echo "  Per-URL timings and a stats summary are written to files in the"
-        echo "  current directory unless --no-save is used."
-        echo "OPTIONS"
-        echo "  -n, --num ${s}N${r}          Number of timed requests per URL (default: 10)"
-        echo "  -w, --warmup ${s}N${r}       Warmup requests before timing (not logged, default: 0)"
-        echo "  -s, --sleep ${s}SECONDS${r}  Sleep between requests (default: none)"
-        echo "  -X, --method ${s}METHOD${r}  HTTP method (default: GET; POST inferred if -d is given)"
-        echo "  -H, --header ${s}HEADER${r}  Extra request header, repeatable"
-        echo "  -d, --data ${s}DATA${r}      Request body (implies POST unless -X is set)"
-        echo "  -A, --user-agent ${s}UA${r}  User-Agent header (default: curl-timing/1.0)"
-        echo "      --no-save        Do not write per-URL log or stats files"
-        echo "  -q, --quiet          Suppress per-request output; only show summary"
-        echo "  -h, --help           Show this help message"
-        echo "EXIT STATUS"
-        echo "  0   All requests sent successfully"
-        echo "  2   Usage / argument error"
-        echo "  3   Dependency error (curl or bc missing)"
-        echo "DEPENDENCIES"
-        echo "  curl, bc"
-        echo "SEE ALSO"
-        echo "  stats, pin-dns, httpcode"
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - time HTTP requests and report summary statistics
+SYNOPSIS
+  $SCRIPT_NAME [${s}options${r}] <${s}url${r}> [${s}url${r}...]
+  $SCRIPT_NAME -h
+DESCRIPTION
+  Sends N requests to each URL with curl, measures response time in
+  milliseconds, and prints count/total/average/range plus outliers
+  detected via IQR. Useful for spot-checking endpoint latency,
+  comparing URLs head-to-head, or tracking performance regressions.
+  Per-URL timings and a stats summary are written to files in the
+  current directory unless --no-save is used.
+OPTIONS
+  -n, --num ${s}N${r}          Number of timed requests per URL (default: 10)
+  -w, --warmup ${s}N${r}       Warmup requests before timing (not logged, default: 0)
+  -s, --sleep ${s}SECONDS${r}  Sleep between requests (default: none)
+  -X, --method ${s}METHOD${r}  HTTP method (default: GET; POST inferred if -d is given)
+  -H, --header ${s}HEADER${r}  Extra request header, repeatable
+  -d, --data ${s}DATA${r}      Request body (implies POST unless -X is set)
+  -A, --user-agent ${s}UA${r}  User-Agent header (default: curl-timing/1.0)
+      --no-save        Do not write per-URL log or stats files
+  -q, --quiet          Suppress per-request output; only show summary
+  -h, --help           Show this help message
+EXIT STATUS
+  0   All requests sent successfully
+  2   Usage / argument error
+  3   Dependency error (curl or bc missing)
+DEPENDENCIES
+  curl, bc
+SEE ALSO
+  stats, pin-dns, httpcode
+EOF
     }
 
     _req() {

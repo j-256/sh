@@ -19,23 +19,25 @@ _gen_catalog() (
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
-        echo "NAME"
-        echo "  $SCRIPT_NAME - generate SFCC catalog XML"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME ${s}base_count${r} ${s}variants_per_base${r} [${s}catalog_id${r}]"
-        echo "  $SCRIPT_NAME -h"
-        echo "DESCRIPTION"
-        echo "  Generates a Demandware/SFCC catalog XML document with the specified number"
-        echo "  of base products, each with the given number of variants. Output is written"
-        echo "  to stdout."
-        echo "OPTIONS"
-        echo "  ${s}base_count${r}          Number of base products to generate"
-        echo "  ${s}variants_per_base${r}   Number of variants per base product"
-        echo "  ${s}catalog_id${r}          Catalog ID (default: test-catalog)"
-        echo "  -h, --help          Show this help message"
-        echo "EXIT STATUS"
-        echo "  0  Success"
-        echo "  2  Usage error (missing or non-positive-integer arg)"
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - generate SFCC catalog XML
+SYNOPSIS
+  $SCRIPT_NAME ${s}base_count${r} ${s}variants_per_base${r} [${s}catalog_id${r}]
+  $SCRIPT_NAME -h
+DESCRIPTION
+  Generates a Demandware/SFCC catalog XML document with the specified number
+  of base products, each with the given number of variants. Output is written
+  to stdout.
+OPTIONS
+  ${s}base_count${r}          Number of base products to generate
+  ${s}variants_per_base${r}   Number of variants per base product
+  ${s}catalog_id${r}          Catalog ID (default: test-catalog)
+  -h, --help          Show this help message
+EXIT STATUS
+  0  Success
+  2  Usage error (missing or non-positive-integer arg)
+EOF
     }
 
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }

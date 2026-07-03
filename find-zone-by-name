@@ -33,38 +33,40 @@ _find_zone_by_name() (
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
-        echo "NAME"
-        echo "  $SCRIPT_NAME - Salesforce Commerce Cloud SCAPI helper for finding a CDN zone by name"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME -j ${s}jwt${r} -s ${s}shortcode${r} -r ${s}realm${r} -i ${s}instance${r} -n ${s}name${r}"
-        echo "  J_JWT=... J_SHORTCODE=... J_REALM=... J_INSTANCE=... J_TARGET=... $SCRIPT_NAME"
-        echo "  $SCRIPT_NAME -h"
-        echo "DESCRIPTION"
-        echo "  Queries the SFCC CDN Zones API, paging through"
-        echo "  GET /cdn/zones/v1/organizations/f_ecom_<tenant>/zones/info until it"
-        echo "  finds a zone whose name contains the given substring. The matching"
-        echo "  zone's JSON object is printed to stdout."
-        echo "  Prefixed environment variables (J_*) are honored as defaults for flags."
-        echo "OPTIONS"
-        echo "  -j, --jwt ${s}jwt${r}              JWT bearer token (required unless J_JWT set)"
-        echo "  -s, --shortcode ${s}shortcode${r}  SCAPI shortcode (required unless J_SHORTCODE set)"
-        echo "  -r, --realm ${s}realm${r}          Realm ID (required unless J_REALM set)"
-        echo "  -i, --instance ${s}instance${r}    Instance name (required unless J_INSTANCE set)"
-        echo "  -n, --name ${s}name${r}            Target zone name substring (required unless J_TARGET set)"
-        echo "  -t, --target ${s}name${r}          Alias for -n/--name"
-        echo "  -h, --help                 Show this help message"
-        echo "ENVIRONMENT"
-        echo "  J_JWT        JWT bearer token (default for -j/--jwt)"
-        echo "  J_SHORTCODE  SCAPI shortcode (default for -s/--shortcode)"
-        echo "  J_REALM      Realm ID (default for -r/--realm)"
-        echo "  J_INSTANCE   Instance name (default for -i/--instance)"
-        echo "  J_TARGET     Zone name substring (default for -n/--name)"
-        echo "DEPENDENCIES"
-        echo "  curl, jq"
-        echo "EXIT STATUS"
-        echo "  0   Zone found and printed"
-        echo "  1   No matching zone found, or API request failed"
-        echo "  2   Usage error (missing/empty option value, missing required parameter, unknown flag)"
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - Salesforce Commerce Cloud SCAPI helper for finding a CDN zone by name
+SYNOPSIS
+  $SCRIPT_NAME -j ${s}jwt${r} -s ${s}shortcode${r} -r ${s}realm${r} -i ${s}instance${r} -n ${s}name${r}
+  J_JWT=... J_SHORTCODE=... J_REALM=... J_INSTANCE=... J_TARGET=... $SCRIPT_NAME
+  $SCRIPT_NAME -h
+DESCRIPTION
+  Queries the SFCC CDN Zones API, paging through
+  GET /cdn/zones/v1/organizations/f_ecom_<tenant>/zones/info until it
+  finds a zone whose name contains the given substring. The matching
+  zone's JSON object is printed to stdout.
+  Prefixed environment variables (J_*) are honored as defaults for flags.
+OPTIONS
+  -j, --jwt ${s}jwt${r}              JWT bearer token (required unless J_JWT set)
+  -s, --shortcode ${s}shortcode${r}  SCAPI shortcode (required unless J_SHORTCODE set)
+  -r, --realm ${s}realm${r}          Realm ID (required unless J_REALM set)
+  -i, --instance ${s}instance${r}    Instance name (required unless J_INSTANCE set)
+  -n, --name ${s}name${r}            Target zone name substring (required unless J_TARGET set)
+  -t, --target ${s}name${r}          Alias for -n/--name
+  -h, --help                 Show this help message
+ENVIRONMENT
+  J_JWT        JWT bearer token (default for -j/--jwt)
+  J_SHORTCODE  SCAPI shortcode (default for -s/--shortcode)
+  J_REALM      Realm ID (default for -r/--realm)
+  J_INSTANCE   Instance name (default for -i/--instance)
+  J_TARGET     Zone name substring (default for -n/--name)
+DEPENDENCIES
+  curl, jq
+EXIT STATUS
+  0   Zone found and printed
+  1   No matching zone found, or API request failed
+  2   Usage error (missing/empty option value, missing required parameter, unknown flag)
+EOF
     }
 
     _expand_short_opts() {

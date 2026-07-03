@@ -14,33 +14,35 @@ _install_bash() (
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="install-bash" ;; esac
 
     _show_help() {
-        echo "NAME"
-        echo "  $SCRIPT_NAME - install Homebrew bash and set it as the login shell"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME"
-        echo "  $SCRIPT_NAME -h"
-        echo "DESCRIPTION"
-        echo "  Performs the following steps (skipping any already completed):"
-        echo "    1. Install Homebrew if not present"
-        echo "    2. Install bash via \`brew install bash\`"
-        echo "    3. Add the new bash to /etc/shells (requires sudo)"
-        echo "    4. Set the current user's shell via \`chsh\` (permanent login-shell change)"
-        echo "    5. Append \`brew shellenv\` output to ~/.bash_profile if not already present"
-        echo ""
-        echo "  The install location is resolved dynamically via \`brew --prefix\`, so the"
-        echo "  script works on both Intel (/usr/local) and Apple Silicon (/opt/homebrew)."
-        echo "PRECONDITIONS"
-        echo "  - macOS only (uses Homebrew, chsh, and /etc/shells)"
-        echo "  - sudo access (for editing /etc/shells)"
-        echo "  - chsh changes the login shell permanently; revert with \`chsh -s /bin/zsh\`"
-        echo "OPTIONS"
-        echo "  -h, --help    Show this help message"
-        echo "EXIT STATUS"
-        echo "  0  Success"
-        echo "  1  Runtime failure (install step failed, sudo/chsh rejection, etc.)"
-        echo "  2  Precondition error (not running on macOS)"
-        echo "DEPENDENCIES"
-        echo "  curl, sudo, chsh, uname"
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - install Homebrew bash and set it as the login shell
+SYNOPSIS
+  $SCRIPT_NAME
+  $SCRIPT_NAME -h
+DESCRIPTION
+  Performs the following steps (skipping any already completed):
+    1. Install Homebrew if not present
+    2. Install bash via \`brew install bash\`
+    3. Add the new bash to /etc/shells (requires sudo)
+    4. Set the current user's shell via \`chsh\` (permanent login-shell change)
+    5. Append \`brew shellenv\` output to ~/.bash_profile if not already present
+
+  The install location is resolved dynamically via \`brew --prefix\`, so the
+  script works on both Intel (/usr/local) and Apple Silicon (/opt/homebrew).
+PRECONDITIONS
+  - macOS only (uses Homebrew, chsh, and /etc/shells)
+  - sudo access (for editing /etc/shells)
+  - chsh changes the login shell permanently; revert with \`chsh -s /bin/zsh\`
+OPTIONS
+  -h, --help    Show this help message
+EXIT STATUS
+  0  Success
+  1  Runtime failure (install step failed, sudo/chsh rejection, etc.)
+  2  Precondition error (not running on macOS)
+DEPENDENCIES
+  curl, sudo, chsh, uname
+EOF
     }
 
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }

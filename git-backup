@@ -19,45 +19,47 @@ _git_backup() (
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
-        echo "NAME"
-        echo "  $SCRIPT_NAME - back up git changes to a timestamped remote tag"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME [--dry-run] ${s}repo_directory${r} [${s}remote${r}]"
-        echo "  $SCRIPT_NAME -h"
-        echo "DESCRIPTION"
-        echo "  Stashes all tracked and untracked changes, detaches HEAD, commits"
-        echo "  everything, tags it backup-YYYY-MM-DD-HHMM.SS (UTC), pushes the tag"
-        echo "  to the remote, then restores the original branch and working state."
-        echo "  The local tag is deleted after pushing; the remote tag persists."
-        echo ""
-        echo "  Pushes immediately without confirmation -- the backup tag is named"
-        echo "  uniquely by timestamp and won't overwrite or interfere with your main"
-        echo "  work. Use --dry-run first if you want to see what would happen."
-        echo ""
-        echo "  If \`git stash apply\` hits conflicts, the script auto-resolves them by"
-        echo "  keeping the stashed version (\`git checkout --theirs\`). See CAVEATS."
-        echo "OPTIONS"
-        echo "  -n, --dry-run      Print the commands that would run, make no changes"
-        echo "  ${s}repo_directory${r}   Path to the git repository (e.g. . for CWD)"
-        echo "  ${s}remote${r}           Remote name (default: origin)"
-        echo "  -h, --help         Show this help message"
-        echo "PRECONDITIONS"
-        echo "  - ${s}repo_directory${r} is an accessible git working tree"
-        echo "  - ${s}remote${r} is configured in that repo and you have push access"
-        echo "EXIT STATUS"
-        echo "  0   Success"
-        echo "  1   Runtime failure (git command failed)"
-        echo "  2   Usage / precondition error (remote missing, bad args)"
-        echo "DEPENDENCIES"
-        echo "  git"
-        echo "CAVEATS"
-        echo "  Conflict auto-resolution uses \`git checkout --theirs\` (keep stashed"
-        echo "  side). This is destructive for the 'ours' side of any conflict --"
-        echo "  review the backup tag after a conflict-resolved run."
-        echo ""
-        echo "  Backup tags persist on the remote and are not auto-pruned. Clean"
-        echo "  them up periodically with:"
-        echo "    git push ${s}remote${r} :refs/tags/backup-YYYY-..."
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - back up git changes to a timestamped remote tag
+SYNOPSIS
+  $SCRIPT_NAME [--dry-run] ${s}repo_directory${r} [${s}remote${r}]
+  $SCRIPT_NAME -h
+DESCRIPTION
+  Stashes all tracked and untracked changes, detaches HEAD, commits
+  everything, tags it backup-YYYY-MM-DD-HHMM.SS (UTC), pushes the tag
+  to the remote, then restores the original branch and working state.
+  The local tag is deleted after pushing; the remote tag persists.
+
+  Pushes immediately without confirmation -- the backup tag is named
+  uniquely by timestamp and won't overwrite or interfere with your main
+  work. Use --dry-run first if you want to see what would happen.
+
+  If \`git stash apply\` hits conflicts, the script auto-resolves them by
+  keeping the stashed version (\`git checkout --theirs\`). See CAVEATS.
+OPTIONS
+  -n, --dry-run      Print the commands that would run, make no changes
+  ${s}repo_directory${r}   Path to the git repository (e.g. . for CWD)
+  ${s}remote${r}           Remote name (default: origin)
+  -h, --help         Show this help message
+PRECONDITIONS
+  - ${s}repo_directory${r} is an accessible git working tree
+  - ${s}remote${r} is configured in that repo and you have push access
+EXIT STATUS
+  0   Success
+  1   Runtime failure (git command failed)
+  2   Usage / precondition error (remote missing, bad args)
+DEPENDENCIES
+  git
+CAVEATS
+  Conflict auto-resolution uses \`git checkout --theirs\` (keep stashed
+  side). This is destructive for the 'ours' side of any conflict --
+  review the backup tag after a conflict-resolved run.
+
+  Backup tags persist on the remote and are not auto-pruned. Clean
+  them up periodically with:
+    git push ${s}remote${r} :refs/tags/backup-YYYY-...
+EOF
     }
 
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }

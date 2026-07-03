@@ -37,50 +37,52 @@ _scdef() (
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
-        echo "NAME"
-        echo "  $SCRIPT_NAME - look up a ShellCheck warning/error by code or message"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME [${s}options${r}] <${s}code${r}>"
-        echo "  $SCRIPT_NAME -s <${s}pattern${r}>"
-        echo "  $SCRIPT_NAME --list"
-        echo "DESCRIPTION"
-        echo "  Fetches a ShellCheck wiki entry and prints a brief summary -- title,"
-        echo "  problematic example, correct example, URL. Use --full for the whole"
-        echo "  page; --raw for the markdown source. The code argument is flexible:"
-        echo "  SC2155, sc2155, 2155, '#SC2155', '[SC2155]' all resolve to SC2155."
-        echo "  With --search, looks up by message; auto-fetches on a unique match."
-        echo "OPTIONS"
-        echo "  -r, --raw                Raw markdown (skip extraction and rendering)"
-        echo "      --full               Full wiki page (rendered) instead of brief"
-        echo "  -u, --url                Print the wiki URL and exit"
-        echo "  -o, --open               Open the wiki page in a browser"
-        echo "  -s, --search ${s}pattern${r}     Search index by description (substring, case-insensitive)"
-        echo "  -l, --list               Print the full index (SC####<TAB>description)"
-        echo "      --refresh            Force refresh of the cached index (7-day TTL)"
-        echo "  -h, --help               Show this help message"
-        echo "EXAMPLES"
-        echo "  $SCRIPT_NAME 2155                       # brief summary to stdout"
-        echo "  $SCRIPT_NAME --full 2155                # full wiki page"
-        echo "  $SCRIPT_NAME --raw 2155 | glow -        # pipe markdown to a renderer"
-        echo "  $SCRIPT_NAME -u 2086                    # print URL only"
-        echo "  $SCRIPT_NAME -s 'declare and assign'    # search by message"
-        echo "ENVIRONMENT"
-        echo "  SCDEF_RENDERER    Force renderer: glow, render-md, text, or none"
-        echo "                    Default: auto (glow > render-md > built-in plaintext)"
-        echo "  XDG_CACHE_HOME    Cache root (default \$HOME/.cache)"
-        echo "EXIT STATUS"
-        echo "  0  Success"
-        echo "  1  Runtime failure (network, filesystem)"
-        echo "  2  Usage error"
-        echo "  3  Dependency error (curl missing; open/xdg-open missing for --open)"
-        echo "  4  No search matches"
-        echo "  5  Code not found on the ShellCheck wiki"
-        echo "DEPENDENCIES"
-        echo "  curl"
-        echo "  column     (optional, aligns --search output on a TTY)"
-        echo "  glow       (optional, preferred renderer)"
-        echo "  render-md  (optional, fallback renderer)"
-        echo "  open       (required only for --open; xdg-open on Linux)"
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - look up a ShellCheck warning/error by code or message
+SYNOPSIS
+  $SCRIPT_NAME [${s}options${r}] <${s}code${r}>
+  $SCRIPT_NAME -s <${s}pattern${r}>
+  $SCRIPT_NAME --list
+DESCRIPTION
+  Fetches a ShellCheck wiki entry and prints a brief summary -- title,
+  problematic example, correct example, URL. Use --full for the whole
+  page; --raw for the markdown source. The code argument is flexible:
+  SC2155, sc2155, 2155, '#SC2155', '[SC2155]' all resolve to SC2155.
+  With --search, looks up by message; auto-fetches on a unique match.
+OPTIONS
+  -r, --raw                Raw markdown (skip extraction and rendering)
+      --full               Full wiki page (rendered) instead of brief
+  -u, --url                Print the wiki URL and exit
+  -o, --open               Open the wiki page in a browser
+  -s, --search ${s}pattern${r}     Search index by description (substring, case-insensitive)
+  -l, --list               Print the full index (SC####<TAB>description)
+      --refresh            Force refresh of the cached index (7-day TTL)
+  -h, --help               Show this help message
+EXAMPLES
+  $SCRIPT_NAME 2155                       # brief summary to stdout
+  $SCRIPT_NAME --full 2155                # full wiki page
+  $SCRIPT_NAME --raw 2155 | glow -        # pipe markdown to a renderer
+  $SCRIPT_NAME -u 2086                    # print URL only
+  $SCRIPT_NAME -s 'declare and assign'    # search by message
+ENVIRONMENT
+  SCDEF_RENDERER    Force renderer: glow, render-md, text, or none
+                    Default: auto (glow > render-md > built-in plaintext)
+  XDG_CACHE_HOME    Cache root (default \$HOME/.cache)
+EXIT STATUS
+  0  Success
+  1  Runtime failure (network, filesystem)
+  2  Usage error
+  3  Dependency error (curl missing; open/xdg-open missing for --open)
+  4  No search matches
+  5  Code not found on the ShellCheck wiki
+DEPENDENCIES
+  curl
+  column     (optional, aligns --search output on a TTY)
+  glow       (optional, preferred renderer)
+  render-md  (optional, fallback renderer)
+  open       (required only for --open; xdg-open on Linux)
+EOF
     }
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
     _warn()  { echo "[WRN][$SCRIPT_NAME] $*" >&2; }

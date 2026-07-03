@@ -32,21 +32,23 @@ _snippet() (
         # Underline only if output is a terminal (not a pipe or file)
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
-        echo "Usage:"
-        echo "  $SCRIPT_NAME -s ${s}pattern${r} [-e ${s}pattern${r}] [-f ${s}num${r}] [-l ${s}num${r}] [${s}file${r} ${s}...${r}]"
-        echo "  $SCRIPT_NAME -s ${s}pattern${r} [-e ${s}pattern${r}] [-t ${s}num${r}] [${s}file${r} ${s}...${r}]"
-        echo "  $SCRIPT_NAME [-h]"
-        echo "Options:"
-        echo "  -s, --start ${s}pattern${r}   Specify the pattern indicating the beginning of the desired snippet"
-        echo "  -e, --end ${s}pattern${r}     Specify the pattern indicating the end of the desired snippet"
-        echo "                        If not provided, reads to end of input"
-        echo "  -f, --trim-first ${s}num${r}  Exclude the first ${s}num${r} lines of the snippet"
-        echo "  -l, --trim-last ${s}num${r}   Exclude the last ${s}num${r} lines of the snippet"
-        echo "  -t, --trim ${s}num${r}        Exclude the first and last ${s}num${r} lines of the snippet"
-        echo "  -h, --help            Show this help message"
-        echo "Exit status:"
-        echo "  0  Success"
-        echo "  2  Usage error (missing flag value, missing start pattern, unknown option)"
+        cat <<EOF
+Usage:
+  $SCRIPT_NAME -s ${s}pattern${r} [-e ${s}pattern${r}] [-f ${s}num${r}] [-l ${s}num${r}] [${s}file${r} ${s}...${r}]
+  $SCRIPT_NAME -s ${s}pattern${r} [-e ${s}pattern${r}] [-t ${s}num${r}] [${s}file${r} ${s}...${r}]
+  $SCRIPT_NAME [-h]
+Options:
+  -s, --start ${s}pattern${r}   Specify the pattern indicating the beginning of the desired snippet
+  -e, --end ${s}pattern${r}     Specify the pattern indicating the end of the desired snippet
+                        If not provided, reads to end of input
+  -f, --trim-first ${s}num${r}  Exclude the first ${s}num${r} lines of the snippet
+  -l, --trim-last ${s}num${r}   Exclude the last ${s}num${r} lines of the snippet
+  -t, --trim ${s}num${r}        Exclude the first and last ${s}num${r} lines of the snippet
+  -h, --help            Show this help message
+Exit status:
+  0  Success
+  2  Usage error (missing flag value, missing start pattern, unknown option)
+EOF
     }
     # Drop first n lines of input
     _dropfirst() {

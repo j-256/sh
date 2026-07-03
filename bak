@@ -26,19 +26,21 @@ _bak() (
         # Underline only if output is a terminal (not a pipe or file)
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
-        echo "NAME"
-        echo "  $SCRIPT_NAME - move ${s}file${r} to ${s}file.bak${r}"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME [-v | -n] [--] [${s}file${r} ${s}...${r}]"
-        echo "  $SCRIPT_NAME -h"
-        echo "OPTIONS"
-        echo "  -v, --verbose      Print filenames as they are backed up"
-        echo "  -n, --dry-run      Simulate actions without making changes"
-        echo "  -h, --help         Show this help message"
-        echo "EXIT STATUS"
-        echo "  0  Success"
-        echo "  1  Runtime failure (source file missing, mv failed)"
-        echo "  2  Usage error (unknown option)"
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - move ${s}file${r} to ${s}file.bak${r}
+SYNOPSIS
+  $SCRIPT_NAME [-v | -n] [--] [${s}file${r} ${s}...${r}]
+  $SCRIPT_NAME -h
+OPTIONS
+  -v, --verbose      Print filenames as they are backed up
+  -n, --dry-run      Simulate actions without making changes
+  -h, --help         Show this help message
+EXIT STATUS
+  0  Success
+  1  Runtime failure (source file missing, mv failed)
+  2  Usage error (unknown option)
+EOF
     }
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
 

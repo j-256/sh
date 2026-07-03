@@ -26,35 +26,37 @@ _cf_ddns() (
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
-        echo "NAME"
-        echo "  $SCRIPT_NAME - update Cloudflare DNS to this machine's outbound IP"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME ${s}api_token${r} ${s}domain${r}"
-        echo "  $SCRIPT_NAME -h"
-        echo "DESCRIPTION"
-        echo "  Detects the machine's outbound IP via api.ipify.org, compares it to the"
-        echo "  domain's current A record (via Google DNS), and updates Cloudflare if they"
-        echo "  differ. All existing A records for the domain are deleted first."
-        echo "  Run periodically from the host to achieve basic Dynamic DNS."
-        echo "OPTIONS"
-        echo "  -h, --help   Show this help message"
-        echo "ENVIRONMENT"
-        echo "  DDNS_DEBUG   Set to any value to enable verbose curl/debug output"
-        echo "EXIT STATUS"
-        echo "  0  Success (DNS already correct or successfully updated)"
-        echo "  1  Runtime failure (IP detection failed, API returned unexpected JSON,"
-        echo "     no zone for domain)"
-        echo "  2  Usage error (missing API token or domain)"
-        echo "  3  Dependency error (curl, jq, or dig missing)"
-        echo "DEPENDENCIES"
-        echo "  curl, jq, dig"
-        echo "EXTERNAL SERVICES"
-        echo "  api.ipify.org   used to detect this machine's public IP"
-        echo "  8.8.8.8         Google DNS (TCP), used to resolve the domain's current A record"
-        echo "  If either endpoint is unreachable (firewall, restricted network), the"
-        echo "  script will fail -- make sure outbound access to both is permitted."
-        echo "API TOKEN PERMISSIONS"
-        echo "  Zone.Zone, Zone.DNS"
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - update Cloudflare DNS to this machine's outbound IP
+SYNOPSIS
+  $SCRIPT_NAME ${s}api_token${r} ${s}domain${r}
+  $SCRIPT_NAME -h
+DESCRIPTION
+  Detects the machine's outbound IP via api.ipify.org, compares it to the
+  domain's current A record (via Google DNS), and updates Cloudflare if they
+  differ. All existing A records for the domain are deleted first.
+  Run periodically from the host to achieve basic Dynamic DNS.
+OPTIONS
+  -h, --help   Show this help message
+ENVIRONMENT
+  DDNS_DEBUG   Set to any value to enable verbose curl/debug output
+EXIT STATUS
+  0  Success (DNS already correct or successfully updated)
+  1  Runtime failure (IP detection failed, API returned unexpected JSON,
+     no zone for domain)
+  2  Usage error (missing API token or domain)
+  3  Dependency error (curl, jq, or dig missing)
+DEPENDENCIES
+  curl, jq, dig
+EXTERNAL SERVICES
+  api.ipify.org   used to detect this machine's public IP
+  8.8.8.8         Google DNS (TCP), used to resolve the domain's current A record
+  If either endpoint is unreachable (firewall, restricted network), the
+  script will fail -- make sure outbound access to both is permitted.
+API TOKEN PERMISSIONS
+  Zone.Zone, Zone.DNS
+EOF
     }
 
     # ANSI palette for diagnostics, computed once (no per-call _color subshell):

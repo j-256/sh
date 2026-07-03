@@ -18,25 +18,27 @@ _explode() (
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
-        echo "NAME"
-        echo "  $SCRIPT_NAME - move a directory's contents up one level, then remove it"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME [${s}options${r}] <${s}directory${r}>"
-        echo "  $SCRIPT_NAME -h"
-        echo "DESCRIPTION"
-        echo "  Moves every item in ${s}directory${r} into its parent, then removes the"
-        echo "  now-empty ${s}directory${r}. Aborts without changes if any items would"
-        echo "  collide with existing files, unless --force is given."
-        echo "OPTIONS"
-        echo "  -f, --force    Overwrite existing files at the destination"
-        echo "  -n, --dry-run  Show what would happen without making changes"
-        echo "  -v, --verbose  List each item as it is moved"
-        echo "  -h, --help     Display this help message"
-        echo "EXIT STATUS"
-        echo "  0   Success (or help/dry-run completed)"
-        echo "  1   Runtime failure (a move failed, or directory removal failed)"
-        echo "  2   Usage error, or precondition not met (bad args, missing"
-        echo "      directory, collision without --force)"
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - move a directory's contents up one level, then remove it
+SYNOPSIS
+  $SCRIPT_NAME [${s}options${r}] <${s}directory${r}>
+  $SCRIPT_NAME -h
+DESCRIPTION
+  Moves every item in ${s}directory${r} into its parent, then removes the
+  now-empty ${s}directory${r}. Aborts without changes if any items would
+  collide with existing files, unless --force is given.
+OPTIONS
+  -f, --force    Overwrite existing files at the destination
+  -n, --dry-run  Show what would happen without making changes
+  -v, --verbose  List each item as it is moved
+  -h, --help     Display this help message
+EXIT STATUS
+  0   Success (or help/dry-run completed)
+  1   Runtime failure (a move failed, or directory removal failed)
+  2   Usage error, or precondition not met (bad args, missing
+      directory, collision without --force)
+EOF
     }
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
 

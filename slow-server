@@ -23,27 +23,29 @@ _slow_server() (
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
-        echo "NAME"
-        echo "  $SCRIPT_NAME - start a web server that responds after a configurable delay"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME [${s}port${r}]"
-        echo "  $SCRIPT_NAME -h"
-        echo "DESCRIPTION"
-        echo "  Starts a socat-based HTTP server on the given port (default 8080)."
-        echo "  The last path segment of each request is the delay in milliseconds."
-        echo "  Requests without a numeric path return 404."
-        echo "EXAMPLES"
-        echo "  $SCRIPT_NAME 3000"
-        echo "  curl http://localhost:3000/2500   # responds after ~2.5 seconds"
-        echo "OPTIONS"
-        echo "  ${s}port${r}   Port to listen on (default: 8080)"
-        echo "  -h, --help   Show this help message"
-        echo "EXIT STATUS"
-        echo "  0  Success (server exited cleanly)"
-        echo "  3  Dependency error (socat missing)"
-        echo "  *  socat exit code on other failures"
-        echo "DEPENDENCIES"
-        echo "  socat, sleep (must support fractional seconds)"
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - start a web server that responds after a configurable delay
+SYNOPSIS
+  $SCRIPT_NAME [${s}port${r}]
+  $SCRIPT_NAME -h
+DESCRIPTION
+  Starts a socat-based HTTP server on the given port (default 8080).
+  The last path segment of each request is the delay in milliseconds.
+  Requests without a numeric path return 404.
+EXAMPLES
+  $SCRIPT_NAME 3000
+  curl http://localhost:3000/2500   # responds after ~2.5 seconds
+OPTIONS
+  ${s}port${r}   Port to listen on (default: 8080)
+  -h, --help   Show this help message
+EXIT STATUS
+  0  Success (server exited cleanly)
+  3  Dependency error (socat missing)
+  *  socat exit code on other failures
+DEPENDENCIES
+  socat, sleep (must support fractional seconds)
+EOF
     }
 
     # Function invoked by socat below on each request. Exported for socat's

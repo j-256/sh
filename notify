@@ -41,38 +41,40 @@ _notify() (
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
-        echo "NAME"
-        echo "  $SCRIPT_NAME - show a macOS notification via osascript"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME [${s}options${r}] [${s}message${r} ...]"
-        echo "  ${s}command${r} | $SCRIPT_NAME [${s}options${r}]"
-        echo "  $SCRIPT_NAME -h"
-        echo "DESCRIPTION"
-        echo "  Displays a macOS notification in the top-right corner and in"
-        echo "  Notification Center. The ${s}message${r} may be passed as positional"
-        echo "  arguments or piped to stdin."
-        echo ""
-        echo "  Notifications are attributed to Script Editor (the osascript host"
-        echo "  app). Notification duration is controlled by macOS, not this script"
-        echo "  (System Settings > Notifications > Script Editor)."
-        echo "OPTIONS"
-        echo "  -t, --title ${s}title${r}        Notification title (default: \"Notification\")"
-        echo "  -s, --subtitle ${s}subtitle${r}  Notification subtitle"
-        echo "      --sound ${s}sound${r}        Sound name (default: \"Glass\")"
-        echo "  -n, --no-sound           Suppress notification sound"
-        echo "  -l, --list-sounds        List available sound names and exit"
-        echo "  -h, --help               Show this help message"
-        echo "ENVIRONMENT"
-        echo "  NOTIFY_TITLE    Default title (overridden by --title)"
-        echo "  NOTIFY_SOUND    Default sound (overridden by --sound / --no-sound)"
-        echo "EXIT STATUS"
-        echo "  0  Success"
-        echo "  2  Invalid arguments or missing required message"
-        echo "  3  osascript not found (not running on macOS)"
-        echo "DEPENDENCIES"
-        echo "  osascript (macOS)"
-        echo "CAVEATS"
-        echo "  macOS only. osascript is the backing mechanism for notifications."
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - show a macOS notification via osascript
+SYNOPSIS
+  $SCRIPT_NAME [${s}options${r}] [${s}message${r} ...]
+  ${s}command${r} | $SCRIPT_NAME [${s}options${r}]
+  $SCRIPT_NAME -h
+DESCRIPTION
+  Displays a macOS notification in the top-right corner and in
+  Notification Center. The ${s}message${r} may be passed as positional
+  arguments or piped to stdin.
+
+  Notifications are attributed to Script Editor (the osascript host
+  app). Notification duration is controlled by macOS, not this script
+  (System Settings > Notifications > Script Editor).
+OPTIONS
+  -t, --title ${s}title${r}        Notification title (default: "Notification")
+  -s, --subtitle ${s}subtitle${r}  Notification subtitle
+      --sound ${s}sound${r}        Sound name (default: "Glass")
+  -n, --no-sound           Suppress notification sound
+  -l, --list-sounds        List available sound names and exit
+  -h, --help               Show this help message
+ENVIRONMENT
+  NOTIFY_TITLE    Default title (overridden by --title)
+  NOTIFY_SOUND    Default sound (overridden by --sound / --no-sound)
+EXIT STATUS
+  0  Success
+  2  Invalid arguments or missing required message
+  3  osascript not found (not running on macOS)
+DEPENDENCIES
+  osascript (macOS)
+CAVEATS
+  macOS only. osascript is the backing mechanism for notifications.
+EOF
     }
 
     _list_sounds() {

@@ -44,34 +44,36 @@ __dbg__main() {
     __dbg__show_help() {
         local s; [ -t 1 ] && s=$'\033[4m' || s=""
         local r; [ -t 1 ] && r=$'\033[24m' || r=""
-        echo "NAME"
-        echo "  $__dbg__name - print variables as key-value pairs for debugging"
-        echo "SYNOPSIS"
-        echo "  . $__dbg__name ${s}ref${r} [${s}ref${r}...]"
-        echo "  . $__dbg__name -h"
-        echo "DESCRIPTION"
-        echo "  Must be sourced (not executed) because $__dbg__name reads variables"
-        echo "  from the caller's shell; an executed script runs in a subprocess and"
-        echo "  the caller's variables are not visible there."
-        echo "  Each ${s}ref${r} is resolved and printed as a shell-assignment-like line to"
-        echo "  stderr:"
-        echo "  - Scalars / whole arrays: output derived from \`declare -p\`"
-        echo "  - arr[@]: one quoted token per element (preserves boundaries)"
-        echo "  - arr[*]: single quoted token of the IFS-joined value"
-        echo "  - arr[i] / map[key]: \`${s}ref${r}=<quoted>\` or \`unset ${s}ref${r}\` if absent"
-        echo "  - Exported scalars prefix with \`export\`"
-        echo "  Values containing control characters (e.g. ESC) are rendered via"
-        echo "  \`printf %q\` for terminal safety; all other values use double-quoted"
-        echo "  readable form with \\ \" \$ \` escaped."
-        echo "OPTIONS"
-        echo "  ${s}ref${r}          Variable name or array element/whole-array reference"
-        echo "  -h, --help   Show this help message"
-        echo "ENVIRONMENT"
-        echo "  __DBG_STRICT  When \"true\", reject eval-unsafe reference syntax"
-        echo "                (quotes, \$(...), backticks, \${...}, operators, newlines)"
-        echo "EXIT STATUS"
-        echo "  0  Success"
-        echo "  2  Usage error (script was executed rather than sourced)"
+        cat <<EOF
+NAME
+  $__dbg__name - print variables as key-value pairs for debugging
+SYNOPSIS
+  . $__dbg__name ${s}ref${r} [${s}ref${r}...]
+  . $__dbg__name -h
+DESCRIPTION
+  Must be sourced (not executed) because $__dbg__name reads variables
+  from the caller's shell; an executed script runs in a subprocess and
+  the caller's variables are not visible there.
+  Each ${s}ref${r} is resolved and printed as a shell-assignment-like line to
+  stderr:
+  - Scalars / whole arrays: output derived from \`declare -p\`
+  - arr[@]: one quoted token per element (preserves boundaries)
+  - arr[*]: single quoted token of the IFS-joined value
+  - arr[i] / map[key]: \`${s}ref${r}=<quoted>\` or \`unset ${s}ref${r}\` if absent
+  - Exported scalars prefix with \`export\`
+  Values containing control characters (e.g. ESC) are rendered via
+  \`printf %q\` for terminal safety; all other values use double-quoted
+  readable form with \\ " \$ \` escaped.
+OPTIONS
+  ${s}ref${r}          Variable name or array element/whole-array reference
+  -h, --help   Show this help message
+ENVIRONMENT
+  __DBG_STRICT  When "true", reject eval-unsafe reference syntax
+                (quotes, \$(...), backticks, \${...}, operators, newlines)
+EXIT STATUS
+  0  Success
+  2  Usage error (script was executed rather than sourced)
+EOF
     }
 
     __dbg__error() { echo "[ERR][$__dbg__name] $*" >&2; }

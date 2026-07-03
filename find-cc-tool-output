@@ -26,69 +26,71 @@ _find_cc_tool_output() (
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
-        echo "NAME"
-        echo "  $SCRIPT_NAME - recover full tool_result output from Claude Code transcripts"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME [${s}options${r}] <${s}substring${r}>"
-        echo "  $SCRIPT_NAME -h"
-        echo "DESCRIPTION"
-        echo "  Searches ~/.claude/projects/ JSONL transcripts for tool_result entries"
-        echo "  whose content contains <${s}substring${r}>. Useful for recovering full"
-        echo "  Bash/Read output from a previous session when the CLI's"
-        echo "  '+N lines (ctrl+o)' display cap can't be expanded."
-        echo
-        echo "  Matches are deduplicated by exact body text. When all matches share the"
-        echo "  same body, it's printed to stdout. When bodies differ, each unique body"
-        echo "  is listed on stderr with all its occurrences and the script exits 2 --"
-        echo "  pick one with -m/--match ${s}N${r}, narrow with --session or --dir, or pass"
-        echo "  --all to dump every unique body."
-        echo "OPTIONS"
-        echo "  -s, --session ${s}name|uuid${r}"
-        echo "                       Limit to one session. Friendly names (set via"
-        echo "                       /rename) are resolved by latest customTitle event"
-        echo "  -d, --dir ${s}path${r}        Limit to one project directory. Accepts"
-        echo "                       absolute paths (encoded automatically) or the"
-        echo "                       already-encoded basename"
-        echo "  -m, --match ${s}N${r}         Print the Nth unique output from the previous"
-        echo "                       listing (1-based). Mutex with --all"
-        echo "  -a, --all            Dump every unique body, separated by headers"
-        echo "      --include-meta   Don't filter out this script's own listing output"
-        echo "                       (which otherwise self-matches when captured by a"
-        echo "                       later tool call)"
-        echo "  -v, --verbose        Verbose progress output"
-        echo "  -h, --help           Show this help message"
-        echo "DEPENDENCIES"
-        echo "  python3"
-        echo "EXIT STATUS"
-        echo "  0  Match found and printed (or all dumped)"
-        echo "  1  No matches"
-        echo "  2  Usage error, or multiple unique outputs without --match/--all"
-        echo "  3  Missing dependency"
-        echo "EXAMPLES"
-        echo "  # Recover output containing a unique string"
-        echo "  $SCRIPT_NAME 'PARENS ACRONYMS'"
-        echo
-        echo "  # When several unique outputs match, pick one from the listing"
-        echo "  $SCRIPT_NAME --match 2 'PARENS ACRONYMS'"
-        echo
-        echo "  # Restrict to one renamed session"
-        echo "  $SCRIPT_NAME -s 'dsc-scrape audit' 'landings on disk'"
-        echo
-        echo "  # Restrict to one project directory"
-        echo "  $SCRIPT_NAME -d /x 'sips -Z'"
-        echo
-        echo "  # Dump every unique body"
-        echo "  $SCRIPT_NAME --all 'curl -fSsiL'"
-        echo "CAVEATS"
-        echo "  Substring matching is performed on decoded JSON content, so quoted"
-        echo "  strings in the original output match literally. Substrings spanning"
-        echo "  raw newlines work; substrings containing literal backslashes may not."
-        echo
-        echo "  Encoded project basenames start with '-', which collides with the"
-        echo "  short-flag bundling syntax. Use the '=' form for those:"
-        echo "    $SCRIPT_NAME --dir=-Users-me--x foo  # works"
-        echo "    $SCRIPT_NAME --dir -Users-me--x foo  # parsed as bundled flags"
-        echo "  Absolute paths are encoded automatically and have no such issue."
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - recover full tool_result output from Claude Code transcripts
+SYNOPSIS
+  $SCRIPT_NAME [${s}options${r}] <${s}substring${r}>
+  $SCRIPT_NAME -h
+DESCRIPTION
+  Searches ~/.claude/projects/ JSONL transcripts for tool_result entries
+  whose content contains <${s}substring${r}>. Useful for recovering full
+  Bash/Read output from a previous session when the CLI's
+  '+N lines (ctrl+o)' display cap can't be expanded.
+
+  Matches are deduplicated by exact body text. When all matches share the
+  same body, it's printed to stdout. When bodies differ, each unique body
+  is listed on stderr with all its occurrences and the script exits 2 --
+  pick one with -m/--match ${s}N${r}, narrow with --session or --dir, or pass
+  --all to dump every unique body.
+OPTIONS
+  -s, --session ${s}name|uuid${r}
+                       Limit to one session. Friendly names (set via
+                       /rename) are resolved by latest customTitle event
+  -d, --dir ${s}path${r}        Limit to one project directory. Accepts
+                       absolute paths (encoded automatically) or the
+                       already-encoded basename
+  -m, --match ${s}N${r}         Print the Nth unique output from the previous
+                       listing (1-based). Mutex with --all
+  -a, --all            Dump every unique body, separated by headers
+      --include-meta   Don't filter out this script's own listing output
+                       (which otherwise self-matches when captured by a
+                       later tool call)
+  -v, --verbose        Verbose progress output
+  -h, --help           Show this help message
+DEPENDENCIES
+  python3
+EXIT STATUS
+  0  Match found and printed (or all dumped)
+  1  No matches
+  2  Usage error, or multiple unique outputs without --match/--all
+  3  Missing dependency
+EXAMPLES
+  # Recover output containing a unique string
+  $SCRIPT_NAME 'PARENS ACRONYMS'
+
+  # When several unique outputs match, pick one from the listing
+  $SCRIPT_NAME --match 2 'PARENS ACRONYMS'
+
+  # Restrict to one renamed session
+  $SCRIPT_NAME -s 'dsc-scrape audit' 'landings on disk'
+
+  # Restrict to one project directory
+  $SCRIPT_NAME -d /x 'sips -Z'
+
+  # Dump every unique body
+  $SCRIPT_NAME --all 'curl -fSsiL'
+CAVEATS
+  Substring matching is performed on decoded JSON content, so quoted
+  strings in the original output match literally. Substrings spanning
+  raw newlines work; substrings containing literal backslashes may not.
+
+  Encoded project basenames start with '-', which collides with the
+  short-flag bundling syntax. Use the '=' form for those:
+    $SCRIPT_NAME --dir=-Users-me--x foo  # works
+    $SCRIPT_NAME --dir -Users-me--x foo  # parsed as bundled flags
+  Absolute paths are encoded automatically and have no such issue.
+EOF
     }
 
     _expand_short_opts() {

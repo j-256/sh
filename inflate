@@ -28,34 +28,36 @@ _inflate() (
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
-        echo "NAME"
-        echo "  $SCRIPT_NAME - adjust a historical USD amount for inflation"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME ${s}amount${r} ${s}year${r} [${s}month${r}]"
-        echo "  $SCRIPT_NAME -h"
-        echo "DESCRIPTION"
-        echo "  Fetches CPI data from the US Bureau of Labor Statistics and prints"
-        echo "  the equivalent buying power in the most recent month available."
-        echo "  The adjusted amount is printed to stdout; a summary line (e.g."
-        echo "  \"\$150.00: Sep 1970 -> Jun 2024\") is printed to stderr."
-        echo "  BLS CPI data is available for years 1913 through the most recent"
-        echo "  month (typically a 1-2 month delay)."
-        echo "OPTIONS"
-        echo "  ${s}amount${r}           Dollar amount to adjust (e.g. 150, 1234.56)"
-        echo "  ${s}year${r}             Historical year (1913 or later)"
-        echo "  ${s}month${r}            Month as integer 1-12 (default: 1 / January)"
-        echo "  -h, --help         Show this help message"
-        echo "EXIT STATUS"
-        echo "  0  Success"
-        echo "  1  Runtime failure (BLS calculator response didn't yield a number)"
-        echo "  2  Usage error (missing amount, missing year, month out of range)"
-        echo "  3  Dependency error (curl missing)"
-        echo "DEPENDENCIES"
-        echo "  curl"
-        echo "CAVEATS"
-        echo "  Requires network connectivity; the BLS inflation calculator at"
-        echo "  https://data.bls.gov/cgi-bin/cpicalc.pl must be reachable. Data is"
-        echo "  fetched on every invocation (no local cache)."
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - adjust a historical USD amount for inflation
+SYNOPSIS
+  $SCRIPT_NAME ${s}amount${r} ${s}year${r} [${s}month${r}]
+  $SCRIPT_NAME -h
+DESCRIPTION
+  Fetches CPI data from the US Bureau of Labor Statistics and prints
+  the equivalent buying power in the most recent month available.
+  The adjusted amount is printed to stdout; a summary line (e.g.
+  "\$150.00: Sep 1970 -> Jun 2024") is printed to stderr.
+  BLS CPI data is available for years 1913 through the most recent
+  month (typically a 1-2 month delay).
+OPTIONS
+  ${s}amount${r}           Dollar amount to adjust (e.g. 150, 1234.56)
+  ${s}year${r}             Historical year (1913 or later)
+  ${s}month${r}            Month as integer 1-12 (default: 1 / January)
+  -h, --help         Show this help message
+EXIT STATUS
+  0  Success
+  1  Runtime failure (BLS calculator response didn't yield a number)
+  2  Usage error (missing amount, missing year, month out of range)
+  3  Dependency error (curl missing)
+DEPENDENCIES
+  curl
+CAVEATS
+  Requires network connectivity; the BLS inflation calculator at
+  https://data.bls.gov/cgi-bin/cpicalc.pl must be reachable. Data is
+  fetched on every invocation (no local cache).
+EOF
     }
 
     case "$1" in

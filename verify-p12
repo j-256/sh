@@ -25,48 +25,50 @@ _verify_p12() (
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
-        echo "NAME"
-        echo "  $SCRIPT_NAME - verify WebDAV cartridge access with Bearer or Basic auth"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME ${s}hostname${r} ${s}token${r} [${s}p12_password${r}] [${s}p12_file${r}]"
-        echo "  $SCRIPT_NAME --basic ${s}hostname${r} ${s}user:pass${r} [${s}p12_password${r}] [${s}p12_file${r}]"
-        echo "  $SCRIPT_NAME -h"
-        echo "DESCRIPTION"
-        echo "  Sends a GET request to /webdav/Sites/Cartridges on ${s}hostname${r}."
-        echo "  Prints the HTTP status line and cartridge directory listing."
-        echo ""
-        echo "  Default auth is Bearer using the given ${s}token${r}. With --basic,"
-        echo "  auth is Basic using ${s}user:pass${r} (the full colon-delimited string)."
-        echo ""
-        echo "  When ${s}p12_password${r} is provided, adds mTLS client certificate"
-        echo "  authentication using the .p12 file. Default ${s}p12_file${r} is"
-        echo "  \$USER-${s}hostname${r}.p12 in the current directory."
-        echo "OPTIONS"
-        echo "  --basic        Use Basic auth instead of Bearer"
-        echo "  ${s}hostname${r}       Instance hostname (e.g. dev01-web-example.demandware.net)"
-        echo "  ${s}token${r}          Bearer token for authorization (default auth mode)"
-        echo "  ${s}user:pass${r}      Username and password for Basic auth (with --basic)"
-        echo "  ${s}p12_password${r}   (optional) Password for the .p12 client certificate"
-        echo "  ${s}p12_file${r}       (optional) Path to .p12 file (default: \$USER-hostname.p12)"
-        echo "  -h, --help     Show this help message"
-        echo "PRECONDITIONS"
-        echo "  - If ${s}p12_password${r} is given, the .p12 file must exist and be readable"
-        echo "  - Network must be able to reach ${s}hostname${r} on port 443"
-        echo "  - Credentials (token or user:pass, and .p12 password if used) must be valid"
-        echo "EXIT STATUS"
-        echo "  0   curl succeeded (check HTTP status line -- 401/403 still exit 0)"
-        echo "  2   Usage error (missing required argument)"
-        echo "  *   curl exit code on network or TLS failure"
-        echo ""
-        echo "  Common curl codes: 35 = TLS handshake, 51 = server cert, 58 = .p12 /"
-        echo "  client-cert problem, 60 = CA cert."
-        echo "CAVEATS"
-        echo "  curl exit 58 typically means the .p12 file is missing, unreadable, or"
-        echo "  the password is wrong."
-        echo "DEPENDENCIES"
-        echo "  curl (always); openssl (only with --basic)"
-        echo "SEE ALSO"
-        echo "  propfind-p12, generate-p12"
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - verify WebDAV cartridge access with Bearer or Basic auth
+SYNOPSIS
+  $SCRIPT_NAME ${s}hostname${r} ${s}token${r} [${s}p12_password${r}] [${s}p12_file${r}]
+  $SCRIPT_NAME --basic ${s}hostname${r} ${s}user:pass${r} [${s}p12_password${r}] [${s}p12_file${r}]
+  $SCRIPT_NAME -h
+DESCRIPTION
+  Sends a GET request to /webdav/Sites/Cartridges on ${s}hostname${r}.
+  Prints the HTTP status line and cartridge directory listing.
+
+  Default auth is Bearer using the given ${s}token${r}. With --basic,
+  auth is Basic using ${s}user:pass${r} (the full colon-delimited string).
+
+  When ${s}p12_password${r} is provided, adds mTLS client certificate
+  authentication using the .p12 file. Default ${s}p12_file${r} is
+  \$USER-${s}hostname${r}.p12 in the current directory.
+OPTIONS
+  --basic        Use Basic auth instead of Bearer
+  ${s}hostname${r}       Instance hostname (e.g. dev01-web-example.demandware.net)
+  ${s}token${r}          Bearer token for authorization (default auth mode)
+  ${s}user:pass${r}      Username and password for Basic auth (with --basic)
+  ${s}p12_password${r}   (optional) Password for the .p12 client certificate
+  ${s}p12_file${r}       (optional) Path to .p12 file (default: \$USER-hostname.p12)
+  -h, --help     Show this help message
+PRECONDITIONS
+  - If ${s}p12_password${r} is given, the .p12 file must exist and be readable
+  - Network must be able to reach ${s}hostname${r} on port 443
+  - Credentials (token or user:pass, and .p12 password if used) must be valid
+EXIT STATUS
+  0   curl succeeded (check HTTP status line -- 401/403 still exit 0)
+  2   Usage error (missing required argument)
+  *   curl exit code on network or TLS failure
+
+  Common curl codes: 35 = TLS handshake, 51 = server cert, 58 = .p12 /
+  client-cert problem, 60 = CA cert.
+CAVEATS
+  curl exit 58 typically means the .p12 file is missing, unreadable, or
+  the password is wrong.
+DEPENDENCIES
+  curl (always); openssl (only with --basic)
+SEE ALSO
+  propfind-p12, generate-p12
+EOF
     }
 
     local auth_mode="bearer"

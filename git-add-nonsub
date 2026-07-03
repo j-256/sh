@@ -20,36 +20,38 @@ _git_add_nonsub() (
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
-        echo "NAME"
-        echo "  $SCRIPT_NAME - temporarily move a nested .git aside so git add stages files"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME <${s}directory${r}>"
-        echo "  $SCRIPT_NAME -h"
-        echo "DESCRIPTION"
-        echo "  Moves ${s}directory${r}/.git to a temp location, runs \`git add .\` inside"
-        echo "  ${s}directory${r} (so the OUTER repo's git picks up the files directly"
-        echo "  instead of creating a submodule reference), then restores the .git"
-        echo "  directory. Useful for vendoring a third-party repo without maintaining"
-        echo "  a submodule link."
-        echo "OPTIONS"
-        echo "  ${s}directory${r}   Directory that contains its own .git subdirectory"
-        echo "  -h, --help    Show this help message"
-        echo "PRECONDITIONS"
-        echo "  - ${s}directory${r} must exist and contain a .git subdirectory"
-        echo "  - Must be invoked from inside an outer git repository's working tree"
-        echo "EXIT STATUS"
-        echo "  0   Success"
-        echo "  1   Runtime failure (backup, restore, or git add failed)"
-        echo "  2   Usage / precondition error"
-        echo "  130 Interrupted (SIGINT/SIGTERM/SIGHUP); emergency restore attempted"
-        echo "DEPENDENCIES"
-        echo "  git"
-        echo "CAVEATS"
-        echo "  The temporary .git move is not fully crash-safe. A signal-trap"
-        echo "  (INT/TERM/HUP) will attempt to restore .git, but a SIGKILL or power"
-        echo "  loss between the move and restore will leave the target without its"
-        echo "  .git directory. The temp path is printed so manual recovery is"
-        echo "  possible."
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - temporarily move a nested .git aside so git add stages files
+SYNOPSIS
+  $SCRIPT_NAME <${s}directory${r}>
+  $SCRIPT_NAME -h
+DESCRIPTION
+  Moves ${s}directory${r}/.git to a temp location, runs \`git add .\` inside
+  ${s}directory${r} (so the OUTER repo's git picks up the files directly
+  instead of creating a submodule reference), then restores the .git
+  directory. Useful for vendoring a third-party repo without maintaining
+  a submodule link.
+OPTIONS
+  ${s}directory${r}   Directory that contains its own .git subdirectory
+  -h, --help    Show this help message
+PRECONDITIONS
+  - ${s}directory${r} must exist and contain a .git subdirectory
+  - Must be invoked from inside an outer git repository's working tree
+EXIT STATUS
+  0   Success
+  1   Runtime failure (backup, restore, or git add failed)
+  2   Usage / precondition error
+  130 Interrupted (SIGINT/SIGTERM/SIGHUP); emergency restore attempted
+DEPENDENCIES
+  git
+CAVEATS
+  The temporary .git move is not fully crash-safe. A signal-trap
+  (INT/TERM/HUP) will attempt to restore .git, but a SIGKILL or power
+  loss between the move and restore will leave the target without its
+  .git directory. The temp path is printed so manual recovery is
+  possible.
+EOF
     }
 
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }

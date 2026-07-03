@@ -20,34 +20,36 @@ _dw_jwt() (
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
-        echo "NAME"
-        echo "  $SCRIPT_NAME - generate a signed JWT for Salesforce B2C Commerce OAuth2"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME ${s}client_id${r} ${s}private_key_file${r}"
-        echo "  $SCRIPT_NAME -h"
-        echo "DESCRIPTION"
-        echo "  Salesforce B2C Commerce (formerly Demandware) is a SaaS e-commerce"
-        echo "  platform. This script generates the RS256 JWT used when calling"
-        echo "  Account Manager's OAuth2 client_credentials endpoint"
-        echo "  (https://account.demandware.com). The token is valid for 30 minutes"
-        echo "  and is printed to stdout, ready to use as the client_assertion in a"
-        echo "  subsequent token request."
-        echo ""
-        echo "  A PEM key starts with \`-----BEGIN RSA PRIVATE KEY-----\` or"
-        echo "  \`-----BEGIN PRIVATE KEY-----\` and ends with the matching"
-        echo "  \`-----END ...-----\` line."
-        echo "OPTIONS"
-        echo "  ${s}client_id${r}          SFCC API client ID (used as iss and sub claims)"
-        echo "  ${s}private_key_file${r}   Path to the RSA private key (PEM format)"
-        echo "  -h, --help         Show this help message"
-        echo "EXIT STATUS"
-        echo "  0  Success"
-        echo "  1  Signing failed (openssl error)"
-        echo "  2  Usage / argument error"
-        echo "  3  Dependency error (openssl missing)"
-        echo "  4  Private key file not found or unreadable"
-        echo "DEPENDENCIES"
-        echo "  openssl"
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - generate a signed JWT for Salesforce B2C Commerce OAuth2
+SYNOPSIS
+  $SCRIPT_NAME ${s}client_id${r} ${s}private_key_file${r}
+  $SCRIPT_NAME -h
+DESCRIPTION
+  Salesforce B2C Commerce (formerly Demandware) is a SaaS e-commerce
+  platform. This script generates the RS256 JWT used when calling
+  Account Manager's OAuth2 client_credentials endpoint
+  (https://account.demandware.com). The token is valid for 30 minutes
+  and is printed to stdout, ready to use as the client_assertion in a
+  subsequent token request.
+
+  A PEM key starts with \`-----BEGIN RSA PRIVATE KEY-----\` or
+  \`-----BEGIN PRIVATE KEY-----\` and ends with the matching
+  \`-----END ...-----\` line.
+OPTIONS
+  ${s}client_id${r}          SFCC API client ID (used as iss and sub claims)
+  ${s}private_key_file${r}   Path to the RSA private key (PEM format)
+  -h, --help         Show this help message
+EXIT STATUS
+  0  Success
+  1  Signing failed (openssl error)
+  2  Usage / argument error
+  3  Dependency error (openssl missing)
+  4  Private key file not found or unreadable
+DEPENDENCIES
+  openssl
+EOF
     }
 
     case "$1" in

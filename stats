@@ -18,24 +18,26 @@ _stats() (
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
-        echo "NAME"
-        echo "  $SCRIPT_NAME - calculate statistics from a list of integers"
-        echo "SYNOPSIS"
-        echo "  ${s}command${r} | $SCRIPT_NAME [-n]"
-        echo "  $SCRIPT_NAME -h"
-        echo "DESCRIPTION"
-        echo "  Reads whitespace-separated integers from stdin and prints count, total,"
-        echo "  average, range (min to max), and outliers (1.5 * IQR method). Input may"
-        echo "  be newline-, space-, or tab-delimited (or any mix)."
-        echo "OPTIONS"
-        echo "  -n, --print    Print the dataset before statistics"
-        echo "  -h, --help     Show this help message"
-        echo "EXIT STATUS"
-        echo "  0  Success"
-        echo "  2  Usage error (non-integer input, unknown option)"
-        echo "  3  Dependency error (bc missing)"
-        echo "DEPENDENCIES"
-        echo "  bc"
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - calculate statistics from a list of integers
+SYNOPSIS
+  ${s}command${r} | $SCRIPT_NAME [-n]
+  $SCRIPT_NAME -h
+DESCRIPTION
+  Reads whitespace-separated integers from stdin and prints count, total,
+  average, range (min to max), and outliers (1.5 * IQR method). Input may
+  be newline-, space-, or tab-delimited (or any mix).
+OPTIONS
+  -n, --print    Print the dataset before statistics
+  -h, --help     Show this help message
+EXIT STATUS
+  0  Success
+  2  Usage error (non-integer input, unknown option)
+  3  Dependency error (bc missing)
+DEPENDENCIES
+  bc
+EOF
     }
 
     _expand_short_opts() {

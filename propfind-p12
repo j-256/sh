@@ -19,36 +19,38 @@ _propfind_p12() (
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
-        echo "NAME"
-        echo "  $SCRIPT_NAME - WebDAV PROPFIND with p12 client certificate auth"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME [-t ${s}token${r}] ${s}hostname${r} ${s}code_version${r} ${s}p12_password${r}"
-        echo "  $SCRIPT_NAME -h"
-        echo "DESCRIPTION"
-        echo "  Sends a WebDAV PROPFIND request (Depth: 1) to a Salesforce B2C Commerce"
-        echo "  (Demandware) instance to list cartridges at the given ${s}code_version${r}."
-        echo "  Authenticates with a Bearer token and a .p12 client certificate."
-        echo "OPTIONS"
-        echo "  ${s}hostname${r}       Instance hostname (e.g. dev01-web-example.demandware.net)"
-        echo "  ${s}code_version${r}   Code version path segment (e.g. version1)"
-        echo "  ${s}p12_password${r}   Password for the .p12 certificate"
-        echo "  -t, --token ${s}t${r}  Bearer token for authorization (or set SFCC_TOKEN env var)"
-        echo "  -h, --help     Show this help message"
-        echo "ENVIRONMENT"
-        echo "  SFCC_TOKEN  Fallback source for the Bearer token if -t/--token is not given"
-        echo "PRECONDITIONS"
-        echo "  Two certificate files must exist in the current directory:"
-        echo "    \$USER-${s}hostname${r}.p12   Client certificate (use 'generate-p12' to create)"
-        echo "    ${s}hostname${r}_01.crt       CA certificate (from SFCC Account Manager)"
-        echo "EXIT STATUS"
-        echo "  0   PROPFIND succeeded"
-        echo "  2   Usage / argument error"
-        echo "  4   Required .p12 or CA cert file not found"
-        echo "  *   curl exit code (e.g. 58 = .p12 problem, 35 = TLS handshake)"
-        echo "DEPENDENCIES"
-        echo "  curl"
-        echo "SEE ALSO"
-        echo "  generate-p12, verify-p12"
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - WebDAV PROPFIND with p12 client certificate auth
+SYNOPSIS
+  $SCRIPT_NAME [-t ${s}token${r}] ${s}hostname${r} ${s}code_version${r} ${s}p12_password${r}
+  $SCRIPT_NAME -h
+DESCRIPTION
+  Sends a WebDAV PROPFIND request (Depth: 1) to a Salesforce B2C Commerce
+  (Demandware) instance to list cartridges at the given ${s}code_version${r}.
+  Authenticates with a Bearer token and a .p12 client certificate.
+OPTIONS
+  ${s}hostname${r}       Instance hostname (e.g. dev01-web-example.demandware.net)
+  ${s}code_version${r}   Code version path segment (e.g. version1)
+  ${s}p12_password${r}   Password for the .p12 certificate
+  -t, --token ${s}t${r}  Bearer token for authorization (or set SFCC_TOKEN env var)
+  -h, --help     Show this help message
+ENVIRONMENT
+  SFCC_TOKEN  Fallback source for the Bearer token if -t/--token is not given
+PRECONDITIONS
+  Two certificate files must exist in the current directory:
+    \$USER-${s}hostname${r}.p12   Client certificate (use 'generate-p12' to create)
+    ${s}hostname${r}_01.crt       CA certificate (from SFCC Account Manager)
+EXIT STATUS
+  0   PROPFIND succeeded
+  2   Usage / argument error
+  4   Required .p12 or CA cert file not found
+  *   curl exit code (e.g. 58 = .p12 problem, 35 = TLS handshake)
+DEPENDENCIES
+  curl
+SEE ALSO
+  generate-p12, verify-p12
+EOF
     }
 
     _expand_short_opts() {

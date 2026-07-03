@@ -40,32 +40,34 @@ __prompt__main() {
     __prompt__show_help() {
         local s; [ -t 1 ] && s=$'\033[4m' || s=""
         local r; [ -t 1 ] && r=$'\033[24m' || r=""
-        echo "NAME"
-        echo "  $__prompt__name - interactive prompt with default value and placeholder"
-        echo "SYNOPSIS"
-        echo "  . $__prompt__name ${s}variable${r} [${s}prompt${r}] [${s}default${r}] [${s}placeholder${r}]"
-        echo "  . $__prompt__name -h"
-        echo "DESCRIPTION"
-        echo "  Prompts the user for input with an optional gray placeholder that"
-        echo "  disappears on the first keypress. Stores the result (or default)"
-        echo "  in the named ${s}variable${r}. Must be sourced (not executed) because"
-        echo "  prompt sets a variable in your shell; an executed script runs in a"
-        echo "  subprocess that dies immediately, losing the assignment."
-        echo "  Any \"%DEFAULT%\" in ${s}placeholder${r} is replaced with ${s}default${r}."
-        echo "  When stdin is not a terminal (e.g. piped input), the placeholder"
-        echo "  rendering is skipped and a plain line read is performed; defaults"
-        echo "  still apply."
-        echo "OPTIONS"
-        echo "  ${s}variable${r}     Shell variable name to store the result in"
-        echo "  ${s}prompt${r}       Text to display before input (e.g. \"Name: \")"
-        echo "  ${s}default${r}      Value used when the user presses Enter without typing"
-        echo "  ${s}placeholder${r}  Gray hint text (defaults to ${s}default${r} if omitted)"
-        echo "  -h, --help     Show this help message"
-        echo "EXIT STATUS"
-        echo "  0  Success"
-        echo "  2  Usage error (script was executed rather than sourced)"
-        echo "DEPENDENCIES"
-        echo "  stty"
+        cat <<EOF
+NAME
+  $__prompt__name - interactive prompt with default value and placeholder
+SYNOPSIS
+  . $__prompt__name ${s}variable${r} [${s}prompt${r}] [${s}default${r}] [${s}placeholder${r}]
+  . $__prompt__name -h
+DESCRIPTION
+  Prompts the user for input with an optional gray placeholder that
+  disappears on the first keypress. Stores the result (or default)
+  in the named ${s}variable${r}. Must be sourced (not executed) because
+  prompt sets a variable in your shell; an executed script runs in a
+  subprocess that dies immediately, losing the assignment.
+  Any "%DEFAULT%" in ${s}placeholder${r} is replaced with ${s}default${r}.
+  When stdin is not a terminal (e.g. piped input), the placeholder
+  rendering is skipped and a plain line read is performed; defaults
+  still apply.
+OPTIONS
+  ${s}variable${r}     Shell variable name to store the result in
+  ${s}prompt${r}       Text to display before input (e.g. "Name: ")
+  ${s}default${r}      Value used when the user presses Enter without typing
+  ${s}placeholder${r}  Gray hint text (defaults to ${s}default${r} if omitted)
+  -h, --help     Show this help message
+EXIT STATUS
+  0  Success
+  2  Usage error (script was executed rather than sourced)
+DEPENDENCIES
+  stty
+EOF
     }
 
     # __prompt__saved_stty is captured later, after we confirm we're on a TTY

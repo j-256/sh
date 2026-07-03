@@ -24,51 +24,53 @@ _pwa_prereqs() (
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
-        echo "NAME"
-        echo "  $SCRIPT_NAME - check or install PWA development prerequisites"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME [${s}options${r}]"
-        echo "  $SCRIPT_NAME -h"
-        echo "DESCRIPTION"
-        echo "  Checks or installs the prerequisites for Salesforce PWA Kit"
-        echo "  development on macOS:"
-        echo "    1. Xcode Command Line Tools (required by nvm's installer)"
-        echo "    2. nvm (Node Version Manager)"
-        echo "    3. Latest LTS Node.js (via \`nvm install --lts\`)"
-        echo ""
-        echo "  Default (no flags): check-only mode. Reports [ok] or [missing]"
-        echo "  for each component and exits 0 if all are present, 1 otherwise."
-        echo ""
-        echo "  With --install: actually installs any missing components."
-        echo "  Skips anything already present. The Xcode CLT install is a"
-        echo "  GUI flow (Apple's dialog); when missing, this script triggers"
-        echo "  the installer and exits so you can re-run once CLT is in place."
-        echo ""
-        echo "  Shell startup wiring: nvm only works in new terminals after its"
-        echo "  setup lines are added to a shell startup file, and nvm's own"
-        echo "  installer only edits a file that already exists -- so on a fresh"
-        echo "  Mac nvm often vanishes when the terminal is closed. This script"
-        echo "  writes the setup lines itself, idempotently, creating the startup"
-        echo "  file if needed. Use --shell to choose which shell(s) to wire up,"
-        echo "  or --shell none to touch no files (it prints the lines instead,"
-        echo "  for those who manage their own dotfiles)."
-        echo "OPTIONS"
-        echo "  -i, --install      Install missing components (default is check-only)"
-        echo "  -s, --shell ${s}which${r}   Shell startup file(s) to wire up:"
-        echo "                     auto (default), bash, zsh, both, or none"
-        echo "  -h, --help         Show this help message"
-        echo "ENVIRONMENT"
-        echo "  SHELL  Consulted by --shell auto to pick the target startup file"
-        echo "EXIT STATUS"
-        echo "  0  All prerequisites present (check mode) or installed (install mode)"
-        echo "  1  Missing prerequisites (check mode) or installation failed (install mode)"
-        echo "  2  Usage / argument error"
-        echo "DEPENDENCIES"
-        echo "  uname"
-        echo "  xcode-select (macOS; for CLT detection and install)"
-        echo "  curl (required only for --install)"
-        echo "CAVEATS"
-        echo "  macOS only."
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - check or install PWA development prerequisites
+SYNOPSIS
+  $SCRIPT_NAME [${s}options${r}]
+  $SCRIPT_NAME -h
+DESCRIPTION
+  Checks or installs the prerequisites for Salesforce PWA Kit
+  development on macOS:
+    1. Xcode Command Line Tools (required by nvm's installer)
+    2. nvm (Node Version Manager)
+    3. Latest LTS Node.js (via \`nvm install --lts\`)
+
+  Default (no flags): check-only mode. Reports [ok] or [missing]
+  for each component and exits 0 if all are present, 1 otherwise.
+
+  With --install: actually installs any missing components.
+  Skips anything already present. The Xcode CLT install is a
+  GUI flow (Apple's dialog); when missing, this script triggers
+  the installer and exits so you can re-run once CLT is in place.
+
+  Shell startup wiring: nvm only works in new terminals after its
+  setup lines are added to a shell startup file, and nvm's own
+  installer only edits a file that already exists -- so on a fresh
+  Mac nvm often vanishes when the terminal is closed. This script
+  writes the setup lines itself, idempotently, creating the startup
+  file if needed. Use --shell to choose which shell(s) to wire up,
+  or --shell none to touch no files (it prints the lines instead,
+  for those who manage their own dotfiles).
+OPTIONS
+  -i, --install      Install missing components (default is check-only)
+  -s, --shell ${s}which${r}   Shell startup file(s) to wire up:
+                     auto (default), bash, zsh, both, or none
+  -h, --help         Show this help message
+ENVIRONMENT
+  SHELL  Consulted by --shell auto to pick the target startup file
+EXIT STATUS
+  0  All prerequisites present (check mode) or installed (install mode)
+  1  Missing prerequisites (check mode) or installation failed (install mode)
+  2  Usage / argument error
+DEPENDENCIES
+  uname
+  xcode-select (macOS; for CLT detection and install)
+  curl (required only for --install)
+CAVEATS
+  macOS only.
+EOF
     }
 
     _expand_short_opts() {

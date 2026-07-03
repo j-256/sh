@@ -22,25 +22,27 @@ _cf_ips_subnets() (
         # $s/$r underline the -h placeholder in the SYNOPSIS line below
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
-        echo "NAME"
-        echo "  $SCRIPT_NAME - expand Cloudflare IPv4 ranges into /16 and /24 subnets"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME [${s}-h${r}]"
-        echo "DESCRIPTION"
-        echo "  Fetches Cloudflare's published IPv4 CIDR ranges and expands each"
-        echo "  into /16 or /24 subnets (whichever is closest without exceeding"
-        echo "  the original range). Useful for allowlisting in systems that"
-        echo "  only accept /16 or /24 prefixes."
-        echo "  Input ranges larger than /24 are rejected."
-        echo "OPTIONS"
-        echo "  -h, --help   Show this help message"
-        echo "EXIT STATUS"
-        echo "  0  Success"
-        echo "  1  Runtime failure (fetch returned nothing; range exceeds /24)"
-        echo "  3  Dependency error (curl or ipcalc missing)"
-        echo "DEPENDENCIES"
-        echo "  curl"
-        echo "  ipcalc - https://github.com/kjokjo/ipcalc"
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - expand Cloudflare IPv4 ranges into /16 and /24 subnets
+SYNOPSIS
+  $SCRIPT_NAME [${s}-h${r}]
+DESCRIPTION
+  Fetches Cloudflare's published IPv4 CIDR ranges and expands each
+  into /16 or /24 subnets (whichever is closest without exceeding
+  the original range). Useful for allowlisting in systems that
+  only accept /16 or /24 prefixes.
+  Input ranges larger than /24 are rejected.
+OPTIONS
+  -h, --help   Show this help message
+EXIT STATUS
+  0  Success
+  1  Runtime failure (fetch returned nothing; range exceeds /24)
+  3  Dependency error (curl or ipcalc missing)
+DEPENDENCIES
+  curl
+  ipcalc - https://github.com/kjokjo/ipcalc
+EOF
     }
 
     case "$1" in
