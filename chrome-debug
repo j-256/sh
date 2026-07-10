@@ -1,0 +1,553 @@
+#!/bin/bash
+# chrome-debug - Launch a Chromium-family browser in remote-debugging mode for MCP attach
+#
+# Usage:
+#   chrome-debug [-p port] [-d dir] [-nfv] [--no-extensions] <browser-location> [-- extra-chrome-args]
+#
+# Options:
+#   -p, --port PORT          Debug port (default: lowest free port in the .mcp.json pool)
+#   -d, --user-data-dir DIR  Chrome profile dir (default: /tmp/chrome-debug-<port>)
+#   -n, --dry-run            Resolve and print, but do not launch
+#   -f, --fresh              Wipe the port's profile dir before launching
+#   --no-extensions          Launch with extensions disabled (--disable-extensions)
+#   -v, --verbose            Verbose resolution output
+#   -h, --help               Show help message
+
+_chrome_debug() (
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="chrome-debug" ;; esac
+
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+    _warn()  { echo "[WRN][$SCRIPT_NAME] $*" >&2; }
+    _info()  { echo "[INF][$SCRIPT_NAME] $*" >&2; }
+
+    _show_help() {
+        local s; [ -t 1 ] && s=$'\033[4m'
+        local r; [ -t 1 ] && r=$'\033[24m'
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - launch a Chromium-family browser in remote-debugging mode for MCP attach
+SYNOPSIS
+  $SCRIPT_NAME [-p ${s}port${r}] [-d ${s}dir${r}] [-nfv] [--no-extensions] <${s}browser-location${r}> [-- ${s}extra-chrome-args${r}]
+  $SCRIPT_NAME -h
+DESCRIPTION
+  Launches a Chromium-family browser (Chrome, Edge, Brave, Chromium, ...)
+  with remote debugging enabled, so an MCP server (e.g. chrome-devtools-mcp)
+  can attach to it over the DevTools protocol.
+
+  ${s}browser-location${r} identifies the browser to launch -- a path to a
+  .app bundle, a raw executable, or a directory to search for the newest
+  bundle inside (e.g. a freshly-downloaded Chrome for Testing).
+
+  Without -p, the debug port is chosen from the pool of chrome-devtools
+  MCP server entries configured in .mcp.json, picking the lowest port not
+  already in use. .mcp.json is discovered by walking up from the current
+  directory to \$HOME (nearest first, unioned), mirroring how an MCP client
+  finds a project-scoped config; \$CHROME_DEBUG_MCP_JSON overrides that with
+  a single explicit file.
+
+  Without -d, the Chrome profile directory defaults to a fresh
+  /tmp/chrome-debug-<port> so the launched instance doesn't collide with
+  an already-running, non-debug browser profile.
+
+  Account sync is always disabled (--disable-sync) so a debug session never
+  pulls in synced bookmarks, history, passwords, or extensions. On an
+  MDM-managed browser the account may still be force-signed-in, but sync-down
+  is suppressed; use Chrome for Testing for a fully account-free session.
+
+  If the chosen port is already serving a debug browser, $SCRIPT_NAME attaches
+  to it -- it prints the linkage and exits rather than launching a second
+  instance on the same profile (which Chrome would refuse). Use -f/--fresh to
+  wipe the port's profile directory first for a clean-slate session.
+
+  Use -- to pass additional arguments through to the browser executable
+  unchanged.
+OPTIONS
+  -p, --port ${s}port${r}            Debug port (default: lowest free port in the MCP pool)
+  -d, --user-data-dir ${s}dir${r}     Chrome profile dir (default: /tmp/chrome-debug-<port>)
+  -n, --dry-run             Resolve and print, but do not launch
+  -f, --fresh               Wipe the port's profile dir before launching (clean session)
+  --no-extensions           Launch with extensions disabled (passes --disable-extensions)
+  -v, --verbose             Verbose resolution output
+  -h, --help                Show this help message
+ENVIRONMENT
+  CHROME_DEBUG_MCP_JSON  Path to a single .mcp.json for port-pool discovery,
+                            overriding the default cwd-to-\$HOME walk-up
+DEPENDENCIES
+  jq        Parse .mcp.json to discover the chrome-devtools MCP port pool
+  curl      Verify the remote-debugging port is responding (required only for launching, not --dry-run)
+  nc        Check whether a candidate port is already in use
+  defaults  Resolve .app bundle metadata on macOS
+EXIT STATUS
+  0  Success (launched, or dry-run resolved and printed)
+  1  Runtime failure (resolution failed, port busy but not serving, debug endpoint never came up)
+  2  Usage error (missing browser-location, unknown flag, bad flag value)
+  3  Dependency error (required tool not installed)
+EXAMPLES
+  $SCRIPT_NAME "/Applications/Google Chrome.app"
+  $SCRIPT_NAME -p 9222 "/Applications/Google Chrome.app"
+  $SCRIPT_NAME -n -v "/Applications/Google Chrome.app"
+  $SCRIPT_NAME "/Applications/Google Chrome.app" -- --incognito
+EOF
+    }
+
+    # Resolve a browser location (.app bundle, raw executable, or directory) to an
+    # executable path. Prints the path on success (rc 0); prints nothing on failure (rc 1)
+    _resolve_browser() {
+        local loc="$1"
+
+        # Absolutize: `defaults read` rejects relative bundle paths, and callers may
+        # pass a path relative to their CWD. A missing path stays as-is so the
+        # not-found error below still fires
+        if [ -d "$loc" ]; then
+            loc="$(cd "$loc" 2>/dev/null && pwd)"
+        elif [ -e "$loc" ]; then
+            local loc_dir
+            loc_dir="$(cd "$(dirname "$loc")" 2>/dev/null && pwd)"
+            [ -n "$loc_dir" ] && loc="$loc_dir/$(basename "$loc")"
+        fi
+
+        # .app bundle: read CFBundleExecutable, join with Contents/MacOS
+        _resolve_app() {
+            local app="$1"
+            local exe
+            exe="$(defaults read "$app/Contents/Info" CFBundleExecutable 2>/dev/null)"
+            if [ -z "$exe" ] || [ ! -x "$app/Contents/MacOS/$exe" ]; then
+                _error "Failed to resolve executable inside '$app'"
+                return 1
+            fi
+            printf '%s\n' "$app/Contents/MacOS/$exe"
+        }
+
+        case "$loc" in
+            *.app)
+                [ -d "$loc" ] || { _error "Chrome app not found at '$loc'"; return 1; }
+                _resolve_app "$loc"; return $? ;;
+        esac
+
+        if [ -f "$loc" ] && [ -x "$loc" ]; then
+            printf '%s\n' "$loc"
+            return 0
+        fi
+
+        if [ -d "$loc" ]; then
+            # Find all .app bundles under the dir; pick the newest by version-sorted path.
+            # `-prune` stops `find` from descending into a matched bundle, so nested
+            # helper apps (Contents/Frameworks/.../Helpers/*.app) aren't candidates.
+            # `sort -t. -k1,1 ... ` is unreliable across mixed segments, so sort the whole
+            # path with `sort -V` (version sort) and take the last (highest)
+            local chosen
+            chosen="$(find "$loc" -type d -name '*.app' -prune 2>/dev/null | sort -V | tail -n 1)"
+            if [ -z "$chosen" ]; then
+                _error "no .app bundle found under '$loc'"
+                return 1
+            fi
+            [ -n "$verbose" ] && _info "resolved bundle: $chosen"
+            _resolve_app "$chosen"; return $?
+        fi
+
+        _error "Browser location not found: '$loc'"
+        return 1
+    }
+
+    _expand_short_opts() {
+        # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
+        # $2..$N = "$@"
+        # Populates _EXPANDED; caller does: set -- "${_EXPANDED[@]}"; unset _EXPANDED
+        local value_opts="$1"; shift
+        _EXPANDED=()
+        local passthru=""
+        local arg
+        local rest
+        local c
+        for arg in "$@"; do
+            if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
+            case "$arg" in
+                --)          passthru=1; _EXPANDED+=("$arg") ;;
+                --*|-|"")    _EXPANDED+=("$arg") ;;
+                -[a-zA-Z]?*)
+                    rest="${arg#-}"
+                    while [ -n "$rest" ]; do
+                        c="${rest%"${rest#?}"}"; rest="${rest#?}"
+                        _EXPANDED+=("-$c")
+                        case "$value_opts" in *"$c"*)
+                            [ -n "$rest" ] && _EXPANDED+=("$rest")
+                            rest="" ;;
+                        esac
+                    done ;;
+                *)           _EXPANDED+=("$arg") ;;
+            esac
+        done
+    }
+
+    # Print the .mcp.json file(s) to consult, closest first. With
+    # CHROME_DEBUG_MCP_JSON set, that single file is used verbatim. Otherwise mirror
+    # how the MCP client discovers a project-scoped .mcp.json: walk up from $PWD to
+    # $HOME (inclusive), emitting each .mcp.json found, nearest first. If none are
+    # found (e.g. $PWD is outside $HOME), fall back to $HOME/.mcp.json
+    _mcp_json_paths() {
+        if [ -n "$CHROME_DEBUG_MCP_JSON" ]; then
+            printf '%s\n' "$CHROME_DEBUG_MCP_JSON"
+            return 0
+        fi
+        # Normalize the ceiling: strip any trailing slash so the $dir compare below
+        # can't be defeated by HOME=/foo/ (which would never equal a slashless $dir)
+        local ceiling="${HOME%/}"
+        [ -n "$ceiling" ] || ceiling="/"
+        local found=""
+        local dir="$PWD"
+        while :; do
+            if [ -f "$dir/.mcp.json" ]; then
+                printf '%s\n' "$dir/.mcp.json"
+                found=1
+            fi
+            [ "$dir" = "$ceiling" ] && break
+            [ "$dir" = "/" ] && break
+            dir="$(dirname "$dir")"
+        done
+        # Fall back to the home file when the walk (which stops at $HOME) found nothing
+        # because $PWD is outside the $HOME subtree
+        if [ -z "$found" ] && [ -f "$HOME/.mcp.json" ]; then
+            printf '%s\n' "$HOME/.mcp.json"
+        fi
+    }
+
+    # Render the discovered .mcp.json path(s) for error messages: comma-joined,
+    # or a "(searched ...)" note naming the walk range when nothing was found
+    _mcp_json_display() {
+        local paths
+        paths="$(_mcp_json_paths | paste -sd, -)"
+        if [ -n "$paths" ]; then
+            printf '%s' "$paths"
+        else
+            printf '(searched %s up to %s)' "$PWD" "$HOME"
+        fi
+    }
+
+    # Extract "<port> <name>" for every chrome-devtools-mcp server in a single
+    # .mcp.json whose args carry a 127.0.0.1:<port> attach target
+    _parse_pool_file() {
+        jq -r '
+            .mcpServers | to_entries[]
+            | select([.value.args[]? // empty] | any(test("chrome-devtools-mcp")))
+            | .key as $name
+            | ([.value.args[]? | capture("127\\.0\\.0\\.1:(?<p>[0-9]+)") | .p] | .[0]) as $port
+            | select($port != null)
+            | "\($port) \($name)"
+        ' "$1" 2>/dev/null
+    }
+
+    # Print "<port> <name>" for every chrome-devtools-mcp server across all
+    # discovered .mcp.json files (see _mcp_json_paths), unioned and deduped by port
+    # keeping the closest file's entry (files are emitted nearest-first). rc 1 (no
+    # output) if nothing is found
+    _parse_pool() {
+        local seen_ports=" "
+        local out=""
+        local f
+        local line
+        local port
+        while IFS= read -r f; do
+            [ -f "$f" ] || continue
+            while IFS= read -r line; do
+                [ -n "$line" ] || continue
+                port="${line%% *}"
+                case "$seen_ports" in *" $port "*) continue ;; esac
+                seen_ports="$seen_ports$port "
+                out="$out$line
+"
+            done <<INNER
+$(_parse_pool_file "$f")
+INNER
+        done <<OUTER
+$(_mcp_json_paths)
+OUTER
+        [ -n "$out" ] || return 1
+        printf '%s' "$out"
+    }
+
+    # rc 0 = free (nothing listening), rc 1 = busy. -G1 caps connect time at 1s
+    _port_free() {
+        ! nc -z -G1 127.0.0.1 "$1" >/dev/null 2>&1
+    }
+
+    # rc 0 if a DevTools endpoint is already serving on the port (/json/version
+    # returns a body naming the Browser), rc 1 otherwise. Used to make launch
+    # idempotent: a port already serving is the intended end-state, so we attach
+    # rather than trying to start a second browser on the same profile (which
+    # Chrome's process-singleton would abort). curl is guarded before this runs
+    _port_serving_devtools() {
+        local body
+        body="$(curl -s --max-time 2 "http://127.0.0.1:$1/json/version" 2>/dev/null)"
+        case "$body" in
+            *'"Browser"'*) return 0 ;;
+        esac
+        return 1
+    }
+
+    # Sets `port` and `server_name`. Uses explicit `port` if set, else picks lowest
+    # free pool port. Emits the off-pool warning. Returns 1 on all-busy / explicit-busy
+    _select_port() {
+        local pool
+        pool="$(_parse_pool)"   # rc ignored: off-pool explicit port must work even if pool empty
+
+        if [ -n "$port" ]; then
+            if ! _port_free "$port"; then
+                # Port busy. If a DevTools endpoint is already serving it, that IS
+                # the intended end-state (one debug browser per port) -- attach to
+                # it rather than erroring or launching a second instance. Only probe
+                # when we can (curl present) and when actually launching; dry-run and
+                # curl-less runs fall through to the busy error
+                if [ -z "$dry_run" ] && command -v curl >/dev/null 2>&1 && _port_serving_devtools "$port"; then
+                    already_serving=1
+                else
+                    _error "port :$port is already in use"
+                    return 1
+                fi
+            fi
+            server_name="$(printf '%s\n' "$pool" | awk -v p="$port" '$1==p {print $2; exit}')"
+            if [ -z "$server_name" ]; then
+                _warn "no chrome-devtools entry for :$port - chrome-devtools-mcp can't attach; fine for Playwright / chrome://inspect / other CDP tools"
+            fi
+            return 0
+        fi
+
+        if [ -z "$pool" ]; then
+            _error "no chrome-devtools entries in $(_mcp_json_display); add one or pass -p"
+            return 1
+        fi
+        local candidates
+        candidates="$(printf '%s\n' "$pool" | sort -n)"
+        local p
+        local n
+        while read -r p n; do
+            [ -n "$p" ] || continue
+            if _port_free "$p"; then
+                port="$p"
+                server_name="$n"
+                return 0
+            fi
+        done <<EOF
+$candidates
+EOF
+        _error "all configured MCP ports ($(printf '%s\n' "$pool" | awk '{print $1}' | sort -n | paste -sd, -)) in use; free one or add an entry to $(_mcp_json_display)"
+        return 1
+    }
+
+    # --help must work even when dependencies are missing, so short-circuit it
+    # before the jq check below (matches ods-usage/dw-jwt/httpcode)
+    case "$1" in
+        -h|--help) _show_help; return 0 ;;
+    esac
+
+    if ! command -v jq >/dev/null 2>&1; then
+        _error "jq is required"
+        return 3
+    fi
+
+    if ! command -v nc >/dev/null 2>&1; then
+        _error "nc is required"
+        return 3
+    fi
+
+    # --- defaults and parse arguments ---
+    local port=""
+    local server_name=""
+    local already_serving=""
+    local user_data_dir=""
+    local dry_run=""
+    local verbose=""
+    local fresh=""
+    local no_extensions=""
+    local -a chrome_args=()
+    local -a positionals=()
+    local -a browser_argv=()
+
+    _expand_short_opts "pd" "$@"
+    set -- "${_EXPANDED[@]}"; unset _EXPANDED
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -h|--help) _show_help; return 0 ;;
+            -v|--verbose) verbose=1; shift ;;
+            -n|--dry-run) dry_run=1; shift ;;
+            -f|--fresh) fresh=1; shift ;;
+            --no-extensions) no_extensions=1; shift ;;
+            -p|--port)
+                [ -n "${2-}" ] || { _error "--port requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                port="$2"; shift 2 ;;
+            --port=*)
+                port="${1#*=}"
+                [ -n "$port" ] || { _error "--port requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                shift ;;
+            -d|--user-data-dir)
+                [ -n "${2-}" ] || { _error "--user-data-dir requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                user_data_dir="$2"; shift 2 ;;
+            --user-data-dir=*)
+                user_data_dir="${1#*=}"
+                [ -n "$user_data_dir" ] || { _error "--user-data-dir requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                shift ;;
+            --) shift; while [ $# -gt 0 ]; do chrome_args+=("$1"); shift; done ;;
+            --print-pool) # hidden diagnostic: dump parsed pool, sorted
+                if ! _parse_pool | sort -n | grep .; then
+                    _error "no chrome-devtools entries with a resolvable port in $(_mcp_json_display)"
+                    return 1
+                fi
+                return 0 ;;
+            -*) _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+            *)  positionals+=("$1"); shift ;;
+        esac
+    done
+
+    if [ "${#positionals[@]}" -eq 0 ]; then
+        _error "Must provide a browser location. Run \`$SCRIPT_NAME -h\` for usage"
+        return 2
+    fi
+    if [ "${#positionals[@]}" -gt 1 ]; then
+        _error "Multiple browser locations not allowed (already set to '${positionals[0]}'). Run \`$SCRIPT_NAME -h\` for usage"
+        return 2
+    fi
+    local browser_location="${positionals[0]}"
+
+    # Validate an explicit port is numeric: it flows into /tmp/chrome-debug-<port>
+    # and, with --fresh, into rm -rf, so a non-numeric value must never get through
+    if [ -n "$port" ]; then
+        case "$port" in
+            *[!0-9]*|"") _error "--port must be a port number (got '$port'). Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+        esac
+    fi
+
+    local browser_exe
+    if ! browser_exe="$(_resolve_browser "$browser_location")"; then
+        return 1
+    fi
+
+    if ! _select_port; then
+        return 1
+    fi
+
+    if [ -z "$user_data_dir" ]; then
+        user_data_dir="/tmp/chrome-debug-$port"
+    fi
+
+    browser_argv=(
+        "--remote-debugging-port=$port"
+        "--user-data-dir=$user_data_dir"
+        "--no-first-run"
+        "--no-default-browser-check"
+        "--disable-sync"
+    )
+    # --no-extensions is a discoverable alias for the --disable-extensions
+    # passthrough: it suppresses externally-installed extensions (e.g. the
+    # machine's External Extensions manifest) so a debug profile stays bare
+    if [ -n "$no_extensions" ]; then
+        browser_argv+=("--disable-extensions")
+    fi
+    if [ "${#chrome_args[@]}" -gt 0 ]; then
+        browser_argv+=("${chrome_args[@]}")
+    fi
+
+    # Dry-run: resolve and print the launch plan without launching
+    if [ -n "$dry_run" ]; then
+        echo "browser: $browser_exe"
+        echo "port: $port"
+        echo "server: ${server_name:-(none)}"
+        echo "profile: $user_data_dir"
+        echo "args: ${browser_argv[*]}"
+        return 0
+    fi
+
+    # Prints the success confirmation: version/status line, MCP linkage (or off-pool
+    # note), and the profile dir. $1 = browser version, $2 = mode ("launched" for a
+    # freshly-started browser, "serving" for an already-running one we attached to).
+    # The first line differs by mode so the two cases are distinguishable
+    _print_attach_info() {
+        local ver="$1"
+        local mode="$2"
+        if [ "$mode" = "serving" ]; then
+            echo "$SCRIPT_NAME: $ver already serving on :$port"
+        else
+            echo "$SCRIPT_NAME: launched $ver, listening on :$port"
+        fi
+        if [ -n "$server_name" ]; then
+            echo "  → attach via MCP server '$server_name'"
+        else
+            echo "  (no chrome-devtools MCP entry for :$port; attach another CDP client)"
+        fi
+        echo "  profile: $user_data_dir"
+    }
+
+    # curl is only needed to probe the debug endpoint on launch, so check it here
+    # (not unconditionally) -- dry-run and --help must work without it
+    if ! command -v curl >/dev/null 2>&1; then
+        _error "curl is required"
+        return 3
+    fi
+
+    # Idempotent-by-port: the port is already serving a debug browser (detected in
+    # _select_port), so attach to it instead of launching a second instance on the
+    # same profile -- which Chrome's process-singleton would abort. Report and exit
+    if [ -n "$already_serving" ]; then
+        # --fresh can't apply to a live browser (its profile is in use, and a
+        # relaunch would singleton-abort), so say so rather than silently ignoring it
+        [ -n "$fresh" ] && _warn "port :$port is already serving; --fresh ignored (close the browser first to start clean)"
+        local serving_ver
+        serving_ver="$(curl -s --max-time 2 "http://127.0.0.1:$port/json/version" 2>/dev/null | jq -r '.Browser // "unknown"' 2>/dev/null)"
+        _print_attach_info "${serving_ver:-unknown}" serving
+        return 0
+    fi
+
+    # --fresh wipes the profile dir for a clean-slate session. Only on the real
+    # launch path (dry-run returned above, so this never mutates the filesystem
+    # during a dry-run). No-op-safe if the dir doesn't exist yet
+    if [ -n "$fresh" ]; then
+        rm -rf "$user_data_dir"
+    fi
+
+    # Probe budget is env-overridable so tests run fast; defaults are for real use
+    local probe_tries="${CHROME_DEBUG_PROBE_TRIES:-20}"
+    local probe_sleep="${CHROME_DEBUG_PROBE_SLEEP:-0.25}"
+
+    # Launch as a background child; capture PID. Plain `&` already detaches cleanly
+    # (verified: on our exit the browser reparents to launchd and, when headed, stays
+    # in the Dock). We keep the PID only to `wait` on the success path
+    "$browser_exe" "${browser_argv[@]}" >/dev/null 2>&1 &
+    local browser_pid=$!
+
+    # Poll /json/version until the DevTools endpoint answers or tries run out
+    local version_json=""
+    local i=0
+    while [ "$i" -lt "$probe_tries" ]; do
+        version_json="$(curl -s --max-time 2 "http://127.0.0.1:$port/json/version" 2>/dev/null)"
+        case "$version_json" in
+            *'"Browser"'*) break ;;
+            *) version_json="" ;;
+        esac
+        i=$((i + 1))
+        [ "$probe_sleep" = "0" ] || sleep "$probe_sleep"
+    done
+
+    if [ -z "$version_json" ]; then
+        _error "launched but debug endpoint never came up on :$port. If a browser is already open on this profile ($user_data_dir), Chrome won't start a second instance -- close it or use --fresh"
+        return 1
+    fi
+
+    local browser_ver
+    browser_ver="$(printf '%s' "$version_json" | jq -r '.Browser // "unknown"' 2>/dev/null)"
+
+    _print_attach_info "${browser_ver:-unknown}" launched
+
+    # Hold the foreground so this terminal tab owns the browser: Ctrl-C here kills it
+    # and nothing else. Exit status follows the browser
+    wait "$browser_pid"
+    return $?
+)
+
+_chrome_debug "$@"
+__chrome_debug_rc=$?
+unset -f _chrome_debug
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __chrome_debug_rc; return $__chrome_debug_rc"
+fi
+eval "unset __chrome_debug_rc; exit $__chrome_debug_rc"
