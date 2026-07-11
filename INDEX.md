@@ -93,7 +93,7 @@ Each row's primary link opens the doc; the `script` link opens the raw script.
 | [`find-zone-by-name`](docs/find-zone-by-name.md?html) · [script](find-zone-by-name) | Page through the SCAPI zones/info endpoint to find a CDN zone by name substring |
 | [`ods-usage`](docs/ods-usage.md?html) · [script](ods-usage) | Calculate On-Demand Sandbox credits used from an ODS API response |
 | [`gen-catalog`](docs/gen-catalog.md?html) · [script](gen-catalog) | Generate SFCC catalog XML (base products, variants, relationships) for seeding sandboxes or QA |
-| [`pwa-prereqs`](docs/pwa-prereqs.md?html) · [script](pwa-prereqs) | Check or install PWA Kit development prerequisites on macOS (Xcode CLT, Homebrew, nvm, Node LTS) |
+| [`pwa-prereqs`](docs/pwa-prereqs.md?html) · [script](pwa-prereqs) | Check or install PWA Kit development prerequisites on macOS (Xcode CLT, nvm, Node LTS) |
 | [`s`](docs/s.md?html) · [script](s) | `sfcc-ci` wrapper with shortcuts, enhanced output, and human-readable token expiration |
 
 ## Meta
