@@ -88,8 +88,8 @@ SHIM
 # Each test gets its own cache root via XDG_CACHE_HOME so cache state does not
 # leak between cases. Override run_script to inject it. PATH matches the shared
 # helper's pinned floor ($SHIM_DIR:/usr/bin:/bin): scdef needs system tools
-# (basename, mktemp, curl) but must NOT see a host-installed glow/render-md, so
-# the "renderer not on PATH -> fall back to text" branch fires deterministically
+# (basename, mktemp, curl) but must NOT see a host-installed glow, so the
+# "renderer not on PATH -> fall back to text" branch fires deterministically
 run_script() {
     env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR:/usr/bin:/bin" \
         XDG_CACHE_HOME="$TEST_DIR/cache" \
@@ -111,6 +111,7 @@ test_help_output() {
     assert_stdout_contains "help has OPTIONS" "OPTIONS"
     assert_stdout_contains "help has EXIT STATUS" "EXIT STATUS"
     assert_stdout_contains "help has DEPENDENCIES" "DEPENDENCIES"
+    assert_stdout_contains "help documents --verbose" "--verbose"
 }
 
 test_h_short_flag() {
@@ -222,24 +223,44 @@ test_direct_lookup_plaintext() {
     assert_stdout_not_contains "no leading hashes" "## Declare and assign"
 }
 
-# Forced renderer that's missing should warn and fall back to text. The pinned
-# PATH ($SHIM_DIR:/usr/bin:/bin, set in run_script above) guarantees glow is
-# absent regardless of the host, so this reliably exercises the "not on PATH"
-# branch rather than depending on the dev's installs
-test_forced_renderer_not_installed_falls_back() {
+# Explicitly setting SCDEF_RENDERER=glow when glow is absent falls back to
+# text. The pinned PATH ($SHIM_DIR:/usr/bin:/bin, set in run_script above)
+# guarantees glow is absent regardless of the host. Under the command-based
+# model glow is just another command, so this hits the generic "command not
+# found" path
+test_forced_glow_missing_falls_back() {
     SCDEF_RENDERER=glow run_script SC2155
-    assert_rc "missing renderer exits 0" 0
-    assert_stderr_contains "missing renderer warn" "glow is not on PATH"
+    assert_rc "missing glow exits 0" 0
+    assert_stderr_contains "missing glow warn" "SCDEF_RENDERER command 'glow' not found"
     # Falls back to text: heading marker should be stripped
     assert_stdout_contains "fallback content" "Declare and assign separately"
     assert_stdout_not_contains "fallback no md" "## Problematic"
 }
 
-# Bogus SCDEF_RENDERER value should warn and auto-pick
-test_unknown_renderer_value_warns_and_auto() {
-    SCDEF_RENDERER=zzz_not_a_renderer run_script SC2155
-    assert_rc "unknown renderer exits 0" 0
-    assert_stderr_contains "unknown renderer warn" "Unknown SCDEF_RENDERER 'zzz_not_a_renderer'"
+# A SCDEF_RENDERER naming a command that isn't installed warns and falls
+# back to text (rather than piping to a missing command)
+test_renderer_missing_command_falls_back() {
+    SCDEF_RENDERER=zzz_not_a_command run_script SC2155
+    assert_rc "missing cmd exits 0" 0
+    assert_stderr_contains "missing cmd warn" "SCDEF_RENDERER command 'zzz_not_a_command' not found"
+    # Falls back to built-in text (heading hashes stripped)
+    assert_stdout_not_contains "fallback text" "## Problematic"
+}
+
+# An arbitrary installed command receives the markdown on stdin. `cat` is the
+# simplest proof: the raw markdown (with ## headings and fences) passes through
+test_renderer_arbitrary_command() {
+    SCDEF_RENDERER=cat run_script SC2155
+    assert_rc "cat renderer exits 0" 0
+    assert_stdout_contains "piped markdown heading" "## Problematic"
+    assert_stdout_contains "piped markdown fence" '```sh'
+}
+
+# A multi-token command (command + args) works via sh -c
+test_renderer_command_with_args() {
+    SCDEF_RENDERER='sed s/^/PFX:/' run_script SC2155
+    assert_rc "sed renderer exits 0" 0
+    assert_stdout_contains "sed prefixed a line" "PFX:## Problematic"
 }
 
 # SCDEF_RENDERER=text forces the built-in plaintext converter
@@ -264,12 +285,58 @@ test_full_shows_complete_page() {
     assert_stdout_contains "full has rationale" "return value"
 }
 
+# -F is the short form of --full
+test_full_short_flag() {
+    run_script -F SC2155
+    assert_rc "-F exits 0" 0
+    assert_stdout_contains "-F has rationale" "return value"
+}
+
 # --raw emits markdown source verbatim (skips both extractor and renderer)
 test_raw_emits_unparsed_markdown() {
     run_script --raw SC2155
     assert_rc "raw exits 0" 0
     # Raw should preserve fenced code (the wiki uses ```sh)
     assert_stdout_contains "raw fence" '```sh'
+}
+
+# -v/--verbose emits [DBG] diagnostics on stderr; content on stdout is
+# unchanged
+test_verbose_emits_debug() {
+    run_script -v SC2155
+    assert_rc "verbose exits 0" 0
+    assert_stderr_contains "dbg fetch" "[DBG][scdef] GET "
+    assert_stderr_contains "dbg renderer" "[DBG][scdef] renderer:"
+    # Content still on stdout, brief as usual
+    assert_stdout_contains "verbose content" "Declare and assign separately"
+}
+
+test_verbose_long_flag() {
+    run_script --verbose SC2155
+    assert_rc "--verbose exits 0" 0
+    assert_stderr_contains "dbg present" "[DBG][scdef]"
+}
+
+# Without -v, no [DBG] lines appear
+test_no_verbose_no_debug() {
+    run_script SC2155
+    assert_rc "no-verbose exits 0" 0
+    assert_stderr_not_contains "no dbg" "[DBG]"
+}
+
+# Verbose reports the renderer decision -- the key diagnostic. In tests
+# stdout is not a TTY, so the built-in text renderer is chosen
+test_verbose_reports_renderer_choice() {
+    run_script -v SC2155
+    assert_stderr_contains "renderer text" "renderer: text"
+}
+
+# -v surfaces the index cache decision on --list
+test_verbose_reports_cache_decision() {
+    run_script --list  # warm the cache
+    run_script -v --list
+    assert_rc "verbose list exits 0" 0
+    assert_stderr_contains "cache fresh dbg" "index cache: fresh"
 }
 
 test_direct_lookup_raw() {

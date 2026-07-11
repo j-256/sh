@@ -43,12 +43,9 @@ SC2155: Declare and assign separately to avoid masking return values
 
 ```bash
 $ scdef -s quoting
-SC2086  Double quote to prevent globbing and word splitting.
-SC2090  Quote expansions in this `awk` snippet to prevent splitting.
-SC2098  This expansion will not see the mentioned assignment.
 SC2211  This is a glob used as a command name. Was it supposed to be in `${..}`, array, or is it missing quoting?
+SC2217  Redirecting to `echo`, a command that doesn't read stdin. Bad quoting or missing `xargs`?
 SC2248  Prefer double quoting even when variables don't contain special characters.
-...
 ```
 
 **Want the rationale and exceptions:**
@@ -83,34 +80,67 @@ $ scdef -o SC2155
 $ scdef --list | fzf
 ```
 
-## Output forms
+## How much detail -- what to reach for
 
-`scdef` has three output modes for a code lookup:
+For a code lookup, the content axis runs least to most detail:
 
-- **Brief (default)**: title + Problematic block + Correct block + URL. Extracted from the wiki markdown by walking ATX headings and capturing fenced code blocks under sections whose name starts with "Problematic" or "Correct". Fast to skim, useful for lookups when you mostly need to remember the fix.
-- **Full (`--full`)**: the whole wiki page, rendered. Includes Rationale, Exceptions, and any other sections the page provides.
-- **Raw (`--raw`)**: the markdown source verbatim, no extraction, no rendering. For piping into any renderer (`glow`, `mdcat`, `pandoc`, etc.) or further processing.
+| Invocation | Output | Fetches? |
+|---|---|---|
+| `scdef -u <code>` | URL only | No |
+| `scdef <code>` *(default, brief)* | Title + Problematic + Correct + URL | Yes |
+| `scdef --full <code>` | Whole page rendered: brief **plus** Rationale, Exceptions, notes | Yes |
+| `scdef --raw <code>` | Raw markdown source, unprocessed | Yes |
 
-Both Brief and Full pass through a renderer. Raw bypasses everything.
+Reach for `-u` when you just want the link; the bare command when brief's example is enough; `--full` when you need the *why* (rationale, exceptions); `--raw` to pipe markdown elsewhere or read the literal source.
 
-## Renderer auto-detection
+Brief and Full both pass through a renderer (see below); `--raw` bypasses extraction and rendering entirely. Brief extraction walks the markdown's ATX headings and captures fenced code under sections named "Problematic" or "Correct".
 
-When rendering markdown, `scdef` picks one of these in priority order:
+**Diagnostics** are an orthogonal axis -- `-v/--verbose` composes with any of the above, adding `[DBG]` lines on stderr (renderer choice, fetch URL + HTTP status, cache decisions) without changing stdout:
 
-1. `glow` (if on PATH)
-2. `render-md` (if on PATH)
-3. Built-in plaintext converter
+| Add | Effect |
+|---|---|
+| `-v` | `[DBG]` diagnostics to stderr; stdout content unchanged |
 
-You can force a specific choice with `SCDEF_RENDERER`:
+**Non-content modes** answer "what am I looking up", not "how much detail":
+
+| Invocation | Output |
+|---|---|
+| `scdef -o <code>` | Opens the wiki page in a browser (nothing on stdout) |
+| `scdef -l` | Full index dump (`SC####<TAB>description`) |
+| `scdef -s <pattern>` | Matching index rows; a unique match auto-fetches and applies the content axis above |
+
+`--full` and `--raw` compose with a unique `-s` match (e.g. `scdef --full -s 'globbing'` full-renders the single hit). On a multi-match search they're ignored -- you just get the row list.
+
+## Choosing a renderer
+
+By default (`SCDEF_RENDERER` unset), `scdef` auto-selects: [`glow`](https://github.com/charmbracelet/glow) if it's on PATH and stdout is a TTY, otherwise the built-in plaintext converter. `glow` is blessed only in the sense that auto-detection knows to invoke it as `glow -`; it holds no other special status.
+
+`SCDEF_RENDERER` works like `EDITOR` or `PAGER` -- set it to whatever you want the markdown piped to. Two reserved values name the built-in behaviors that have no command form:
 
 ```bash
-$ SCDEF_RENDERER=text scdef 2155       # always use the built-in plaintext converter
-$ SCDEF_RENDERER=glow scdef 2155       # require glow
-$ SCDEF_RENDERER=render-md scdef 2155  # require render-md
-$ SCDEF_RENDERER=none scdef 2155       # emit the (extracted, if brief) markdown unrendered
+$ SCDEF_RENDERER=text scdef 2155        # built-in plaintext converter (persistent)
+$ SCDEF_RENDERER=none scdef 2155        # raw markdown, unrendered (a persistent --raw)
+$ SCDEF_RENDERER=mdcat scdef 2155       # pipe markdown to mdcat
+$ SCDEF_RENDERER='bat -l md' scdef 2155 # ...or any command, with args
+$ SCDEF_RENDERER='glow -' scdef 2155    # force glow even when piped (glow decides what to do)
 ```
 
-If a forced renderer isn't installed, `scdef` warns and falls back to text. The same happens if a TTY-only renderer (glow, render-md) is selected when stdout isn't a TTY -- those tools detect a pipe/redirect and emit nothing, so `scdef` falls back to text rather than producing silent empty output.
+Any value other than `text`/`none` is treated as a command: `scdef` pipes the fetched markdown to it via `sh -c`, so commands with arguments and even pipelines work. Consequences are the caller's -- `scdef` doesn't second-guess whether your renderer needs a TTY. The one safety check: if the command's first token isn't found on PATH, `scdef` warns and falls back to text rather than piping into the void.
+
+Auto-detected `glow` keeps its TTY guard (glow emits nothing when stdout is piped, so auto-selection uses text in that case). That guard is specific to auto-detection; an explicit `SCDEF_RENDERER=glow` is just a command like any other and won't get the TTY safety net -- use `SCDEF_RENDERER=text` if you want plaintext when piping.
+
+If you're unsure which renderer was chosen, `-v` shows the decision:
+
+```bash
+$ scdef -v 2155
+[DBG][scdef] GET https://raw.githubusercontent.com/wiki/koalaman/shellcheck/SC2155.md
+[DBG][scdef] curl exit 0, HTTP 200
+[DBG][scdef] renderer: text (auto; glow not on PATH)
+SC2155: Declare and assign separately to avoid masking return values
+...
+```
+
+`-v` prints `[DBG]` lines to stderr (so they don't pollute piped stdout) covering the renderer decision, each fetch and its HTTP status, and index cache hits/refreshes.
 
 ## Code argument flexibility
 
@@ -142,12 +172,13 @@ If a refresh fails (network down, wiki HTML changed) and a cache file already ex
 | Flag | Description |
 |---|---|
 | `-r, --raw` | Raw markdown source (skip extraction and rendering) |
-| `--full` | Full wiki page (rendered) instead of brief |
+| `-F, --full` | Full wiki page (rendered) instead of brief |
 | `-u, --url` | Print the wiki URL and exit (no fetch) |
 | `-o, --open` | Open the wiki page in a browser |
 | `-s, --search <pattern>` | Search index by description (case-insensitive substring) |
 | `-l, --list` | Print the full index (`SC####<TAB>description`) |
 | `--refresh` | Force refresh of the cached index (7-day TTL) |
+| `-v, --verbose` | Print `[DBG]` diagnostics to stderr (renderer choice, fetches, cache decisions) |
 | `-h, --help` | Show help message |
 
 `--raw` and `--full` are mutually exclusive (raw is unrendered source; full is rendered output -- conflicting requests). `-u`, `-o`, `-s`, `-l` are mutually exclusive (each is a distinct mode).
@@ -156,7 +187,7 @@ If a refresh fails (network down, wiki HTML changed) and a cache file already ex
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `SCDEF_RENDERER` | Force a specific renderer: `glow`, `render-md`, `text`, or `none` | auto (priority chain) |
+| `SCDEF_RENDERER` | `text` (built-in plaintext), `none` (raw markdown), or any command to pipe markdown to (e.g. `mdcat`, `bat -l md`) | auto (glow if on PATH + TTY, else text) |
 | `XDG_CACHE_HOME` | Cache root directory | `$HOME/.cache` |
 
 The cache file lives at `$XDG_CACHE_HOME/scdef/index.tsv`.
@@ -178,8 +209,7 @@ The cache file lives at `$XDG_CACHE_HOME/scdef/index.tsv`.
 |---|---|---|
 | `curl` | Fetch wiki content | Required for any path that fetches; `-h`, `-u`, `-o`, and cached `--list`/`--search` work without it |
 | `column` | Align `--search` output | Optional; falls back to raw TSV when missing or stdout is not a TTY |
-| `glow` | Markdown rendering | Optional; preferred renderer when present |
-| `render-md` | Markdown rendering | Optional; fallback renderer when glow is not present |
+| `glow` | Markdown rendering in the terminal | Optional; used automatically on a TTY when present, else built-in text |
 | `open` (macOS) or `xdg-open` (Linux) | Open the wiki in a browser | Required only for `--open` |
 
 ### Caching

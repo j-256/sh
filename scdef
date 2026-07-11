@@ -9,17 +9,20 @@
 #
 # Options:
 #   -r, --raw       Raw markdown source, no extraction or rendering
-#       --full      Full wiki page (rendered) instead of brief
+#   -F, --full      Full wiki page (rendered) instead of brief
 #   -u, --url       Print wiki URL and exit
 #   -o, --open      Open the wiki page in a browser
 #   -s, --search    Search index by description (case-insensitive substring)
 #   -l, --list      Print the full index
 #       --refresh   Force refresh of the cached index
+#   -v, --verbose   Print [DBG] diagnostics (renderer choice, fetches, cache)
 #   -h, --help      Show help
 #
 # Environment:
-#   SCDEF_RENDERER  Force a specific renderer: glow|render-md|text|none
-#                   Default: auto (glow > render-md > built-in plaintext)
+#   SCDEF_RENDERER  Renderer for fetched markdown. Unset: auto (glow if on
+#                   PATH, else built-in plaintext). 'text': built-in
+#                   plaintext. 'none': raw markdown. Any other value is a
+#                   command the markdown is piped to (e.g. mdcat, 'bat -l md')
 #   XDG_CACHE_HOME  Cache root (default $HOME/.cache)
 
 _scdef() (
@@ -52,12 +55,13 @@ DESCRIPTION
   With --search, looks up by message; auto-fetches on a unique match.
 OPTIONS
   -r, --raw                Raw markdown (skip extraction and rendering)
-      --full               Full wiki page (rendered) instead of brief
+  -F, --full               Full wiki page (rendered) instead of brief
   -u, --url                Print the wiki URL and exit
   -o, --open               Open the wiki page in a browser
   -s, --search ${s}pattern${r}     Search index by description (substring, case-insensitive)
   -l, --list               Print the full index (SC####<TAB>description)
       --refresh            Force refresh of the cached index (7-day TTL)
+  -v, --verbose            Print [DBG] diagnostics (renderer, fetches, cache)
   -h, --help               Show this help message
 EXAMPLES
   $SCRIPT_NAME 2155                       # brief summary to stdout
@@ -66,8 +70,10 @@ EXAMPLES
   $SCRIPT_NAME -u 2086                    # print URL only
   $SCRIPT_NAME -s 'declare and assign'    # search by message
 ENVIRONMENT
-  SCDEF_RENDERER    Force renderer: glow, render-md, text, or none
-                    Default: auto (glow > render-md > built-in plaintext)
+  SCDEF_RENDERER    Renderer for fetched markdown. Unset: auto (glow if on
+                    PATH, else built-in plaintext). 'text': built-in plaintext.
+                    'none': raw markdown. Any other value is a command the
+                    markdown is piped to (e.g. mdcat, 'bat -l md')
   XDG_CACHE_HOME    Cache root (default \$HOME/.cache)
 EXIT STATUS
   0  Success
@@ -79,14 +85,14 @@ EXIT STATUS
 DEPENDENCIES
   curl
   column     (optional, aligns --search output on a TTY)
-  glow       (optional, preferred renderer)
-  render-md  (optional, fallback renderer)
+  glow       (optional, renders markdown in the terminal)
   open       (required only for --open; xdg-open on Linux)
 EOF
     }
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
     _warn()  { echo "[WRN][$SCRIPT_NAME] $*" >&2; }
     _info()  { echo "[INF][$SCRIPT_NAME] $*" >&2; }
+    _debug() { [ "$verbose" = "1" ] || return 0; echo "[DBG][$SCRIPT_NAME] $*" >&2; }
 
     _expand_short_opts() {
         local value_opts="$1"; shift
@@ -145,10 +151,12 @@ EOF
     _fetch() {
         local url="$1"
         local dest="$2"
+        _debug "GET $url"
         _FETCH_CURL_RC=0
         _FETCH_HTTP=""
         _FETCH_HTTP="$(curl -fsS -L -o "$dest" -w '%{http_code}' "$url" 2>/dev/null)"
         _FETCH_CURL_RC=$?
+        _debug "curl exit $_FETCH_CURL_RC, HTTP $_FETCH_HTTP"
         if [ "$_FETCH_CURL_RC" -ne 0 ] && [ "$_FETCH_HTTP" != "404" ]; then
             rm -f "$dest"
             return 1
@@ -216,6 +224,12 @@ EOF
             else
                 need=1
             fi
+        fi
+
+        if [ "$need" = "1" ]; then
+            _debug "index cache: refresh needed (force=$force, have_cache=$have_cache)"
+        else
+            _debug "index cache: fresh, using $CACHE_FILE"
         fi
 
         if [ "$need" = "1" ]; then
@@ -306,10 +320,13 @@ EOF
         printf '%s\n' "$CACHE_FILE"
     }
     # Brief-extract a wiki page's markdown to: title + Problematic blocks +
-    # Correct blocks + URL. Walks the page once: the first non-section ATX
-    # heading is the title; subsequent headings whose first word is
-    # "Problematic" or "Correct" begin a section whose fenced code blocks are
-    # captured. Output is markdown (so the rendering step can still apply).
+    # Correct blocks + URL. Walks the page once: the first ATX heading (any
+    # level -- pages use # or ## for the title) that is not a Problematic/
+    # Correct section becomes the title; headings whose text starts with
+    # "Problematic" or "Correct" (at any level) begin a section whose fenced
+    # code blocks are captured. Section detection keys off heading text, not
+    # level, since the wiki mixes ##/### for both titles and sections.
+    # Output is markdown (so the rendering step can still apply).
     # $1: SC code, $2: source URL
     _extract_brief() {
         local code="$1"
@@ -317,11 +334,11 @@ EOF
         awk -v code="$code" -v url="$url" '
             BEGIN { in_code=0; section=""; have_title=0 }
 
-            # ATX heading lines change section state. Only the first non-
-            # section heading becomes the title
-            /^##+[[:space:]]+/ {
+            # ATX heading lines change section state. The first heading that
+            # is not a known section becomes the title
+            /^#+[[:space:]]+/ {
                 t = $0
-                sub(/^##+[[:space:]]+/, "", t)
+                sub(/^#+[[:space:]]+/, "", t)
                 sub(/[[:space:]]+$/, "", t)
                 if (t ~ /^[Pp]roblematic/) { section = "problem"; next }
                 if (t ~ /^[Cc]orrect/)     { section = "correct"; next }
@@ -473,65 +490,59 @@ EOF
             }
         '
     }
-    # Pick a renderer per $SCDEF_RENDERER (if set) or by auto-detecting the
-    # preferred chain (glow > render-md > text). Prints the chosen renderer
-    # name on stdout: "glow", "render-md", "text", or "none" (raw markdown).
-    # Honors a TTY check: TTY-only renderers fall back to text when stdout
-    # isn't a TTY, since they would emit nothing
+    # Decide how to render the fetched markdown, from $SCDEF_RENDERER:
+    #   unset   -> auto: "glow -" on a TTY if glow is on PATH, else built-in text
+    #   text    -> built-in plaintext converter
+    #   none    -> raw markdown passthrough (a persistent --raw)
+    #   <other> -> a command the markdown is piped to via `sh -c`, so
+    #              `mdcat`, `bat -l md`, `pandoc -f md -t plain | less` all
+    #              work (EDITOR-style: consequences are the caller's). The
+    #              command's first token is checked with command -v; if it is
+    #              not found, warn and fall back to text
+    # Prints a directive for _render on stdout: "text", "none", or
+    # "cmd:<command>". Auto-selected glow is emitted as "cmd:glow -", unifying
+    # it with the arbitrary-command path
     _pick_renderer() {
         local choice="${SCDEF_RENDERER:-}"
-        if [ -n "$choice" ]; then
-            case "$choice" in
-                glow|render-md|text|none) ;;
-                *)
-                    _warn "Unknown SCDEF_RENDERER '$choice'; falling back to auto"
-                    choice=""
-                    ;;
-            esac
-        fi
-
-        # Forced choices: validate availability, fall back if missing or if
-        # stdout is not a TTY for TTY-only renderers
         case "$choice" in
-            glow|render-md)
-                if ! command -v "$choice" >/dev/null 2>&1; then
-                    _warn "$choice is not on PATH; falling back to text"
-                    choice="text"
+            "")
+                if [ -t 1 ] && command -v glow >/dev/null 2>&1; then
+                    _debug "renderer: glow (auto)"
+                    printf 'cmd:glow -'
                 elif [ ! -t 1 ]; then
-                    _warn "$choice produces no output when stdout is not a TTY; falling back to text"
-                    choice="text"
+                    _debug "renderer: text (auto; stdout not a TTY)"
+                    printf 'text'
+                else
+                    _debug "renderer: text (auto; glow not on PATH)"
+                    printf 'text'
                 fi
                 ;;
             text|none)
+                _debug "renderer: $choice (SCDEF_RENDERER)"
+                printf '%s' "$choice"
                 ;;
-            "")
-                # Auto: pick the best TTY-capable renderer; on non-TTY, text
-                if [ -t 1 ]; then
-                    if command -v glow >/dev/null 2>&1; then
-                        choice="glow"
-                    elif command -v render-md >/dev/null 2>&1; then
-                        choice="render-md"
-                    else
-                        choice="text"
-                    fi
+            *)
+                local tok="${choice%% *}"
+                if command -v "$tok" >/dev/null 2>&1; then
+                    _debug "renderer: $choice (SCDEF_RENDERER)"
+                    printf 'cmd:%s' "$choice"
                 else
-                    choice="text"
+                    _warn "SCDEF_RENDERER command '$tok' not found; falling back to text"
+                    _debug "renderer: text (fallback)"
+                    printf 'text'
                 fi
                 ;;
         esac
-        printf '%s' "$choice"
     }
 
-    # Render markdown on stdin using the picked renderer. Caller decides
-    # which renderer via _pick_renderer; this just executes
+    # Render markdown on stdin per the directive from _pick_renderer
     _render() {
         local r="$1"
         case "$r" in
-            glow)      glow - ;;
-            render-md) render-md ;;
-            text)      _to_text ;;
-            none)      cat ;;
-            *)         _to_text ;;  # defensive default
+            text)   _to_text ;;
+            none)   cat ;;
+            cmd:*)  sh -c "${r#cmd:}" ;;
+            *)      _to_text ;;  # defensive default
         esac
     }
     # Fetch the wiki page for a canonical SC#### code, then either:
@@ -607,15 +618,17 @@ EOF
     local search_pattern=""
     local list=0
     local refresh=0
+    local verbose=0
     local args=()
     while [ $# -gt 0 ]; do
         case "$1" in
             -h|--help)    _show_help; return 0 ;;
             -r|--raw)     raw=1; shift ;;
-            --full)       full=1; shift ;;
+            -F|--full)    full=1; shift ;;
             -u|--url)     url_only=1; shift ;;
             -o|--open)    open_in_browser=1; shift ;;
             -l|--list)    list=1; shift ;;
+            -v|--verbose) verbose=1; shift ;;
             --refresh)    refresh=1; shift ;;
 
             -s|--search)
