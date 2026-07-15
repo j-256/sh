@@ -60,6 +60,32 @@ EXIT STATUS
 EOF
     }
 
+    _do_append() {
+        local name="${1:-}"
+        local event="${2:-}"
+        if [ -z "$name" ] || [ -z "$event" ]; then
+            _error "append requires <name> and <event>. Run \`$SCRIPT_NAME -h\` for usage"
+            return 2
+        fi
+        case "$event" in
+            trigger|noop|change|error) ;;
+            *) _error "Invalid event '$event' (valid: trigger|noop|change|error). Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+        esac
+        local detail
+        if [ "${3:-}" = "--detail-stdin" ]; then
+            detail="$(cat)"
+        else
+            detail="${3:-}"
+        fi
+        local ts; ts="$(TZ=Etc/UTC date '+%Y-%m-%dT%H:%M:%SZ')"
+        mkdir -p "$LOG_DIR" || { _error "cannot create $LOG_DIR"; return 1; }
+        # --rawfile reads raw detail (any bytes) into a JSON string; --arg for the rest
+        jq -cn --arg ts "$ts" --arg daemon "$name" --arg event "$event" \
+            --rawfile detail <(printf '%s' "$detail") \
+            '{ts:$ts, daemon:$daemon, event:$event, detail:($detail)}' \
+            >> "$LOG_DIR/$name.log" || { _error "failed to write log record"; return 1; }
+    }
+
     if ! command -v jq >/dev/null 2>&1; then _error "jq is required"; return 3; fi
 
     local subcmd="${1:-}"
@@ -67,7 +93,7 @@ EOF
     case "$subcmd" in
         -h|--help) _show_help; return 0 ;;
         "") _error "Must provide a subcommand. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
-        append)  _error "append not yet implemented"; return 1 ;;
+        append)  _do_append "$@"; return $? ;;
         status)  _error "status not yet implemented"; return 1 ;;
         check)   _error "check not yet implemented"; return 1 ;;
         log)     _error "log not yet implemented"; return 1 ;;

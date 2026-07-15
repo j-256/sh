@@ -35,4 +35,54 @@ test_no_subcommand() {
     assert_rc "no subcommand exits 2" 2
 }
 
+test_append_writes_valid_json() {
+    run_script append reconcile trigger "watchpath fired"
+    assert_rc "append exits 0" 0
+    assert_file_exists "log created" "$TEST_DIR/log/reconcile.log"
+    local line; line="$(cat "$TEST_DIR/log/reconcile.log")"
+    assert_eq "one record" "1" "$(printf '%s\n' "$line" | grep -c .)"
+    assert_eq "daemon field" "reconcile" "$(printf '%s' "$line" | jq -r .daemon)"
+    assert_eq "event field" "trigger" "$(printf '%s' "$line" | jq -r .event)"
+    assert_eq "detail field" "watchpath fired" "$(printf '%s' "$line" | jq -r .detail)"
+    assert_contains "ts is ISO-UTC" "$(printf '%s' "$line" | jq -r .ts)" "T"
+}
+
+test_append_multiline_detail_roundtrips() {
+    run_script append reconcile error "$(printf 'line1\nline2\twith tab')"
+    assert_rc "append exits 0" 0
+    local got; got="$(jq -r .detail "$TEST_DIR/log/reconcile.log")"
+    assert_eq "newline+tab preserved" "$(printf 'line1\nline2\twith tab')" "$got"
+    # The physical file is still ONE line (newline is inside the JSON string)
+    assert_eq "still one physical line" "1" "$(grep -c . "$TEST_DIR/log/reconcile.log")"
+}
+
+test_append_appends_not_truncates() {
+    run_script append reconcile trigger "first"
+    run_script append reconcile noop "second"
+    assert_eq "two records" "2" "$(grep -c . "$TEST_DIR/log/reconcile.log")"
+}
+
+test_append_empty_detail_ok() {
+    run_script append reconcile trigger
+    assert_rc "append without detail exits 0" 0
+    assert_eq "detail empty string" "" "$(jq -r .detail "$TEST_DIR/log/reconcile.log")"
+}
+
+test_append_bad_event_rejected() {
+    run_script append reconcile bogus "x"
+    assert_rc "invalid event exits 2" 2
+    assert_stderr_contains "names valid events" "trigger"
+}
+
+test_append_missing_args() {
+    run_script append reconcile
+    assert_rc "missing event exits 2" 2
+}
+
+test_append_detail_stdin() {
+    printf 'big\nmultiline\npayload' | run_script append reconcile error --detail-stdin
+    assert_rc "stdin detail exits 0" 0
+    assert_eq "stdin detail captured" "$(printf 'big\nmultiline\npayload')" "$(jq -r .detail "$TEST_DIR/log/reconcile.log")"
+}
+
 run_tests "$@"
