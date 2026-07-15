@@ -148,4 +148,45 @@ test_query_event_equals_form() {
     assert_eq "equals-form matches the error record" "boom" "$(get_stdout | jq -r .detail)"
 }
 
+test_log_renders_human() {
+    seed_log reconcile '{"ts":"2026-07-15T10:00:00Z","daemon":"reconcile","event":"change","detail":"3 deltas"}'
+    run_script log reconcile
+    assert_rc "log exits 0" 0
+    assert_stdout_contains "shows ts" "2026-07-15T10:00:00Z"
+    assert_stdout_contains "shows event upper" "CHANGE"
+    assert_stdout_contains "shows detail" "3 deltas"
+}
+
+test_log_multiline_detail_indented() {
+    seed_log reconcile "$(jq -cn '{ts:"2026-07-15T10:00:00Z",daemon:"reconcile",event:"error",detail:"line1\nline2"}')"
+    run_script log reconcile
+    assert_stdout_contains "first detail line" "line1"
+    assert_stdout_contains "second detail line indented" "  line2"
+}
+
+test_log_all_merge_sorts() {
+    seed_log reconcile '{"ts":"2026-07-15T11:00:00Z","daemon":"reconcile","event":"noop","detail":"later"}'
+    seed_log screenshot-rename '{"ts":"2026-07-15T10:00:00Z","daemon":"screenshot-rename","event":"change","detail":"earlier"}'
+    run_script log --all
+    # "earlier" (10:00) must render before "later" (11:00)
+    local out; out="$(get_stdout)"
+    local first; first="$(printf '%s\n' "$out" | grep -n 'earlier' | head -1 | cut -d: -f1)"
+    local second; second="$(printf '%s\n' "$out" | grep -n 'later' | head -1 | cut -d: -f1)"
+    assert_eq "earlier before later" "1" "$([ "$first" -lt "$second" ] && echo 1 || echo 0)"
+}
+
+test_log_absent_is_empty() {
+    run_script log reconcile
+    assert_rc "absent log exits 0" 0
+    assert_eq "no output" "" "$(get_stdout)"
+}
+
+test_log_empty_detail_renders_blank() {
+    seed_log reconcile '{"ts":"2026-07-15T10:00:00Z","daemon":"reconcile","event":"noop","detail":""}'
+    run_script log reconcile
+    assert_rc "log exits 0" 0
+    assert_stdout_not_contains "no literal null" "null"
+    assert_stdout_contains "shows event upper" "NOOP"
+}
+
 run_tests "$@"

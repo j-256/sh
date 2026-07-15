@@ -145,6 +145,39 @@ EOF
         done | { [ "$jqexpr" = "." ] && cat || jq "$jqexpr"; }
     }
 
+    # Render JSONL from stdin: one header line per record + indented extra detail lines
+    _render_records() {
+        jq -r '
+            "\(.ts) \(.daemon) \(.event|ascii_upcase) \(.detail | split("\n")[0] // "")",
+            (.detail | split("\n")[1:][] | "  " + .)
+        '
+    }
+
+    _do_log() {
+        local follow=""
+        local target=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                -f|--follow) follow=1; shift ;;
+                --all) target="--all"; shift ;;
+                -*) _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+                *) target="$1"; shift ;;
+            esac
+        done
+        local files; files="$(_log_files_for "$target")"
+        [ -z "$files" ] && return 0
+        if [ -n "$follow" ]; then
+            # Follow: tail -f the file(s); render each incoming JSONL line
+            # -q suppresses the "==> path <==" banners tail prints with 2+ files, which are not JSON and would abort the jq parse
+            # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- $files is a newline list of paths we intentionally word-split into tail's args
+            tail -f -q $files | _render_records
+        else
+            # Merge-sort all records by ts (line-sortable ISO-UTC), then render
+            # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- $files is a newline list of paths we intentionally word-split into cat's args
+            cat $files | jq -c . | sort | _render_records
+        fi
+    }
+
     if ! command -v jq >/dev/null 2>&1; then _error "jq is required"; return 3; fi
 
     local subcmd="${1:-}"
@@ -155,7 +188,7 @@ EOF
         append)  _do_append "$@"; return $? ;;
         status)  _error "status not yet implemented"; return 1 ;;
         check)   _error "check not yet implemented"; return 1 ;;
-        log)     _error "log not yet implemented"; return 1 ;;
+        log)     _do_log "$@"; return $? ;;
         query)   _do_query "$@"; return $? ;;
         *) _error "Unknown argument '$subcmd'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
     esac
