@@ -189,4 +189,58 @@ test_log_empty_detail_renders_blank() {
     assert_stdout_contains "shows event upper" "NOOP"
 }
 
+write_shims() {
+    # launchctl shim: `print <domain>/<label>` -- loaded if $TEST_DIR/loaded lists the label,
+    # emitting a fake block with a "last exit code" line taken from $TEST_DIR/exit_<label> (default 0)
+    cat > "$SHIM_DIR/launchctl" <<'SHIM'
+#!/bin/bash
+if [ "$1" = "print" ]; then
+    label="${2##*/}"
+    if [ -f "$TEST_DIR/loaded" ] && grep -qx "$label" "$TEST_DIR/loaded"; then
+        ec=0; [ -f "$TEST_DIR/exit_$label" ] && ec="$(cat "$TEST_DIR/exit_$label")"
+        printf '\tlast exit code = %s\n' "$ec"
+        exit 0
+    fi
+    exit 1
+fi
+exit 0
+SHIM
+    chmod +x "$SHIM_DIR/launchctl"
+}
+
+# Registry with one daemon whose label is "usr.test.one"
+seed_registry() {
+    mkdir -p "$(dirname "$TEST_DIR/daemons.tsv")"
+    cat > "$TEST_DIR/daemons.tsv" <<TSV
+name	domain	label	script
+one	gui/\$UID/	usr.test.one	$TEST_DIR/one.sh
+TSV
+    printf '#!/bin/bash\n' > "$TEST_DIR/one.sh"; chmod +x "$TEST_DIR/one.sh"
+    printf 'usr.test.one\n' > "$TEST_DIR/loaded"
+}
+
+test_status_missing_registry() {
+    run_script status
+    assert_rc "missing registry exits 1" 1
+    assert_stderr_contains "names the registry" "daemons.tsv"
+}
+
+test_status_reports_never_fired() {
+    seed_registry
+    run_script status
+    assert_rc "status exits 0" 0
+    assert_stdout_contains "names the daemon" "one"
+    assert_stdout_contains "never fired when no log" "never fired"
+}
+
+test_status_reports_last_activity() {
+    seed_registry
+    seed_log one \
+        '{"ts":"2026-07-15T10:00:00Z","daemon":"one","event":"trigger","detail":"fired"}' \
+        '{"ts":"2026-07-15T10:00:00Z","daemon":"one","event":"change","detail":"did work"}'
+    run_script status
+    assert_stdout_contains "shows last outcome" "change"
+    assert_stdout_contains "shows a count" "1 change"
+}
+
 run_tests "$@"

@@ -3,7 +3,7 @@
 #
 # Usage:
 #   daemons append <name> <event> [detail]   Append one activity record
-#   daemons status                           Summarize all daemons (loaded? last fire? counts)
+#   daemons status                           Summarize all daemons (loaded? last activity + counts)
 #   daemons check                            Health+activity gate (returns nonzero on problem)
 #   daemons log [name|--all] [-f]            Render the log (human-readable)
 #   daemons query [name|--all] [options]     Filter/extract JSONL records
@@ -43,7 +43,7 @@ DESCRIPTION
   'append' is the write path daemons call; 'status'/'check'/'log'/'query' read.
 SUBCOMMANDS
   append   Append one activity record (creates the log dir on first write)
-  status   Per-daemon summary: loaded? last exit? last fire + today's counts
+  status   Per-daemon summary: loaded? + last activity (event + timestamp) + all-time event counts; "never fired" when no log
   check    Health+activity gate; nonzero + loud alerts on any problem
   log      Render the log human-readably (--all merges; -f follows)
   query    Filter/extract JSONL by --event/--since/--all/--jq
@@ -153,6 +153,58 @@ EOF
         '
     }
 
+    # Echo registry rows as name<TAB>domain<TAB>label<TAB>script. Skips the header
+    # row and blank lines. Errors (return 1) if the registry file is absent
+    _read_registry() {
+        if [ ! -f "$REGISTRY" ]; then
+            _error "registry not found: $REGISTRY"
+            return 1
+        fi
+        # Skip header (first line) and blanks; collapse runs of whitespace/tabs to a single tab
+        local uid; uid="$(id -u)"
+        tail -n +2 "$REGISTRY" | while IFS= read -r row; do
+            [ -n "$row" ] || continue
+            # Split on whitespace runs into 4 fields (script path assumed space-free)
+            local name
+            local domain
+            local label
+            local script
+            read -r name domain label script <<< "$row"
+            [ -n "$name" ] || continue
+            # Substitute $UID token in the domain
+            domain="${domain//\$UID/$uid}"
+            printf '%s\t%s\t%s\t%s\n' "$name" "$domain" "$label" "$script"
+        done
+    }
+
+    # Echo `launchctl print <domain><label>` text; return nonzero if not loaded
+    _launchd_state() {
+        launchctl print "$1$2" 2>/dev/null
+    }
+
+    _do_status() {
+        local rows; rows="$(_read_registry)" || return 1
+        printf '%s\n' "$rows" | while IFS=$'\t' read -r name domain label script; do
+            [ -n "$name" ] || continue
+            local loaded="loaded"
+            _launchd_state "$domain" "$label" >/dev/null || loaded="NOT LOADED"
+            local logf="$LOG_DIR/$name.log"
+            local activity
+            if [ ! -e "$logf" ]; then
+                activity="never fired"
+            else
+                local last_ts; last_ts="$(jq -rs 'last | .ts // "?"' "$logf" 2>/dev/null)"
+                local last_ev; last_ev="$(jq -rs 'last | .event // "?"' "$logf" 2>/dev/null)"
+                # Counts by event (all-time; simple and enough for a glance)
+                local n_change; n_change="$(jq -rs '[.[]|select(.event=="change")]|length' "$logf" 2>/dev/null)"
+                local n_noop; n_noop="$(jq -rs '[.[]|select(.event=="noop")]|length' "$logf" 2>/dev/null)"
+                local n_err; n_err="$(jq -rs '[.[]|select(.event=="error")]|length' "$logf" 2>/dev/null)"
+                activity="last $last_ev @ $last_ts ($n_change change, $n_noop noop, $n_err error)"
+            fi
+            printf '%-24s %-11s %s\n' "$name" "$loaded" "$activity"
+        done
+    }
+
     _do_log() {
         local follow=""
         local target=""
@@ -186,7 +238,7 @@ EOF
         -h|--help) _show_help; return 0 ;;
         "") _error "Must provide a subcommand. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
         append)  _do_append "$@"; return $? ;;
-        status)  _error "status not yet implemented"; return 1 ;;
+        status)  _do_status "$@"; return $? ;;
         check)   _error "check not yet implemented"; return 1 ;;
         log)     _do_log "$@"; return $? ;;
         query)   _do_query "$@"; return $? ;;
