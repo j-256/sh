@@ -85,4 +85,67 @@ test_append_detail_stdin() {
     assert_eq "stdin detail captured" "$(printf 'big\nmultiline\npayload')" "$(jq -r .detail "$TEST_DIR/log/reconcile.log")"
 }
 
+# Seed helper: write records directly (bypass append) with controlled timestamps
+seed_log() {
+    local name="$1"; shift
+    mkdir -p "$TEST_DIR/log"
+    printf '%s\n' "$@" >> "$TEST_DIR/log/$name.log"
+}
+
+test_query_filters_by_event() {
+    seed_log reconcile \
+        '{"ts":"2026-07-15T10:00:00Z","daemon":"reconcile","event":"trigger","detail":"a"}' \
+        '{"ts":"2026-07-15T10:00:01Z","daemon":"reconcile","event":"error","detail":"boom"}'
+    run_script query reconcile --event error
+    assert_rc "query exits 0" 0
+    assert_eq "one match" "1" "$(get_stdout | grep -c .)"
+    assert_eq "it's the error" "boom" "$(get_stdout | jq -r .detail)"
+}
+
+test_query_since() {
+    seed_log reconcile \
+        '{"ts":"2026-07-14T10:00:00Z","daemon":"reconcile","event":"noop","detail":"old"}' \
+        '{"ts":"2026-07-15T10:00:00Z","daemon":"reconcile","event":"noop","detail":"new"}'
+    run_script query reconcile --since 2026-07-15
+    assert_eq "only new" "new" "$(get_stdout | jq -r .detail)"
+}
+
+test_query_all_merges() {
+    seed_log reconcile '{"ts":"2026-07-15T10:00:00Z","daemon":"reconcile","event":"noop","detail":"r"}'
+    seed_log screenshot-rename '{"ts":"2026-07-15T11:00:00Z","daemon":"screenshot-rename","event":"change","detail":"s"}'
+    run_script query --all
+    assert_eq "two records across daemons" "2" "$(get_stdout | grep -c .)"
+}
+
+test_query_jq_expr() {
+    seed_log reconcile '{"ts":"2026-07-15T10:00:00Z","daemon":"reconcile","event":"change","detail":"3 deltas"}'
+    run_script query reconcile --jq '.detail'
+    assert_eq "jq expr applied" "3 deltas" "$(get_stdout | tr -d '"')"
+}
+
+test_query_missing_log_empty() {
+    run_script query reconcile
+    assert_rc "absent log exits 0" 0
+    assert_eq "no output" "" "$(get_stdout)"
+}
+
+test_query_missing_value_errors() {
+    run_script query reconcile --event
+    assert_rc "trailing --event with no value exits 2" 2
+    run_script query reconcile --since
+    assert_rc "trailing --since with no value exits 2" 2
+    run_script query reconcile --jq
+    assert_rc "trailing --jq with no value exits 2" 2
+}
+
+test_query_event_equals_form() {
+    seed_log reconcile \
+        '{"ts":"2026-07-15T10:00:00Z","daemon":"reconcile","event":"trigger","detail":"a"}' \
+        '{"ts":"2026-07-15T10:00:01Z","daemon":"reconcile","event":"error","detail":"boom"}'
+    run_script query reconcile --event=error
+    assert_rc "equals-form query exits 0" 0
+    assert_eq "one match" "1" "$(get_stdout | grep -c .)"
+    assert_eq "equals-form matches the error record" "boom" "$(get_stdout | jq -r .detail)"
+}
+
 run_tests "$@"

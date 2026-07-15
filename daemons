@@ -86,6 +86,65 @@ EOF
             >> "$LOG_DIR/$name.log" || { _error "failed to write log record"; return 1; }
     }
 
+    # Echo the log file path(s) for a name, or all logs for --all. No error if absent
+    _log_files_for() {
+        local target="${1:-}"
+        if [ "$target" = "--all" ] || [ -z "$target" ]; then
+            # All *.log in LOG_DIR (may be none)
+            local f
+            for f in "$LOG_DIR"/*.log; do [ -e "$f" ] && printf '%s\n' "$f"; done
+        else
+            [ -e "$LOG_DIR/$target.log" ] && printf '%s\n' "$LOG_DIR/$target.log"
+        fi
+    }
+
+    # Normalize --since: a bare date (YYYY-MM-DD) becomes midnight UTC; an ISO
+    # timestamp passes through; NNN[smh] becomes "now minus that span"
+    _since_to_ts() {
+        local t="$1"
+        case "$t" in
+            [0-9]*[smh])
+                local n="${t%[smh]}"; local unit="${t##*[0-9]}"
+                local secs=0
+                case "$unit" in s) secs=$n ;; m) secs=$((n*60)) ;; h) secs=$((n*3600)) ;; esac
+                TZ=Etc/UTC date -v-"${secs}"S '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null \
+                    || TZ=Etc/UTC date -u -d "-${secs} seconds" '+%Y-%m-%dT%H:%M:%SZ' ;;
+            ????-??-??) printf '%sT00:00:00Z\n' "$t" ;;
+            *) printf '%s\n' "$t" ;;
+        esac
+    }
+
+    _do_query() {
+        local target=""
+        local event=""
+        local since=""
+        local jqexpr="."
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --all) target="--all"; shift ;;
+                --event) [ $# -ge 2 ] || { _error "--event requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }; event="$2"; shift 2 ;;
+                --event=*) event="${1#*=}"; shift ;;
+                --since) [ $# -ge 2 ] || { _error "--since requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }; since="$2"; shift 2 ;;
+                --since=*) since="${1#*=}"; shift ;;
+                --jq) [ $# -ge 2 ] || { _error "--jq requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }; jqexpr="$2"; shift 2 ;;
+                --jq=*) jqexpr="${1#*=}"; [ -n "$jqexpr" ] || { _error "--jq requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }; shift ;;
+                -*) _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+                *) target="$1"; shift ;;
+            esac
+        done
+        local since_ts=""
+        [ -n "$since" ] && since_ts="$(_since_to_ts "$since")"
+        local files; files="$(_log_files_for "$target")"
+        [ -z "$files" ] && return 0
+        # Filter each record: event match (if set), ts >= since (if set), then apply jqexpr
+        printf '%s\n' "$files" | while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            jq -c \
+                --arg event "$event" --arg since "$since_ts" \
+                'select(($event=="" or .event==$event) and ($since=="" or .ts>=$since))' "$f"
+        done | { [ "$jqexpr" = "." ] && cat || jq "$jqexpr"; }
+    }
+
     if ! command -v jq >/dev/null 2>&1; then _error "jq is required"; return 3; fi
 
     local subcmd="${1:-}"
@@ -97,7 +156,7 @@ EOF
         status)  _error "status not yet implemented"; return 1 ;;
         check)   _error "check not yet implemented"; return 1 ;;
         log)     _error "log not yet implemented"; return 1 ;;
-        query)   _error "query not yet implemented"; return 1 ;;
+        query)   _do_query "$@"; return $? ;;
         *) _error "Unknown argument '$subcmd'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
     esac
 )
