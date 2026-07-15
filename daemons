@@ -1,0 +1,85 @@
+#!/bin/bash
+# daemons - observe the homegrown launchd daemons: write/read per-daemon activity logs
+#
+# Usage:
+#   daemons append <name> <event> [detail]   Append one activity record
+#   daemons status                           Summarize all daemons (loaded? last fire? counts)
+#   daemons check                            Health+activity gate (returns nonzero on problem)
+#   daemons log [name|--all] [-f]            Render the log (human-readable)
+#   daemons query [name|--all] [options]     Filter/extract JSONL records
+#   daemons -h | --help
+#
+# Environment:
+#   DAEMONS_LOG_DIR   Directory of <name>.log files (default: $XDG_STATE_HOME/daemons or ~/.local/state/daemons)
+#   DAEMONS_REGISTRY  Registry TSV (default: $XDG_CONFIG_HOME/daemons/daemons.tsv or ~/.config/daemons/daemons.tsv)
+
+PATH="/opt/homebrew/bin:/usr/local/bin:$PATH" # LaunchDaemons get a minimal PATH; need jq
+
+_daemons() (
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="daemons" ;; esac
+
+    local LOG_DIR="${DAEMONS_LOG_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/daemons}"
+    local REGISTRY="${DAEMONS_REGISTRY:-${XDG_CONFIG_HOME:-$HOME/.config}/daemons/daemons.tsv}"
+
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+
+    _show_help() {
+        local s; [ -t 1 ] && s=$'\033[4m'
+        local r; [ -t 1 ] && r=$'\033[24m'
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - observe the homegrown launchd daemons
+SYNOPSIS
+  $SCRIPT_NAME append <${s}name${r}> <${s}event${r}> [${s}detail${r}]
+  $SCRIPT_NAME status
+  $SCRIPT_NAME check
+  $SCRIPT_NAME log [${s}name${r}|--all] [-f]
+  $SCRIPT_NAME query [${s}name${r}|--all] [--event ${s}E${r}] [--since ${s}T${r}] [--jq ${s}EXPR${r}]
+DESCRIPTION
+  Writes and reads per-daemon activity logs (JSONL) under \$DAEMONS_LOG_DIR.
+  Each record is {ts, daemon, event, detail}; event is trigger|noop|change|error.
+  'append' is the write path daemons call; 'status'/'check'/'log'/'query' read.
+SUBCOMMANDS
+  append   Append one activity record (creates the log dir on first write)
+  status   Per-daemon summary: loaded? last exit? last fire + today's counts
+  check    Health+activity gate; nonzero + loud alerts on any problem
+  log      Render the log human-readably (--all merges; -f follows)
+  query    Filter/extract JSONL by --event/--since/--all/--jq
+ENVIRONMENT
+  DAEMONS_LOG_DIR   Directory of <name>.log files (default: \$XDG_STATE_HOME/daemons or ~/.local/state/daemons)
+  DAEMONS_REGISTRY  Registry TSV (default: \$XDG_CONFIG_HOME/daemons/daemons.tsv or ~/.config/daemons/daemons.tsv)
+DEPENDENCIES
+  jq, launchctl
+EXIT STATUS
+  0  Success
+  1  Runtime failure
+  2  Usage error (unknown/missing subcommand or option)
+  3  jq not installed
+EOF
+    }
+
+    if ! command -v jq >/dev/null 2>&1; then _error "jq is required"; return 3; fi
+
+    local subcmd="${1:-}"
+    [ $# -gt 0 ] && shift
+    case "$subcmd" in
+        -h|--help) _show_help; return 0 ;;
+        "") _error "Must provide a subcommand. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+        append)  _error "append not yet implemented"; return 1 ;;
+        status)  _error "status not yet implemented"; return 1 ;;
+        check)   _error "check not yet implemented"; return 1 ;;
+        log)     _error "log not yet implemented"; return 1 ;;
+        query)   _error "query not yet implemented"; return 1 ;;
+        *) _error "Unknown argument '$subcmd'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+    esac
+)
+
+_daemons "$@"
+__daemons_rc=$?
+unset -f _daemons
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __daemons_rc; return $__daemons_rc"
+fi
+eval "unset __daemons_rc; exit $__daemons_rc"
