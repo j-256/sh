@@ -205,6 +205,41 @@ EOF
         done
     }
 
+    # Loud alert line (bold + red), to stdout so the login shell shows it inline
+    _alert() {
+        local b; local red; local rst
+        if [ -t 1 ]; then b=$'\033[1m'; red=$'\033[31m'; rst=$'\033[0m'; fi
+        printf '%s%s[daemons] %s%s\n' "$b" "$red" "$*" "$rst"
+    }
+
+    _do_check() {
+        local rows; rows="$(_read_registry)" || return 1
+        local problems=0
+        # Use a temp file for the problem count: the while loop runs in a subshell
+        # (piped), so a plain variable increment wouldn't survive. Portable to bash 3.2
+        local flag; flag="$(mktemp)"
+        printf '0' > "$flag"
+        printf '%s\n' "$rows" | while IFS=$'\t' read -r name domain label script; do
+            [ -n "$name" ] || continue
+            local state
+            if ! state="$(_launchd_state "$domain" "$label")"; then
+                _alert "$label not loaded in launchd!"
+                printf '1' > "$flag"; continue
+            fi
+            if [ -n "$script" ] && [ ! -f "$script" ]; then
+                _alert "$label points at a missing script ($script) -- re-run its install"
+                printf '1' > "$flag"; continue
+            fi
+            local last_exit; last_exit="$(printf '%s\n' "$state" | awk '/last exit code/ {print $NF}')"
+            if [ -n "$last_exit" ] && [ "$last_exit" != 0 ]; then
+                _alert "$label last run failed (exit $last_exit)"
+                printf '1' > "$flag"
+            fi
+        done
+        problems="$(cat "$flag")"; rm -f "$flag"
+        [ "$problems" = 0 ]
+    }
+
     _do_log() {
         local follow=""
         local target=""
@@ -239,7 +274,7 @@ EOF
         "") _error "Must provide a subcommand. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
         append)  _do_append "$@"; return $? ;;
         status)  _do_status "$@"; return $? ;;
-        check)   _error "check not yet implemented"; return 1 ;;
+        check)   _do_check "$@"; return $? ;;
         log)     _do_log "$@"; return $? ;;
         query)   _do_query "$@"; return $? ;;
         *) _error "Unknown argument '$subcmd'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;

@@ -243,4 +243,34 @@ test_status_reports_last_activity() {
     assert_stdout_contains "shows a count" "1 change"
 }
 
+test_check_all_healthy() {
+    seed_registry
+    run_script check
+    assert_rc "healthy exits 0" 0
+}
+
+test_check_not_loaded() {
+    seed_registry
+    : > "$TEST_DIR/loaded" # nothing loaded
+    run_script check
+    assert_rc "not loaded exits 1" 1
+    assert_stdout_contains "alerts not loaded" "not loaded"
+}
+
+test_check_missing_script() {
+    seed_registry
+    rm "$TEST_DIR/one.sh" # script baked into registry no longer exists
+    run_script check
+    assert_rc "missing script exits 1" 1
+    assert_stdout_contains "alerts missing script" "missing script"
+}
+
+test_check_last_exit_nonzero() {
+    seed_registry
+    printf '3\n' > "$TEST_DIR/exit_usr.test.one"
+    run_script check
+    assert_rc "nonzero last exit exits 1" 1
+    assert_stdout_contains "alerts last run failed" "last run failed"
+}
+
 run_tests "$@"
