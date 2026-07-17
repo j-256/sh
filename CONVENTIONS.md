@@ -334,7 +334,7 @@ The severity token leads so `grep '^\[ERR\]'` is greppable across the repo witho
 Usage-class errors (missing arg, unknown option, bad flag value) append `. Run \`$SCRIPT_NAME -h\` for usage`. Runtime errors (network failed, file not found) and dependency errors (`jq is required`) do **not** -- usage isn't the issue.
 
 ```bash
-_error "Must provide a domain name. Run \`$SCRIPT_NAME -h\` for usage"   # usage error
+_error "Must provide a domain name. Run \`$SCRIPT_NAME -h\` for usage"  # usage error
 _error "Failed to get device's IP"                                      # runtime error
 _error "jq is required"                                                 # dep error
 ```
@@ -492,8 +492,8 @@ _expand_short_opts() {
     for arg in "$@"; do
         if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
         case "$arg" in
-            --)          passthru=1; _EXPANDED+=("$arg") ;;
-            --*|-|"")    _EXPANDED+=("$arg") ;;
+            --)       passthru=1; _EXPANDED+=("$arg") ;;
+            --*|-|"") _EXPANDED+=("$arg") ;;
             -[a-zA-Z]?*)
                 rest="${arg#-}"
                 while [ -n "$rest" ]; do
