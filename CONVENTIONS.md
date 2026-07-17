@@ -641,6 +641,45 @@ DEPENDENCIES
 
 This keeps the unconditional deps prominent while making the conditional ones discoverable.
 
+## Persistent Paths
+
+Scripts that persist their own data across runs -- a cache, a log, a state file, user config -- follow the [XDG Base Directory spec](https://specifications.freedesktop.org/basedir-spec/latest/): pick the base by what the data *is*, read the matching `XDG_*` variable, and fall back to its spec default when that variable is unset.
+
+| Data kind | Variable | Default | Examples |
+|---|---|---|---|
+| Cache (regenerable, safe to delete) | `XDG_CACHE_HOME` | `~/.cache` | fetched indexes, memoized responses |
+| State (logs, history, last-run markers) | `XDG_STATE_HOME` | `~/.local/state` | activity logs, "last seen" values |
+| Config (user-authored, not regenerable) | `XDG_CONFIG_HOME` | `~/.config` | a registry the user maintains |
+| Data (portable, user-generated) | `XDG_DATA_HOME` | `~/.local/share` | rarely needed by these scripts |
+
+Always namespace under a `<script-name>/` subdirectory, and use the `${XDG_*:-$HOME/...}` fallback form so the script works whether or not the caller has `XDG_*` set:
+
+```bash
+local CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/scdef"
+```
+
+Document the variable in the `# Environment:` header comment, the `--help` `ENVIRONMENT` section, and the `.md`, same as any other knob. `scdef` (cache) and `daemons` (state + config) are the reference implementations.
+
+### Script-specific override in front
+
+When a script wants a dedicated knob a user can point anywhere without touching `XDG_*` globally, put it *in front of* the XDG resolution, not instead of it:
+
+```bash
+local LOG_DIR="${DAEMONS_LOG_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/daemons}"
+```
+
+That gives three tiers, most specific first: the script's own variable, then the XDG base, then the hardcoded `$HOME` default. Reserve it for scripts that genuinely benefit (e.g. a daemon whose log path an operator relocates); a plain `${XDG_*:-...}` is enough for most.
+
+### What stays a plain `$HOME` path
+
+XDG governs only data a script *owns*. Leave these as fixed `~/` paths:
+
+- **Files owned by another tool** -- shell rc files (`~/.bash_profile`, `~/.zshrc`, `~/.profile`), `~/.curlrc`, `~/.nvm`, `~/.claude/`, `~/.mcp.json`. Their locations are defined by those tools, not by us.
+- **OS-fixed locations** -- `~/Library/Sounds`, `~/Desktop`, and the like on macOS.
+- **Ephemeral scratch** -- use `/tmp` (or `$TMPDIR`), cleaned by the OS; never an XDG base.
+
+The spec names `~/.local/bin` for user executables but defines no variable for it (there is no standard `XDG_BIN_HOME`), so scripts that install binaries default to that path behind an explicit override variable instead -- see `get` (`INSTALL_DIR`).
+
 ## Commit Style
 
 - **Subject format:** `Update <script> - <short description>` (leading verb "Update", no final period). For truly new additions, `Add <script> - <short description>`.
