@@ -7,12 +7,12 @@ Notes for working on the scripts in this repo (whether you're a human or an agen
 ```sh
 git clone https://github.com/j-256/sh
 cd sh
-npm install        # installs the git hooks (via the prepare script)
+make setup         # activates the git hooks
 ```
 
-`npm install` runs [`tests/install-hooks.sh`](tests/install-hooks.sh), which points git's `core.hooksPath` at [`tests/hooks/`](tests/hooks) so the tracked [`pre-commit`](tests/hooks/pre-commit) hook runs on every commit. To install the hooks without npm, run `tests/install-hooks.sh` directly; to remove them, `tests/install-hooks.sh --uninstall`.
+`make setup` runs [`tests/install-hooks.sh`](tests/install-hooks.sh), which points git's `core.hooksPath` at [`tests/hooks/`](tests/hooks) so the tracked [`pre-commit`](tests/hooks/pre-commit) hook runs on every commit. To activate the hooks without make, run `tests/install-hooks.sh` directly; to remove them, `make uninstall` (or `tests/install-hooks.sh --uninstall`).
 
-There are no runtime dependencies – the scripts target Bash 3.2 and stock POSIX tools. npm is used only for the `test`/`setup` task runner.
+There are no runtime dependencies – the scripts target Bash 3.2 and stock POSIX tools. The [`Makefile`](Makefile) is just a thin task runner (`make test`, `make setup`, `make uninstall`); it needs only GNU Make and bash, both of which ship with macOS.
 
 ## Conventions
 
@@ -27,7 +27,7 @@ A new script needs all four to land together: the script, its `docs/<name>.md`, 
 ## Before committing
 
 ```sh
-npm test           # runs the full suite (tests/test-runner.sh)
+make test          # runs the full suite (tests/test-runner.sh)
 ```
 
-The pre-commit hook automatically runs the fast, static checks (currently the comment-style lint) on every commit, but it only covers a subset and can be bypassed with `git commit --no-verify`. Run `npm test` yourself before pushing to catch everything – the hook is a convenience gate, not a substitute for the full suite.
+The pre-commit hook automatically runs the fast, static checks (currently the comment-style lint) on every commit, but it only covers a subset and can be bypassed with `git commit --no-verify`. Run `make test` yourself before pushing to catch everything – the hook is a convenience gate, not a substitute for the full suite.

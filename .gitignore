@@ -1,6 +1,4 @@
 .DS_Store
 test
 *.bak
-node_modules/
-package-lock.json
 docs/superpowers/

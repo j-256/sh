@@ -4,8 +4,8 @@
 # Points git's core.hooksPath at tests/hooks/, so the tracked pre-commit hook
 # runs without copying anything into .git/hooks. Because the hooks are
 # version-controlled, every clone activates the same set with one command, and
-# edits take effect immediately -- no re-install. Usually run via `npm run
-# setup` (or automatically on `npm install`), but works standalone too.
+# edits take effect immediately -- no re-install. Usually run via `make setup`,
+# but works standalone too.
 #
 # Usage:
 #   tests/install-hooks.sh             Activate the hooks
