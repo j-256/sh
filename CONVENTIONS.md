@@ -472,7 +472,10 @@ Reuse these letters with these meanings across scripts. New scripts that need on
 
 `-n` for dry-run follows `make -n`, `rsync -n`, `git push -n` (mnemonic: "no execute"). `-d` is deliberately script-specific -- several scripts already use it for `--data`, `--duration`, etc., so it is not reserved for dry-run.
 
-Every short option must be paired with a long option unless the short is deliberately undocumented (rare -- prefer documenting and pairing). The long form is what shows up in scripts, docs, and error messages; the short is the typing shortcut.
+Short and long forms follow two asymmetric rules:
+
+- **Every short option must have a long form**, the sole exception being a deliberately undocumented short (rare -- prefer documenting and pairing). The long form is what appears in scripts, docs, and error messages; the short is a typing shortcut, and a shortcut with no long form behind it is a dead end.
+- **A long option need not have a short form.** The short-letter namespace is small and collision-prone, so spend a letter only when the option is typed often enough to earn one. Long-only is the natural default for options that are rarely hand-typed, that negate (`--no-save`, `--no-extensions` -- negation flags conventionally carry no short), that would collide with a letter already in use, or whose short space is spoken for (`pin-dns` reserves its entire short space for curl passthrough, so none of its own options can take one).
 
 ### Preprocessor
 
