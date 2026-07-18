@@ -16,32 +16,34 @@ _test_runner() (
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="test-runner.sh" ;; esac
 
     _show_help() {
-        local s
-        [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
-        local r
-        [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
-        echo "NAME"
-        echo "  $SCRIPT_NAME - run all .test.sh files"
-        echo "SYNOPSIS"
-        echo "  $SCRIPT_NAME [${s}options${r}] [${s}name${r}]..."
-        echo "DESCRIPTION"
-        echo "  Finds and runs all .test.sh files in the same directory."
-        echo "  If one or more names are given, only runs the tests they name. Each"
-        echo "  name is reduced to a script name (basename minus .test.sh), so a bare"
-        echo "  name, a filename (pin-dns.test.sh), or a path (tests/pin-dns.test.sh)"
-        echo "  all select the same test -- and a shell glob like tests/meta-*.test.sh"
-        echo "  selects that whole group. Matching is exact, not substring: a name of"
-        echo "  s runs s alone, never stats."
-        echo "  -m/--meta selects the cross-cutting meta-*.test.sh group by name, so"
-        echo "  it works from any directory without relying on a shell glob."
-        echo "  Unmatched names are reported and cause a non-zero exit."
-        echo "  When exactly one name is given and it matches, the per-file header"
-        echo "  and aggregate summary are suppressed -- the test file's own summary"
-        echo "  line is enough."
-        echo "OPTIONS"
-        echo "  -m, --meta     Run only the meta-*.test.sh files"
-        echo "  -v, --verbose  Pass -v (verbose) to each test file"
-        echo "  -h, --help     Show this help message"
+        local s; [ -t 1 ] && s=$'\033[4m'
+        local r; [ -t 1 ] && r=$'\033[24m'
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - run all .test.sh files
+SYNOPSIS
+  $SCRIPT_NAME [${s}options${r}] [${s}name${r}]...
+DESCRIPTION
+  Finds and runs all .test.sh files in the same directory.
+  If one or more names are given, only runs the tests they name. Each
+  name is reduced to a script name (basename minus .test.sh), so a bare
+  name, a filename (pin-dns.test.sh), or a path (tests/pin-dns.test.sh)
+  all select the same test -- and a shell glob like tests/meta-*.test.sh
+  selects that whole group. Matching is exact, not substring: a name of
+  s runs s alone, never stats.
+  -m/--meta selects the cross-cutting meta-*.test.sh group by name,
+  resolved relative to the script's own directory -- so unlike a typed
+  meta-*.test.sh glob (which the shell expands relative to your cwd) it
+  works from anywhere.
+  Unmatched names are reported and cause a non-zero exit.
+  When exactly one name is given and it matches, the per-file header
+  and aggregate summary are suppressed -- the test file's own summary
+  line is enough.
+OPTIONS
+  -m, --meta     Run only the meta-*.test.sh files
+  -v, --verbose  Pass -v (verbose) to each test file
+  -h, --help     Show this help message
+EOF
     }
     local script_dir
     script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -54,10 +56,12 @@ _test_runner() (
             -h|--help) _show_help; return 0 ;;
             -v|--verbose) verbose="-v" ;;
             -m|--meta)
-                # Sugar for selecting the cross-cutting meta-*.test.sh group
-                # without a shell glob (so it works from any cwd). Seeds names
-                # with each meta script name, reusing the matching/reporting/
-                # solo logic below; composes with explicit names as a union
+                # Sugar for selecting the cross-cutting meta-*.test.sh group by
+                # name, resolved against the script's own dir -- so unlike a
+                # typed glob (which the shell expands relative to cwd) it works
+                # anywhere. Seeds names with each meta script name, reusing the
+                # matching/reporting/solo logic below; composes with explicit
+                # names as a union
                 meta_requested=1
                 local mf
                 for mf in "$script_dir"/meta-*.test.sh; do
