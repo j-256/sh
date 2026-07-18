@@ -25,8 +25,12 @@ _test_runner() (
         echo "  $SCRIPT_NAME [${s}options${r}] [${s}name${r}]..."
         echo "DESCRIPTION"
         echo "  Finds and runs all .test.sh files in the same directory."
-        echo "  If one or more names are given, only runs tests whose script name"
-        echo "  (basename minus .test.sh) exactly matches one of them."
+        echo "  If one or more names are given, only runs the tests they name. Each"
+        echo "  name is reduced to a script name (basename minus .test.sh), so a bare"
+        echo "  name, a filename (pin-dns.test.sh), or a path (tests/pin-dns.test.sh)"
+        echo "  all select the same test -- and a shell glob like tests/meta-*.test.sh"
+        echo "  selects that whole group. Matching is exact, not substring: a name of"
+        echo "  s runs s alone, never stats."
         echo "  Unmatched names are reported and cause a non-zero exit."
         echo "  When exactly one name is given and it matches, the per-file header"
         echo "  and aggregate summary are suppressed -- the test file's own summary"
@@ -41,7 +45,12 @@ _test_runner() (
         case "$1" in
             -h|--help) _show_help; return 0 ;;
             -v) verbose="-v" ;;
-            *) names+=("$1") ;;
+            # A name may be a bare script name (pin-dns), a test filename
+            # (pin-dns.test.sh), or a path (tests/pin-dns.test.sh) -- basename
+            # reduces all three to the script name, so a shell-expanded glob
+            # like tests/meta-*.test.sh selects that group. The match downstream
+            # stays exact (<name>.test.sh) -- no substring-glob footgun
+            *) names+=("$(basename "$1" .test.sh)") ;;
         esac
         shift
     done
