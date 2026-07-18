@@ -5,8 +5,9 @@
 #   test-runner.sh [options] [name]...
 #
 # Options:
-#   -v          Verbose (pass through to test files)
-#   -h, --help  Show help message
+#   -m, --meta     Run only the meta-*.test.sh files
+#   -v, --verbose  Verbose (pass through to test files)
+#   -h, --help     Show help message
 
 _test_runner() (
     local SCRIPT_NAME
@@ -31,20 +32,39 @@ _test_runner() (
         echo "  all select the same test -- and a shell glob like tests/meta-*.test.sh"
         echo "  selects that whole group. Matching is exact, not substring: a name of"
         echo "  s runs s alone, never stats."
+        echo "  -m/--meta selects the cross-cutting meta-*.test.sh group by name, so"
+        echo "  it works from any directory without relying on a shell glob."
         echo "  Unmatched names are reported and cause a non-zero exit."
         echo "  When exactly one name is given and it matches, the per-file header"
         echo "  and aggregate summary are suppressed -- the test file's own summary"
         echo "  line is enough."
         echo "OPTIONS"
-        echo "  -v          Pass -v (verbose) to each test file"
-        echo "  -h, --help  Show this help message"
+        echo "  -m, --meta     Run only the meta-*.test.sh files"
+        echo "  -v, --verbose  Pass -v (verbose) to each test file"
+        echo "  -h, --help     Show this help message"
     }
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
     local verbose=""
     local names=()
+    local meta_requested=0
     while [ $# -gt 0 ]; do
         case "$1" in
             -h|--help) _show_help; return 0 ;;
-            -v) verbose="-v" ;;
+            -v|--verbose) verbose="-v" ;;
+            -m|--meta)
+                # Sugar for selecting the cross-cutting meta-*.test.sh group
+                # without a shell glob (so it works from any cwd). Seeds names
+                # with each meta script name, reusing the matching/reporting/
+                # solo logic below; composes with explicit names as a union
+                meta_requested=1
+                local mf
+                for mf in "$script_dir"/meta-*.test.sh; do
+                    [ -f "$mf" ] || continue
+                    names+=("$(basename "$mf" .test.sh)")
+                done
+                ;;
             # A name may be a bare script name (pin-dns), a test filename
             # (pin-dns.test.sh), or a path (tests/pin-dns.test.sh) -- basename
             # reduces all three to the script name, so a shell-expanded glob
@@ -55,8 +75,12 @@ _test_runner() (
         shift
     done
 
-    local script_dir
-    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    # --meta with no meta-*.test.sh present must not silently fall through to
+    # "no names -> run everything"; report it and fail instead
+    if [ "$meta_requested" -eq 1 ] && [ "${#names[@]}" -eq 0 ]; then
+        echo "No meta-*.test.sh files found in $script_dir" >&2
+        return 1
+    fi
 
     # Pre-compute which names matched a real file. Names that never match
     # are reported after the run and force a non-zero exit
