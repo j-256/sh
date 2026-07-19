@@ -152,6 +152,18 @@ _pin_dns() (
     _warn()  { [ -n "$quiet" ] && return 0; printf '%s[WRN][%s] %s%s\n' "$C_WRN" "$SCRIPT_NAME" "$*" "$C_RST" >&2; }
     _info()  { [ -n "$quiet" ] && return 0; printf '%s[INF][%s] %s%s\n' "$C_INF" "$SCRIPT_NAME" "$*" "$C_RST" >&2; }
 
+    # Temp-file registry cleaned by a single EXIT trap. Set early so any temp
+    # registered later (the capture/decode body + header files) is removed when
+    # the subshell returns, on every exit path
+    local _tmpfiles=""
+    # _cleanup_tmp reads _tmpfiles at exit time (deliberately NOT captured at
+    # trap-set time), so temps registered later via _tmpfiles="$_tmpfiles $new"
+    # are still cleaned. Word-splitting of $_tmpfiles in rm is intentional.
+    # SC2329: invoked indirectly via the trap below, not by name
+    # shellcheck disable=SC2064,SC2086,SC2329
+    _cleanup_tmp() { [ -n "$_tmpfiles" ] && rm -f $_tmpfiles; }
+    trap _cleanup_tmp EXIT
+
     _print_help() {
         # Keep this closely aligned with the header comment
         cat >&2 <<EOF
@@ -979,6 +991,65 @@ EOF
         return 1
     }
 
+    # Return 0 if the user directed the body to a file via
+    # -o/--output/-O/--remote-name/-J/--remote-header-name (including the
+    # attached forms -o<file>/--output=<file> and the valueless -O.../-J...).
+    # Drives the file-output --compressed swap and the capture/decode-vs-direct
+    # exec decision. Mirrors -o*/--output=* handling in _curl_opt_consumes_next;
+    # -o takes a value (match -o?* for the attached value), -O/-J take none
+    _curl_args_write_to_file() {
+        [ "$1" = "--" ] && shift
+        local a
+        while [ "$#" -gt 0 ]; do
+            a="$1"
+            shift
+            case "$a" in
+                -o|--output|-O|--remote-name|-J|--remote-header-name) return 0 ;;
+                -o?*|--output=*|-O*|-J*) return 0 ;;
+            esac
+        done
+        return 1
+    }
+
+    # Return 0 if the user asked for headers only via -I/--head. Such a request
+    # emits no body, so it execs curl directly (no capture/decode)
+    _curl_args_headers_only() {
+        [ "$1" = "--" ] && shift
+        local a
+        for a in "$@"; do
+            case "$a" in
+                -I|--head) return 0 ;;
+            esac
+        done
+        return 1
+    }
+
+    # Decode $1 (body file) according to $2 (content-encoding token) to stdout.
+    # Missing decoder -> warn on stderr, emit raw. Unknown/identity -> emit raw
+    _decode_stdout_body() {
+        local body="$1"
+        local enc
+        enc="$(LC_ALL=C printf '%s' "$2" | tr '[:upper:]' '[:lower:]')"
+        case "$enc" in
+            gzip|x-gzip)
+                if _cmd_exists gzip; then gzip -dc < "$body" || cat "$body"; else _warn "gzip decoder not found; emitting raw body"; cat "$body"; fi
+                ;;
+            deflate)
+                # gzip -d handles zlib/deflate on most builds; fall back to raw
+                if _cmd_exists gzip; then gzip -dc < "$body" 2>/dev/null || cat "$body"; else _warn "deflate decoder not found; emitting raw body"; cat "$body"; fi
+                ;;
+            br)
+                if _cmd_exists brotli; then brotli -dc < "$body" || cat "$body"; else _warn "brotli decoder not found (install brotli); emitting raw body"; cat "$body"; fi
+                ;;
+            zstd)
+                if _cmd_exists zstd; then zstd -dc < "$body" || cat "$body"; else _warn "zstd decoder not found (install zstd); emitting raw body"; cat "$body"; fi
+                ;;
+            *)
+                cat "$body"
+                ;;
+        esac
+    }
+
     # Append the full Chrome header set to the cmd array as -H pairs, in Chrome's
     # real order. Skips any header the user already supplied (per-header override)
     # and, if the user's UA is non-Chrome, suppresses the Chrome-only client hints.
@@ -1066,10 +1137,13 @@ EOF
         _user_supplied_header "sec-fetch-dest" -- "${curl_args[@]}" || \
             cmd+=("-H" "Sec-Fetch-Dest: $sf_dest")
 
-        # Accept-Encoding: honest full set here; the file-output path (Task 6)
-        # overrides this by using --compressed instead
-        _user_supplied_header "accept-encoding" -- "${curl_args[@]}" || \
-            cmd+=("-H" "Accept-Encoding: gzip, deflate, br, zstd")
+        # Accept-Encoding: honest full set here so a decode-capable stdout path
+        # advertises what Chrome does. Skipped for file output, where the exec
+        # block adds --compressed instead (curl writes a usable decoded file)
+        if ! _curl_args_write_to_file -- "${curl_args[@]}"; then
+            _user_supplied_header "accept-encoding" -- "${curl_args[@]}" || \
+                cmd+=("-H" "Accept-Encoding: gzip, deflate, br, zstd")
+        fi
 
         _user_supplied_header "accept-language" -- "${curl_args[@]}" || \
             cmd+=("-H" "Accept-Language: en-US,en;q=0.9")
@@ -1683,6 +1757,13 @@ EOF
         _emit_impersonation_headers
     fi
 
+    # File output while impersonating on stock curl: let curl own encoding
+    # (usable saved file); the honest full Accept-Encoding is already skipped
+    # for file output inside _emit_impersonation_headers
+    if [ -z "$no_impersonate" ] && [ -z "$engine_bin" ] && _curl_args_write_to_file -- "${curl_args[@]}"; then
+        cmd+=("--compressed")
+    fi
+
     if [ -n "$ip" ]; then
         cmd+=("--resolve" "${host}:${port}:${ip}")
     fi
@@ -1737,12 +1818,40 @@ EOF
         return 0
     fi
 
+    # Decide execution mode:
+    #   - impersonate engine, file output, or headers-only -> exec directly
+    #   - stock curl + stdout + impersonating -> capture + decode
+    if [ -n "$engine_bin" ] || [ -n "$no_impersonate" ] \
+        || _curl_args_write_to_file -- "${curl_args[@]}" \
+        || _curl_args_headers_only -- "${curl_args[@]}"; then
+        "${cmd[@]}"
+        local curl_rc=$?
+        if [ "$curl_rc" -eq 126 ] || [ "$curl_rc" -eq 127 ]; then
+            _error "curl failed to execute (exit $curl_rc)"
+            return 3
+        fi
+        return "$curl_rc"
+    fi
+
+    # Capture-and-decode path: add -o bodyfile -D headerfile, run, then decode
+    local _body
+    _body="$(mktemp "${TMPDIR:-/tmp}/pin-dns-body.XXXXXX")" || { _error "mktemp failed"; return 3; }
+    local _hdr
+    _hdr="$(mktemp "${TMPDIR:-/tmp}/pin-dns-hdr.XXXXXX")" || { rm -f "$_body"; _error "mktemp failed"; return 3; }
+    _tmpfiles="$_tmpfiles $_body $_hdr"
+
+    cmd+=("-o" "$_body" "-D" "$_hdr")
     "${cmd[@]}"
     local curl_rc=$?
     if [ "$curl_rc" -eq 126 ] || [ "$curl_rc" -eq 127 ]; then
         _error "curl failed to execute (exit $curl_rc)"
         return 3
     fi
+
+    # Extract the LAST Content-Encoding from the header dump (handles redirects)
+    local _ce
+    _ce="$(LC_ALL=C tr -d '\r' < "$_hdr" | awk -F': ' 'tolower($1)=="content-encoding"{v=$2} END{print v}')"
+    _decode_stdout_body "$_body" "$_ce"
     return "$curl_rc"
 )
 

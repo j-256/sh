@@ -605,6 +605,100 @@ test_cache_stale_beyond_window_uses_pin() {
     assert_not_contains "not stale 155" "$(get_curl_args)" "Chrome/155.0.0.0"
 }
 
+# --- decode / output-detection tests (Task 6) ---
+
+test_decode_gzip_stdout() {
+    # curl shim emits gzipped body + Content-Encoding: gzip via -D headerfile
+    cat > "$SHIM_DIR/curl" <<'SHIM'
+#!/bin/bash
+hdr=""; body=""; prev=""
+for a in "$@"; do
+    case "$prev" in -D) hdr="$a" ;; -o) body="$a" ;; esac
+    prev="$a"
+done
+[ -n "$hdr" ] && printf 'HTTP/2 200\r\ncontent-encoding: gzip\r\n\r\n' > "$hdr"
+if [ -n "$body" ]; then printf 'hello-decoded' | gzip -c > "$body"; else printf 'hello-decoded' | gzip -c; fi
+exit 0
+SHIM
+    chmod +x "$SHIM_DIR/curl"
+    run_script "https://example.com" --target "edge.somesite.com"
+    assert_rc "decode-gzip" 0
+    assert_stdout_contains "gzip decoded to stdout" "hello-decoded"
+}
+
+test_decode_missing_decoder_warns_raw() {
+    # Content-Encoding: br but no brotli on PATH -> warn + raw bytes
+    cat > "$SHIM_DIR/curl" <<'SHIM'
+#!/bin/bash
+hdr=""; body=""; prev=""
+for a in "$@"; do
+    case "$prev" in -D) hdr="$a" ;; -o) body="$a" ;; esac
+    prev="$a"
+done
+[ -n "$hdr" ] && printf 'HTTP/2 200\r\ncontent-encoding: br\r\n\r\n' > "$hdr"
+if [ -n "$body" ]; then printf 'RAWBROTLIBYTES' > "$body"; else printf 'RAWBROTLIBYTES'; fi
+exit 0
+SHIM
+    chmod +x "$SHIM_DIR/curl"
+    # Ensure brotli is not resolvable: PATH is $SHIM_DIR:/usr/bin:/bin; brotli
+    # lives in /opt/homebrew/bin, so it is already absent under the test PATH
+    run_script "https://example.com" --target "edge.somesite.com"
+    assert_rc "decode-missing" 0
+    assert_stdout_contains "raw emitted" "RAWBROTLIBYTES"
+    assert_stderr_contains "warns missing decoder" "brotli"
+}
+
+test_decode_present_gzip_fails_falls_back_raw() {
+    # gzip IS on the test PATH (/usr/bin/gzip) but the body is NOT valid gzip.
+    # A present-but-failing decoder must degrade to raw bytes, never empty output
+    cat > "$SHIM_DIR/curl" <<'SHIM'
+#!/bin/bash
+hdr=""; body=""; prev=""
+for a in "$@"; do
+    case "$prev" in -D) hdr="$a" ;; -o) body="$a" ;; esac
+    prev="$a"
+done
+[ -n "$hdr" ] && printf 'HTTP/2 200\r\ncontent-encoding: gzip\r\n\r\n' > "$hdr"
+if [ -n "$body" ]; then printf 'NOTGZIP' > "$body"; else printf 'NOTGZIP'; fi
+exit 0
+SHIM
+    chmod +x "$SHIM_DIR/curl"
+    run_script "https://example.com" --target "edge.somesite.com"
+    assert_rc "decode-gzip-fail" 0
+    assert_stdout_contains "raw emitted on decode failure not empty" "NOTGZIP"
+}
+
+test_file_output_uses_compressed_not_full_ae() {
+    run_script "https://example.com" --target "edge.somesite.com" -o "$TEST_DIR/out.html"
+    assert_rc "file-out" 0
+    assert_contains "adds --compressed" "$(get_curl_args)" "--compressed"
+    assert_not_contains "no honest full AE on file path" "$(get_curl_args)" "Accept-Encoding: gzip, deflate, br, zstd"
+}
+
+test_file_output_attached_o_uses_compressed_not_full_ae() {
+    # Attached short form -o<file> is a valid, common curl form and must be
+    # recognized as file output just like the spaced -o <file> form
+    run_script "https://example.com" --target "edge.somesite.com" -o"$TEST_DIR/f.html"
+    assert_rc "file-out-attached" 0
+    assert_contains "adds --compressed" "$(get_curl_args)" "--compressed"
+    assert_not_contains "no honest full AE on file path" "$(get_curl_args)" "Accept-Encoding: gzip, deflate, br, zstd"
+}
+
+test_file_output_equals_output_uses_compressed_not_full_ae() {
+    # Equals form --output=<file> is a valid curl form and must be recognized
+    # as file output just like the spaced -o <file> form
+    run_script "https://example.com" --target "edge.somesite.com" --output="$TEST_DIR/f.html"
+    assert_rc "file-out-equals" 0
+    assert_contains "adds --compressed" "$(get_curl_args)" "--compressed"
+    assert_not_contains "no honest full AE on file path" "$(get_curl_args)" "Accept-Encoding: gzip, deflate, br, zstd"
+}
+
+test_headers_only_no_decode_full_ae() {
+    run_script "https://example.com" --target "edge.somesite.com" -I
+    assert_rc "head" 0
+    assert_contains "honest AE on head path" "$(get_curl_args)" "Accept-Encoding: gzip, deflate, br, zstd"
+}
+
 # --- run ---
 
 run_tests "$@"
