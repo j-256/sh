@@ -35,6 +35,29 @@ assert_curl_arg_count() {
     assert_eq "$label" "$got_count" "$want_count"
 }
 
+# Assert needleB appears on a line after needleA in curl.args (wire order),
+# matching each needle as a substring of a line rather than the whole line
+# (the UA and Accept values are long, so callers pass a recognizable prefix)
+assert_curl_arg_order() {
+    local label="$1"
+    local first="$2"
+    local second="$3"
+    local li=0
+    local si=0
+    local n=0
+    local line
+    while IFS= read -r line; do
+        n=$((n + 1))
+        case "$line" in *"$first"*) [ "$li" -eq 0 ] && li="$n" ;; esac
+        case "$line" in *"$second"*) [ "$si" -eq 0 ] && si="$n" ;; esac
+    done < "$TEST_DIR/curl.args"
+    if [ "$li" -gt 0 ] && [ "$si" -gt "$li" ]; then
+        _ok "$label"
+    else
+        _fail "$label: '$first'(@$li) should precede '$second'(@$si)"
+    fi
+}
+
 # --- shims ---
 
 write_shims() {
@@ -317,6 +340,61 @@ test_ua_explicit_major_env() {
     run_script "https://example.com" --target "edge.somesite.com"
     assert_rc "env-major" 0
     assert_contains "UA uses env major" "$(get_curl_args)" "Chrome/200.0.0.0"
+}
+
+test_impersonation_navigate_default() {
+    run_script "https://example.com" --target "edge.somesite.com"
+    assert_rc "navigate" 0
+    assert_contains "sec-ch-ua-mobile" "$(get_curl_args)" "sec-ch-ua-mobile: ?0"
+    assert_contains "sec-ch-ua-platform mac" "$(get_curl_args)" "sec-ch-ua-platform: \"macOS\""
+    assert_contains "sec-fetch-mode navigate" "$(get_curl_args)" "Sec-Fetch-Mode: navigate"
+    assert_contains "sec-fetch-dest document" "$(get_curl_args)" "Sec-Fetch-Dest: document"
+    assert_contains "sec-fetch-user" "$(get_curl_args)" "Sec-Fetch-User: ?1"
+    assert_contains "upgrade-insecure" "$(get_curl_args)" "Upgrade-Insecure-Requests: 1"
+    assert_contains "accept html" "$(get_curl_args)" "Accept: text/html,application/xhtml+xml"
+    assert_contains "accept-language" "$(get_curl_args)" "Accept-Language: en-US,en;q=0.9"
+    assert_contains "accept-encoding full" "$(get_curl_args)" "Accept-Encoding: gzip, deflate, br, zstd"
+    # Canonical wire order: UA is emitted via -H at slot 5, not first (curl -A
+    # would send it first). Verify the surrounding sequence holds
+    assert_curl_arg_order "platform before UA" "sec-ch-ua-platform: \"macOS\"" "User-Agent: Mozilla/5.0"
+    assert_curl_arg_order "upgrade-insecure before UA" "Upgrade-Insecure-Requests: 1" "User-Agent: Mozilla/5.0"
+    assert_curl_arg_order "UA before Accept" "User-Agent: Mozilla/5.0" "Accept: text/html"
+    assert_curl_arg_order "Accept before Accept-Language" "Accept: text/html" "Accept-Language: en-US,en;q=0.9"
+}
+
+test_impersonation_override_wins() {
+    run_script "https://example.com" --target "edge.somesite.com" -H "Accept-Language: fr"
+    assert_rc "override" 0
+    assert_contains "user AL present" "$(get_curl_args)" "Accept-Language: fr"
+    assert_not_contains "no default AL" "$(get_curl_args)" "Accept-Language: en-US,en;q=0.9"
+    assert_curl_arg_count "one Accept-Language value" "Accept-Language: fr" "1"
+}
+
+test_impersonation_ua_backoff() {
+    run_script "https://example.com" --target "edge.somesite.com" -A "curl/8.7.1"
+    assert_rc "backoff" 0
+    assert_contains "user UA present" "$(get_curl_args)" "curl/8.7.1"
+    # All three Chrome client hints suppressed against a non-Chrome UA
+    assert_not_contains "no sec-ch-ua" "$(get_curl_args)" "sec-ch-ua:"
+    assert_not_contains "no sec-ch-ua-mobile" "$(get_curl_args)" "sec-ch-ua-mobile:"
+    assert_not_contains "no sec-ch-ua-platform" "$(get_curl_args)" "sec-ch-ua-platform:"
+    # Neutral headers still sent (client-hint backoff does not drop these)
+    assert_contains "sec-fetch still sent" "$(get_curl_args)" "Sec-Fetch-Mode:"
+    assert_contains "accept still sent" "$(get_curl_args)" "Accept: text/html"
+    assert_contains "accept-language still sent" "$(get_curl_args)" "Accept-Language: en-US,en;q=0.9"
+    assert_contains "accept-encoding still sent" "$(get_curl_args)" "Accept-Encoding: gzip, deflate, br, zstd"
+}
+
+test_impersonation_ua_backoff_combined_h() {
+    # Combined no-space -H form (-HUser-Agent:value) must trigger backoff too,
+    # matching the spaced -H form and -A. Client hints suppressed, rest survives
+    run_script "https://example.com" --target "edge.somesite.com" -H"User-Agent: curl/8.7.1"
+    assert_rc "backoff-combined-h" 0
+    assert_contains "user UA present" "$(get_curl_args)" "User-Agent: curl/8.7.1"
+    assert_not_contains "no sec-ch-ua" "$(get_curl_args)" "sec-ch-ua:"
+    assert_not_contains "no sec-ch-ua-mobile" "$(get_curl_args)" "sec-ch-ua-mobile:"
+    assert_not_contains "no sec-ch-ua-platform" "$(get_curl_args)" "sec-ch-ua-platform:"
+    assert_contains "accept still sent" "$(get_curl_args)" "Accept: text/html"
 }
 
 # --- run ---

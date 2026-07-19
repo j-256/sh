@@ -790,6 +790,154 @@ EOF
         return 1
     }
 
+    # Return 0 if the user already supplied header $1 (case-insensitive, matched
+    # with trailing colon) via -H/--header/--header=/-Hx. Args after -- are the
+    # curl args to scan. Used so pin-dns never double-sends a managed header
+    _user_supplied_header() {
+        local want
+        want="$(LC_ALL=C printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+        shift
+        [ "$1" = "--" ] && shift
+        local a
+        local h
+        local lh
+        while [ "$#" -gt 0 ]; do
+            a="$1"
+            shift
+            h=""
+            case "$a" in
+                -H|--header) h="$1" ;;
+                --header=*) h="${a#*=}" ;;
+                -H?*) h="${a#-H}" ;;
+            esac
+            [ -n "$h" ] || continue
+            lh="$(LC_ALL=C printf '%s' "$h" | tr '[:upper:]' '[:lower:]')"
+            case "$lh" in "$want":*) return 0 ;; esac
+        done
+        return 1
+    }
+
+    # Return 0 if the user supplied a User-Agent (via -A/--user-agent or
+    # -H User-Agent:) whose value does NOT contain "Chrome/". Drives the
+    # backoff that suppresses Chrome client hints against a non-Chrome UA
+    _ua_is_non_chrome() {
+        [ "$1" = "--" ] && shift
+        local a
+        local v
+        while [ "$#" -gt 0 ]; do
+            a="$1"
+            shift
+            v=""
+            case "$a" in
+                -A|--user-agent) v="$1" ;;
+                --user-agent=*) v="${a#*=}" ;;
+                -A?*) v="${a#-A}" ;;
+                -H|--header) v="$1"; case "$(LC_ALL=C printf '%s' "$v" | tr '[:upper:]' '[:lower:]')" in user-agent:*) v="${v#*:}" ;; *) v="" ;; esac ;;
+                --header=*) v="${a#*=}"; case "$(LC_ALL=C printf '%s' "$v" | tr '[:upper:]' '[:lower:]')" in user-agent:*) v="${v#*:}" ;; *) v="" ;; esac ;;
+                -H?*) v="${a#-H}"; case "$(LC_ALL=C printf '%s' "$v" | tr '[:upper:]' '[:lower:]')" in user-agent:*) v="${v#*:}" ;; *) v="" ;; esac ;;
+            esac
+            [ -n "$v" ] || continue
+            case "$v" in *Chrome/*) return 1 ;; *) return 0 ;; esac
+        done
+        return 1
+    }
+
+    # Append the full Chrome header set to the cmd array as -H pairs, in Chrome's
+    # real order. Skips any header the user already supplied (per-header override)
+    # and, if the user's UA is non-Chrome, suppresses the Chrome-only client hints.
+    # Reads globals: platform, fetch_mode, chrome_major, curl_args, cmd
+    _emit_impersonation_headers() {
+        local major="$chrome_major"
+        local plat_hint
+        case "$platform" in
+            mac)   plat_hint="macOS" ;;
+            win)   plat_hint="Windows" ;;
+            linux) plat_hint="Linux" ;;
+            *)     plat_hint="macOS" ;;
+        esac
+
+        local accept
+        local sf_site
+        local sf_mode
+        local sf_dest
+        local want_sf_user_and_uir
+        case "$fetch_mode" in
+            cors)
+                accept="*/*"
+                sf_site="same-origin"
+                sf_mode="cors"
+                sf_dest="empty"
+                want_sf_user_and_uir=""
+                ;;
+            no-cors)
+                accept="*/*"
+                sf_site="same-origin"
+                sf_mode="no-cors"
+                sf_dest="empty"
+                want_sf_user_and_uir=""
+                ;;
+            *)
+                accept="text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+                sf_site="none"
+                sf_mode="navigate"
+                sf_dest="document"
+                want_sf_user_and_uir="1"
+                ;;
+        esac
+
+        local ua_backoff=""
+        _ua_is_non_chrome -- "${curl_args[@]}" && ua_backoff="1"
+
+        # Chrome client hints (suppressed under UA backoff)
+        if [ -z "$ua_backoff" ]; then
+            _user_supplied_header "sec-ch-ua" -- "${curl_args[@]}" || \
+                cmd+=("-H" "sec-ch-ua: \"Chromium\";v=\"$major\", \"Not?A_Brand\";v=\"24\", \"Google Chrome\";v=\"$major\"")
+            _user_supplied_header "sec-ch-ua-mobile" -- "${curl_args[@]}" || \
+                cmd+=("-H" "sec-ch-ua-mobile: ?0")
+            _user_supplied_header "sec-ch-ua-platform" -- "${curl_args[@]}" || \
+                cmd+=("-H" "sec-ch-ua-platform: \"$plat_hint\"")
+        fi
+
+        if [ -n "$want_sf_user_and_uir" ]; then
+            _user_supplied_header "upgrade-insecure-requests" -- "${curl_args[@]}" || \
+                cmd+=("-H" "Upgrade-Insecure-Requests: 1")
+        fi
+
+        # User-Agent emitted here as -H so it lands in Chrome's slot: after
+        # Upgrade-Insecure-Requests for navigate, after the client hints for
+        # cors/no-cors, and before Accept either way. curl -A always sends the
+        # UA first on the wire, so -A cannot produce this order. Skipped when
+        # the user supplied their own UA (via -A or -H, which also covers the
+        # non-Chrome backoff case) so we never double-send
+        if ! _curl_args_has_user_agent "${curl_args[@]}"; then
+            local ua
+            ua="$(_ua_for_platform "$platform" "$major")"
+            cmd+=("-H" "User-Agent: $ua")
+        fi
+
+        _user_supplied_header "accept" -- "${curl_args[@]}" || \
+            cmd+=("-H" "Accept: $accept")
+
+        _user_supplied_header "sec-fetch-site" -- "${curl_args[@]}" || \
+            cmd+=("-H" "Sec-Fetch-Site: $sf_site")
+        _user_supplied_header "sec-fetch-mode" -- "${curl_args[@]}" || \
+            cmd+=("-H" "Sec-Fetch-Mode: $sf_mode")
+        if [ -n "$want_sf_user_and_uir" ]; then
+            _user_supplied_header "sec-fetch-user" -- "${curl_args[@]}" || \
+                cmd+=("-H" "Sec-Fetch-User: ?1")
+        fi
+        _user_supplied_header "sec-fetch-dest" -- "${curl_args[@]}" || \
+            cmd+=("-H" "Sec-Fetch-Dest: $sf_dest")
+
+        # Accept-Encoding: honest full set here; the file-output path (Task 6)
+        # overrides this by using --compressed instead
+        _user_supplied_header "accept-encoding" -- "${curl_args[@]}" || \
+            cmd+=("-H" "Accept-Encoding: gzip, deflate, br, zstd")
+
+        _user_supplied_header "accept-language" -- "${curl_args[@]}" || \
+            cmd+=("-H" "Accept-Language: en-US,en;q=0.9")
+    }
+
     _resolve_target_to_ip() {
         local target="$1"
         local resolver="$2"
@@ -882,6 +1030,8 @@ EOF
     local scheme="https"
     local port="443"
     local platform="mac"
+    local fetch_mode="navigate"
+    local no_impersonate=""
     local dry_run=""
     local no_silent=""
     local quiet=""
@@ -1285,13 +1435,11 @@ EOF
         ip="$resolved"
     fi
 
-    local ua=""
-    if _curl_args_has_user_agent "${curl_args[@]}"; then
-        ua=""
-    else
-        local chrome_major
+    # Resolve the Chrome major whenever impersonation is on; the emitter needs it
+    # for both the sec-ch-ua brand string and the -H User-Agent (emitted in slot)
+    local chrome_major=""
+    if [ -z "$no_impersonate" ]; then
         chrome_major="$(_resolve_chrome_major)"
-        ua="$(_ua_for_platform "$platform" "$chrome_major")"
     fi
 
     # curl -q/--disable must be the very first curl argument to reliably disable curlrc
@@ -1320,8 +1468,11 @@ EOF
         cmd+=("-sS")
     fi
 
-    if [ -n "$ua" ]; then
-        cmd+=("-A" "$ua")
+    # The pin-dns-generated User-Agent is emitted inside _emit_impersonation_headers
+    # as -H at Chrome's canonical position, not via -A (curl -A always sends the UA
+    # first on the wire). A user-supplied -A/-H User-Agent still flows via curl_args
+    if [ -z "$no_impersonate" ]; then
+        _emit_impersonation_headers
     fi
 
     if [ -n "$ip" ]; then
