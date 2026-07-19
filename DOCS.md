@@ -4,6 +4,8 @@ How to write a `<script>.md` doc for a script in this repo.
 
 Every script is available at `https://toolio.sh/<script>` and its docs render at `https://toolio.sh/<script>.md.html`.
 
+The doc is an elaboration layer, not a prerequisite. A reader must be able to use the script from `-h` alone; everything the doc adds beyond `-h` is motivation and depth (the pitch, worked examples, background), never a precondition. A precondition -- a config file's schema, an argument's accepted formats, a required env var's shape -- belongs in `-h`, and the doc may restate it but is never its only home. See [CONVENTIONS.md](CONVENTIONS.md#self-sufficiency) for the full rule and the two-tier enforcement split.
+
 ## Structure
 
 Docs follow this order:

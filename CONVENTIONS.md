@@ -112,7 +112,7 @@ EOF
 }
 ```
 
-Sections (use what's relevant): NAME, SYNOPSIS, DESCRIPTION, OPTIONS, ENVIRONMENT, DEPENDENCIES, EXAMPLES, EXIT STATUS, SEE ALSO, CAVEATS.
+Sections (use what's relevant): NAME, SYNOPSIS, DESCRIPTION, OPTIONS, ENVIRONMENT, FILES, DEPENDENCIES, EXAMPLES, EXIT STATUS, SEE ALSO, CAVEATS. Use `FILES` for a config or data file the script reads or writes -- and when that file has a schema the caller must author (a registry's columns, a config's keys), give the schema there, since it's a precondition (see [Self-sufficiency](#self-sufficiency)).
 
 The heredoc has three constraints worth stating outright:
 
@@ -181,6 +181,23 @@ _foo() {
 The path-based pre-check is deliberate: matching on the full path (`/dev/*`) rather than the basename (which could be `63`, `stdin`, etc.) avoids fragile globs that could misfire on legitimate filenames starting with a digit or literally named `stdin`. The post-basename case only handles the stdin-pipe shape, where basename is `bash` or empty. Real-file invocations pass through both cases untouched, so rename/symlink tracking still works. The canonical name is the one non-user-visible place besides the header comment where the literal filename appears.
 
 Enforced by `tests/meta-curl-pipe.test.sh`, which runs every script through all four pipe/procsub shapes with `--help` and asserts the help output names the script (never `bash` or a `/dev/fd` digit) (see TESTING.md).
+
+## Self-sufficiency
+
+A script from this repo must be usable from the file alone. Someone who has one script and nothing else -- no repo, no `.md`, no network -- should be able to read the header or run `-h`/`--help` and use every command it offers. The `.md` is a prettification and elaboration layer, never a prerequisite for use.
+
+This splits everything a doc could say into two kinds:
+
+- **Preconditions** -- what you must know or construct for a command to succeed and cannot discover from `-h`: a config or input file's schema, the *format* of a required environment variable (not just its name), a credential's shape, an argument's legal values, an ordering constraint between subcommands. A command can't be run correctly without them, so they must live in `-h`. A precondition that lives only in the `.md` breaks self-sufficiency.
+- **Motivation** -- why you'd reach for the script, the sell, realistic worked examples, deeper background, nice-to-know caveats. `-h` carries a compact DESCRIPTION; the `.md` is where the *depth* of these lives, and is the elaboration the doc exists for.
+
+The test for a precondition: *could a reader invoke the command correctly without this?* If not, it goes in `-h`. A required file's columns, an argument's accepted formats (a `--since` that takes `1h`/`30m`/`YYYY-MM-DD`), an env var's expected shape are all preconditions even when they feel like mere detail. Put a file's schema in a `FILES` section; give a variable's format in `ENVIRONMENT`, not just its name.
+
+On the invocation surface -- the set of subcommands, flags, and environment-variable names -- the three surfaces are nested supersets: **header ⊆ `-h` ⊆ `.md`**. The header is a compact subset of `-h`; the `.md` may name everything `-h` does and more. But whatever the `.md` adds beyond `-h` must be motivation, never a precondition: `-h` is already complete for *using* the script, and the `.md` only makes it nicer to learn.
+
+The header carries the invocation *surface* -- name, one-line description, synopsis, options, environment-variable names -- so a reader learns what the script does and how to invoke it without running it. It need not inline a bulky precondition's full *content*: a multi-line file schema or value-format table lives in `-h` only, and the header just names the knob that points to it (e.g. list `DAEMONS_REGISTRY` in the header, put its column layout in `-h`'s `FILES`). Inlining such a table in the header would defeat its role as the compact glance. A precondition small enough to state in a token or two (an argument's `--detail-stdin` form, an enum's values) can go in both; the split is about bulk, not about hiding preconditions from the header.
+
+Enforcement is two-tier. That the header, `-h`, and `.md` name the same flags/subcommands/env vars, and that `-h` documents every option the parser accepts, is mechanical and meta-testable. Whether every *precondition* actually reached `-h` is a semantic judgment no linter can make -- it is a review obligation. A green suite means the surfaces name the same things, not that `-h` suffices to use the script; that second bar is on author and reviewer.
 
 ## Cleanup Trap
 
