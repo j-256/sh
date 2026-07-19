@@ -703,6 +703,69 @@ test_headers_only_no_decode_full_ae() {
     assert_contains "honest AE on head path" "$(get_curl_args)" "Accept-Encoding: gzip, deflate, br, zstd"
 }
 
+test_include_flag_uses_compressed_not_capture() {
+    # -i/--include makes curl write the status line + headers into the body ahead
+    # of the payload. If that entered the capture path, _decode_stdout_body would
+    # run the decoder over the header block and emit garbage on a compressed
+    # response. Route to direct exec + --compressed (curl owns decoding) and skip
+    # the honest full Accept-Encoding, matching the -o file-output treatment
+    run_script "https://example.com" --target "edge.somesite.com" -i
+    assert_rc "include" 0
+    assert_contains "adds --compressed" "$(get_curl_args)" "--compressed"
+    assert_not_contains "no honest full AE on include path" "$(get_curl_args)" "Accept-Encoding: gzip, deflate, br, zstd"
+}
+
+test_include_long_form_uses_compressed() {
+    # --include long form must be recognized the same as -i
+    run_script "https://example.com" --target "edge.somesite.com" --include
+    assert_rc "include-long" 0
+    assert_contains "adds --compressed" "$(get_curl_args)" "--compressed"
+    assert_not_contains "no honest full AE on include path" "$(get_curl_args)" "Accept-Encoding: gzip, deflate, br, zstd"
+}
+
+test_user_dump_header_uses_compressed() {
+    # A user -D/--dump-header must route to direct exec + --compressed instead of
+    # the capture path. The capture path appended its OWN -D temp; real curl honors
+    # only the last -D, so the user's dump was silently clobbered (and the temp
+    # then deleted by the EXIT trap). The shim records args AND writes headers to
+    # the LAST -D, so we can also assert the user's file survives as the sole -D
+    cat > "$SHIM_DIR/curl" <<'SHIM'
+#!/bin/bash
+printf '%s\n' "$@" > "$TEST_DIR/curl.args"
+hdr=""; prev=""
+for a in "$@"; do
+    case "$prev" in -D) hdr="$a" ;; esac
+    prev="$a"
+done
+[ -n "$hdr" ] && printf 'HTTP/2 200\r\n' > "$hdr"
+printf '%s\n' "CURL_OK"
+exit 0
+SHIM
+    chmod +x "$SHIM_DIR/curl"
+    run_script "https://example.com" --target "edge.somesite.com" -D "$TEST_DIR/dump.txt"
+    assert_rc "user-D" 0
+    assert_contains "adds --compressed" "$(get_curl_args)" "--compressed"
+    assert_not_contains "no honest full AE on dump-header path" "$(get_curl_args)" "Accept-Encoding: gzip, deflate, br, zstd"
+    assert_file_exists "user dump file preserved as sole -D" "$TEST_DIR/dump.txt"
+}
+
+test_dump_header_attached_uses_compressed() {
+    # Attached short form -D<file> must be recognized as a user header dump just
+    # like the spaced -D <file> form (mirrors the -o<file> attached-form lesson)
+    run_script "https://example.com" --target "edge.somesite.com" -D"$TEST_DIR/dump.txt"
+    assert_rc "dump-attached" 0
+    assert_contains "adds --compressed" "$(get_curl_args)" "--compressed"
+    assert_not_contains "no honest full AE on dump-header path" "$(get_curl_args)" "Accept-Encoding: gzip, deflate, br, zstd"
+}
+
+test_chrome_major_nonnumeric_rejected() {
+    # --chrome-major is passed verbatim into the UA (Chrome/<major>.0.0.0), so a
+    # non-numeric value must be a usage error rather than emitting Chrome/abc.0.0.0
+    run_script --chrome-major abc "https://example.com" --target "edge.somesite.com"
+    assert_rc "chrome-major-nonnum" 2
+    assert_stderr_contains "chrome-major error" "Invalid --chrome-major"
+}
+
 # --- run ---
 
 run_tests "$@"

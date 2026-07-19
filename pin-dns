@@ -1129,6 +1129,29 @@ EOF
         return 1
     }
 
+    # Return 0 if the user asked for headers inline with the body via -i/--include,
+    # or for a header dump via -D/--dump-header (including the attached -D<file> and
+    # --dump-header=<file> forms). Both idioms break the capture/decode path: -i
+    # prepends the status line + headers to the body file (the decoder would run
+    # over the header block and emit garbage on a compressed response), and the
+    # capture path's own -D temp would clobber the user's -D (curl honors only the
+    # last one). Route both to direct exec + --compressed so curl owns decoding and
+    # the user's dump behaves normally, at the same AE-fingerprint tradeoff as -o.
+    # -I/--head is handled by _curl_args_headers_only, not here
+    _curl_args_wants_raw_headers() {
+        [ "$1" = "--" ] && shift
+        local a
+        while [ "$#" -gt 0 ]; do
+            a="$1"
+            shift
+            case "$a" in
+                -i|--include|-D|--dump-header) return 0 ;;
+                -D?*|--dump-header=*) return 0 ;;
+            esac
+        done
+        return 1
+    }
+
     # Decode $1 (body file) according to $2 (content-encoding token) to stdout.
     # Missing decoder -> warn on stderr, emit raw. Unknown/identity -> emit raw
     _decode_stdout_body() {
@@ -1243,9 +1266,11 @@ EOF
             cmd+=("-H" "Sec-Fetch-Dest: $sf_dest")
 
         # Accept-Encoding: honest full set here so a decode-capable stdout path
-        # advertises what Chrome does. Skipped for file output, where the exec
-        # block adds --compressed instead (curl writes a usable decoded file)
-        if ! _curl_args_write_to_file -- "${curl_args[@]}"; then
+        # advertises what Chrome does. Skipped for file output and for -i/-D
+        # (raw-header idioms), where the exec block adds --compressed instead so
+        # curl writes a usable decoded body rather than pin-dns decoding it
+        if ! _curl_args_write_to_file -- "${curl_args[@]}" \
+            && ! _curl_args_wants_raw_headers -- "${curl_args[@]}"; then
             _user_supplied_header "accept-encoding" -- "${curl_args[@]}" || \
                 cmd+=("-H" "Accept-Encoding: gzip, deflate, br, zstd")
         fi
@@ -1532,6 +1557,17 @@ EOF
         curl|impersonate|auto) ;;
         *) _error "Invalid --engine '$engine' (valid: curl|impersonate|auto). Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
     esac
+    # Validate the effective Chrome major (flag beats env, same precedence as
+    # _resolve_chrome_major). It is interpolated verbatim into the UA as
+    # Chrome/<major>.0.0.0, so a set-but-non-numeric value is a usage error; empty
+    # (e.g. --chrome-major=) falls through to env/local/network/pinned detection.
+    # --chrome-major and PIN_DNS_CHROME_MAJOR are the same knob, so one message covers both
+    local chrome_major_effective="${chrome_major_override:-${PIN_DNS_CHROME_MAJOR:-}}"
+    if [ -n "$chrome_major_effective" ]; then
+        case "$chrome_major_effective" in
+            *[!0-9]*) _error "Invalid --chrome-major '$chrome_major_effective' (must be numeric). Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+        esac
+    fi
 
     # Resolve the request engine. Empty -> stock curl (inject UA + header suite);
     # non-empty -> curl-impersonate (it sets headers + TLS together, so pin-dns
@@ -1862,10 +1898,14 @@ EOF
         _emit_impersonation_headers
     fi
 
-    # File output while impersonating on stock curl: let curl own encoding
-    # (usable saved file); the honest full Accept-Encoding is already skipped
-    # for file output inside _emit_impersonation_headers
-    if [ -z "$no_impersonate" ] && [ -z "$engine_bin" ] && _curl_args_write_to_file -- "${curl_args[@]}"; then
+    # File output or a raw-header idiom (-i/-D) while impersonating on stock curl:
+    # let curl own encoding (usable saved file / decoded inline body); the honest
+    # full Accept-Encoding is already skipped for these inside
+    # _emit_impersonation_headers. Single append so --compressed is added at most
+    # once even when both predicates match (e.g. -i together with -o file)
+    if [ -z "$no_impersonate" ] && [ -z "$engine_bin" ] \
+        && { _curl_args_write_to_file -- "${curl_args[@]}" \
+            || _curl_args_wants_raw_headers -- "${curl_args[@]}"; }; then
         cmd+=("--compressed")
     fi
 
@@ -1924,11 +1964,13 @@ EOF
     fi
 
     # Decide execution mode:
-    #   - impersonate engine, file output, or headers-only -> exec directly
+    #   - impersonate engine, file output, headers-only, or raw-header idioms
+    #     (-i/-D) -> exec directly (curl owns any decoding)
     #   - stock curl + stdout + impersonating -> capture + decode
     if [ -n "$engine_bin" ] || [ -n "$no_impersonate" ] \
         || _curl_args_write_to_file -- "${curl_args[@]}" \
-        || _curl_args_headers_only -- "${curl_args[@]}"; then
+        || _curl_args_headers_only -- "${curl_args[@]}" \
+        || _curl_args_wants_raw_headers -- "${curl_args[@]}"; then
         "${cmd[@]}"
         local curl_rc=$?
         if [ "$curl_rc" -eq 126 ] || [ "$curl_rc" -eq 127 ]; then
