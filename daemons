@@ -2,7 +2,7 @@
 # daemons - observe the homegrown launchd daemons: write/read per-daemon activity logs
 #
 # Usage:
-#   daemons append <name> <event> [detail]   Append one activity record
+#   daemons append <name> <event> [detail|--detail-stdin]   Append one activity record
 #   daemons status                           Summarize all daemons (loaded? last activity + counts)
 #   daemons check                            Health+activity gate (returns nonzero on problem)
 #   daemons log [name|--all] [-f]            Render the log (human-readable)
@@ -32,7 +32,7 @@ _daemons() (
 NAME
   $SCRIPT_NAME - observe the homegrown launchd daemons
 SYNOPSIS
-  $SCRIPT_NAME append <${s}name${r}> <${s}event${r}> [${s}detail${r}]
+  $SCRIPT_NAME append <${s}name${r}> <${s}event${r}> [${s}detail${r}|--detail-stdin]
   $SCRIPT_NAME status
   $SCRIPT_NAME check
   $SCRIPT_NAME log [${s}name${r}|--all] [-f]
@@ -42,14 +42,27 @@ DESCRIPTION
   Each record is {ts, daemon, event, detail}; event is trigger|noop|change|error.
   'append' is the write path daemons call; 'status'/'check'/'log'/'query' read.
 SUBCOMMANDS
-  append   Append one activity record (creates the log dir on first write)
+  append   Append one activity record (creates the log dir on first write). Pass --detail-stdin in place of [detail] to read the detail from stdin
   status   Per-daemon summary: loaded? + last activity (event + timestamp) + all-time event counts; "never fired" when no log
   check    Health+activity gate; nonzero + loud alerts on any problem
   log      Render the log human-readably (--all merges; -f follows)
   query    Filter/extract JSONL by --event/--since/--all/--jq
+           --since accepts NNN[smh] (e.g. 1h, 30m), a bare date YYYY-MM-DD (midnight UTC), or a full ISO-8601 UTC timestamp
 ENVIRONMENT
   DAEMONS_LOG_DIR   Directory of <name>.log files (default: \$XDG_STATE_HOME/daemons or ~/.local/state/daemons)
   DAEMONS_REGISTRY  Registry TSV (default: \$XDG_CONFIG_HOME/daemons/daemons.tsv or ~/.config/daemons/daemons.tsv)
+FILES
+  \$DAEMONS_REGISTRY  Whitespace-separated table that 'status' and 'check' read
+                     (append/log/query don't need it). A header row, then one
+                     row per daemon with four columns:
+                       name    log name; matches the <name> passed to append
+                       domain  launchd domain: gui/\$UID/ (per-user agent; \$UID
+                               is replaced with your numeric uid) or system/
+                       label   launchd label; state read via launchctl print <domain><label>
+                       script  path to the daemon's script; check flags it if missing
+                     Example:
+                       name       domain     label                  script
+                       reconcile  gui/\$UID/  com.example.reconcile  /usr/local/bin/reconcile
 DEPENDENCIES
   jq, launchctl
 EXIT STATUS
