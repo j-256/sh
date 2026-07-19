@@ -63,7 +63,7 @@ The script returns immediately after finding the first match. If no zone is foun
 
 | Flag | Description |
 |---|---|
-| `-j, --jwt, --token` | JWT bearer token for SCAPI authentication |
+| `-j, --jwt` | JWT bearer token for SCAPI authentication |
 | `-s, --shortcode` | SCAPI shortcode (8-character lowercase alphanumeric) |
 | `-r, --realm` | Realm ID (4-character lowercase alphabetic) |
 | `-i, --instance` | Instance identifier (e.g., `prd`, `stg`, `dev`, `s01`-`s99`, `001`-`999`) |

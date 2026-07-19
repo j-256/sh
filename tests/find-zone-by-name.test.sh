@@ -124,12 +124,12 @@ test_target_long_form() {
     assert_stdout_contains "target works" "stg-xxxx-example-com.cc-ecdn.net"
 }
 
-test_token_alias() {
-    run_script --token "eyJ.test.token" -s "kv7kzm78" -r "xxxx" -i "stg" -t "stg-xxxx-example-com"
-    assert_rc "token alias" 0
+test_jwt_long_form() {
+    run_script --jwt "eyJ.test.token" -s "kv7kzm78" -r "xxxx" -i "stg" -t "stg-xxxx-example-com"
+    assert_rc "jwt long form" 0
     local args
     args="$(get_curl_args)"
-    assert_contains "token works" "$args" "Bearer eyJ.test.token"
+    assert_contains "jwt works" "$args" "Bearer eyJ.test.token"
 }
 
 # --- run ---

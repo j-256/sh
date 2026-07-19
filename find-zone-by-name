@@ -111,10 +111,10 @@ EOF
     # Parse command-line options
     while [ $# -gt 0 ]; do
         case "$1" in
-            -j|--jwt|--token)
+            -j|--jwt)
                 [ -n "${2-}" ] || { _error "-j|--jwt requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 jwt="$2"; shift 2 ;;
-            --jwt=*|--token=*)
+            --jwt=*)
                 jwt="${1#*=}"
                 [ -n "$jwt" ] || { _error "-j|--jwt requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift ;;
