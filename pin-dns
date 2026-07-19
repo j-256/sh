@@ -77,6 +77,25 @@
 #     --port PORT
 #         Default: 443. URL arguments may be used to infer port unless --port is set
 #
+#     --platform mac|win|linux
+#         UA shape and Sec-CH-UA-Platform. Default: mac
+#
+#     --fetch-mode navigate|cors|no-cors
+#         Request profile: Accept + Sec-Fetch-* set. Default: navigate
+#         navigate = page load; cors/no-cors = in-page fetch/XHR
+#
+#     --engine curl|impersonate|auto
+#         auto (default) uses curl-impersonate if on PATH, else stock curl
+#         impersonate requires it (exit 3 if absent); curl forces stock curl
+#
+#     --chrome-major N
+#         Pin the Chrome major version; skips all version detection
+#
+#     --no-impersonate
+#         Send a bare request (DNS pin only); emit no impersonation headers
+#         Master off-switch: overrides --engine (impersonate + no-impersonate
+#         is still a bare request, not an error)
+#
 #     --dry-run
 #         Do not execute curl. Print the resolved mapping and the curl command to stderr
 #
@@ -111,20 +130,56 @@
 #        pin-dns adds curl -sS by default. Passing curl -s/-S/--silent/--show-error usually changes nothing
 #        Fix: use --no-silent if you want pin-dns to stop adding -sS
 #
-# USER-AGENT
-#     pin-dns attempts to set a realistic Chrome User-Agent by reading Chrome's Info.plist
-#     If that fails, it falls back to "sfcc-test" and logs the fallback to stderr
-#     You can override this by passing your own -A/--user-agent or -H "User-Agent: ..." to curl
+# IMPERSONATION
+#     By default pin-dns sends a full, internally consistent Chrome request:
+#     User-Agent, client hints (Sec-CH-UA*), Sec-Fetch-* and correctly ordered
+#     Accept / Accept-Encoding / Accept-Language. The Chrome major version is
+#     resolved from the local Chrome install, then Google's Version History API
+#     (cached), then a pinned fallback. Override with --chrome-major
+#
+#     --platform mac|win|linux shapes the UA and Sec-CH-UA-Platform (default mac)
+#     --fetch-mode navigate|cors|no-cors selects the Accept + Sec-Fetch-* profile
+#         navigate (default) models a top-level page load; cors/no-cors model an
+#         in-page fetch/XHR (Accept: */*, no Sec-Fetch-User/Upgrade-Insecure)
+#     --no-impersonate sends a bare request (DNS pin only), no added headers.
+#         It is the master off-switch: --engine impersonate combined with
+#         --no-impersonate still yields a bare request, not an engine error
+#
+#     Any header you pass (-H/-A) wins: pin-dns will not duplicate it. If you set
+#     a non-Chrome User-Agent, the Chrome-only client hints are suppressed so the
+#     request does not contradict itself
+#
+#     TLS/JA3 note: stock curl cannot match Chrome's TLS or HTTP/2 fingerprint,
+#     only its headers. If a curl-impersonate binary is on PATH, pin-dns routes
+#     through it (--engine auto) to also match the TLS/HTTP-2 signature. Force
+#     with --engine impersonate, or disable with --engine curl. Install the real
+#     tool from github.com/lexiforest/curl-impersonate (prebuilt binaries) -- do
+#     NOT install the npm 'curl-impersonate' package, which is an unrelated stub
 #
 # ENVIRONMENT
 #     PIN_DNS_CHROME_APP
 #         Optional override for the Chrome app path used to determine version
 #         Default: /Applications/Google Chrome.app
 #
+#     PIN_DNS_CHROME_MAJOR
+#         Pin the Chrome major (same as --chrome-major; flag wins)
+#
+#     PIN_DNS_UA_OFFLINE
+#         Disable the network version fallback
+#
+#     PIN_DNS_UA_CACHE_TTL
+#         Version-cache freshness in seconds (default 86400)
+#
+#     PIN_DNS_VERSION_API_URL
+#         Override the Chrome Version History API base URL (advanced/testing)
+#
+#     XDG_CACHE_HOME
+#         Cache root; the version cache lives under $XDG_CACHE_HOME/pin-dns
+#
 # EXIT STATUS
 #     0   Success
 #     2   Usage / argument error
-#     3   Dependency error (e.g. curl missing; dig missing when TARGET is a hostname)
+#     3   Dependency error (e.g. curl missing; dig missing when TARGET is a hostname; or --engine impersonate set but curl-impersonate not on PATH)
 #     4   Resolution error (dig returned no A/AAAA result)
 #
 _pin_dns() (
@@ -231,6 +286,25 @@ OPTIONS
     --port PORT
         Default: 443. URL arguments may be used to infer port unless --port is set.
 
+    --platform mac|win|linux
+        UA shape and Sec-CH-UA-Platform. Default: mac
+
+    --fetch-mode navigate|cors|no-cors
+        Request profile: Accept + Sec-Fetch-* set. Default: navigate
+        navigate = page load; cors/no-cors = in-page fetch/XHR
+
+    --engine curl|impersonate|auto
+        auto (default) uses curl-impersonate if on PATH, else stock curl.
+        impersonate requires it (exit 3 if absent); curl forces stock curl
+
+    --chrome-major N
+        Pin the Chrome major version; skips all version detection
+
+    --no-impersonate
+        Send a bare request (DNS pin only); emit no impersonation headers.
+        Master off-switch: --engine impersonate + --no-impersonate is still
+        a bare request, not an engine error
+
     --dry-run
         Do not execute curl. Print the resolved mapping and the curl command to stderr.
 
@@ -264,24 +338,55 @@ WARNINGS THAT PREVENT MISUSE
        $SCRIPT_NAME adds curl -sS by default. Passing curl -s/-S/--silent/--show-error usually changes nothing.
        Fix: use --no-silent if you want $SCRIPT_NAME to stop adding -sS.
 
-USER-AGENT
-    $SCRIPT_NAME attempts to set a realistic Chrome User-Agent by reading Chrome's Info.plist.
-    If that fails, it falls back to "sfcc-test" and logs the fallback to stderr.
-    You can override this by passing your own -A/--user-agent or -H "User-Agent: ..." to curl.
+IMPERSONATION
+    By default $SCRIPT_NAME sends a full, internally consistent Chrome request:
+    User-Agent, client hints (Sec-CH-UA*), Sec-Fetch-* and correctly ordered
+    Accept / Accept-Encoding / Accept-Language. The Chrome major is resolved from
+    the local Chrome install, then Google's Version History API (cached), then a
+    pinned fallback. Shape it with --platform and --fetch-mode; pin the version
+    with --chrome-major; turn it all off with --no-impersonate.
+
+    Any header you pass (-H/-A) wins and is never duplicated. A non-Chrome
+    User-Agent suppresses the Chrome-only client hints so the request stays
+    self-consistent.
+
+    Stock curl matches Chrome's headers but not its TLS/JA3 or HTTP/2
+    fingerprint. If a curl-impersonate binary is on PATH, --engine auto routes
+    through it to match those too; --engine impersonate requires it, --engine
+    curl forces stock curl. Install the real tool from
+    github.com/lexiforest/curl-impersonate (prebuilt binaries) -- do NOT install
+    the npm 'curl-impersonate' package, which is an unrelated stub.
 
 ENVIRONMENT
     PIN_DNS_CHROME_APP
         Optional override for the Chrome app path used to determine version.
         Default: /Applications/Google Chrome.app
 
+    PIN_DNS_CHROME_MAJOR
+        Pin the Chrome major (same as --chrome-major; flag wins)
+
+    PIN_DNS_UA_OFFLINE
+        Disable the network version fallback
+
+    PIN_DNS_UA_CACHE_TTL
+        Version-cache freshness in seconds (default 86400)
+
+    PIN_DNS_VERSION_API_URL
+        Override the Chrome Version History API base URL (advanced/testing)
+
+    XDG_CACHE_HOME
+        Cache root; the version cache lives under \$XDG_CACHE_HOME/pin-dns (default \$HOME/.cache/pin-dns)
+
 DEPENDENCIES
     curl
     dig (required only when TARGET is a hostname that must be resolved)
+    jq (only for the network version fallback)
+    brotli / zstd (only to decode those encodings on stdout; absence warns and emits raw)
 
 EXIT STATUS
     0   Success
     2   Usage / argument error
-    3   Dependency error (e.g. curl missing; dig missing when TARGET is a hostname)
+    3   Dependency error (e.g. curl missing; dig missing when TARGET is a hostname; or --engine impersonate set but curl-impersonate not on PATH)
     4   Resolution error (dig returned no A/AAAA result)
 
 EOF

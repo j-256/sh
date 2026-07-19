@@ -154,6 +154,10 @@ test_help_output() {
     assert_rc "help exits 0" 0
     assert_stderr_contains "help has NAME" "NAME"
     assert_stderr_contains "help has ARGUMENT HANDLING" "ARGUMENT HANDLING"
+    assert_stderr_contains "help documents impersonation" "IMPERSONATION"
+    assert_stderr_contains "help lists --fetch-mode" "--fetch-mode"
+    assert_stderr_contains "help lists --engine" "--engine"
+    assert_stderr_contains "help lists --no-impersonate" "--no-impersonate"
 }
 
 test_drop_in_url_hostname_target() {

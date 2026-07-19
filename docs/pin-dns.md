@@ -101,6 +101,54 @@ If TARGET is omitted, pin-dns runs curl normally (no `--resolve`), which is fine
 | Scheme | `https` | `--scheme http` or pass an `http://` URL |
 | Port | `443` (or `80` for http) | `--port 8080` or include port in URL |
 
+## Browser impersonation
+
+By default `pin-dns` sends a full, internally consistent Chrome request, not just
+a User-Agent: client hints (`Sec-CH-UA*`), `Sec-Fetch-*`, and correctly ordered
+`Accept` / `Accept-Encoding` / `Accept-Language`. This defeats header-based bot
+filtering. The Chrome major version is resolved from your local Chrome install,
+falling back to Google's Version History API (cached under
+`$XDG_CACHE_HOME/pin-dns` (default `$HOME/.cache/pin-dns`)), then a pinned constant.
+
+```bash
+# Full Chrome headers, navigate profile (default)
+pin-dns https://example.com edge.example.com
+
+# API/XHR profile for a JSON endpoint
+pin-dns --fetch-mode cors https://api.example.com/v1/things edge.example.com
+
+# Impersonate a Windows Chrome
+pin-dns --platform win https://example.com edge.example.com
+
+# Bare request, no impersonation
+pin-dns --no-impersonate https://example.com edge.example.com
+```
+
+Any header you pass wins (pin-dns never duplicates it). A non-Chrome `-A`/`User-Agent`
+suppresses the Chrome-only client hints so the request stays self-consistent.
+
+`--no-impersonate` is the master off-switch: combining `--engine impersonate` with
+`--no-impersonate` produces a bare request rather than an engine error, because
+`--no-impersonate` wins.
+
+For a decodable stdout response, `pin-dns` advertises `Accept-Encoding: gzip, deflate, br, zstd`
+and decodes the body before printing. On macOS, `deflate` is best-effort: the system has no
+standalone raw-deflate decoder, so a `deflate`-encoded body may be emitted raw. `gzip` decodes
+with the system tool; `br` and `zstd` decode only when the `brotli`/`zstd` binaries are installed
+(otherwise the raw body is emitted with a warning).
+
+### TLS fingerprinting (curl-impersonate)
+
+Stock curl matches Chrome's *headers* but not its *TLS/JA3 or HTTP-2 fingerprint*.
+Advanced detectors (Akamai, DataDome, some Cloudflare modes) check those. To defeat
+them, install [`lexiforest/curl-impersonate`](https://github.com/lexiforest/curl-impersonate)
+(prebuilt binaries on its Releases page). When a `curl-impersonate` binary is on your
+`PATH`, `pin-dns` uses it automatically (`--engine auto`) to match the TLS + HTTP-2
+signature as well; `--engine impersonate` requires it, `--engine curl` forces stock curl.
+
+> **Warning:** the npm package named `curl-impersonate` (v0.0.0) is an unrelated stub,
+> not the real tool. Do not install it. Use the GitHub Releases binaries.
+
 ## Argument placement
 
 A bare hostname or IP anywhere in the arguments is recognized as the target -- put it wherever is convenient:
@@ -131,6 +179,11 @@ pin-dns --target origin.example.net -- https://www.example.com -v
 | `--resolver DNS_SERVER_IP` | DNS server for `dig` to use when resolving TARGET |
 | `--scheme SCHEME` | URL scheme (default: `https`) |
 | `--port PORT` | Port (default: `443`) |
+| `--platform mac\|win\|linux` | UA shape and `Sec-CH-UA-Platform` (default: `mac`) |
+| `--fetch-mode navigate\|cors\|no-cors` | Request profile: `Accept` + `Sec-Fetch-*` set (default: `navigate`). `navigate` = page load; `cors`/`no-cors` = in-page fetch/XHR |
+| `--engine curl\|impersonate\|auto` | `auto` (default) uses curl-impersonate if on `PATH`, else stock curl. `impersonate` requires it (exit 3 if absent); `curl` forces stock curl |
+| `--chrome-major N` | Pin the Chrome major version; skips all version detection |
+| `--no-impersonate` | Send a bare request (DNS pin only); emit no impersonation headers. Master off-switch (overrides `--engine`) |
 | `--dry-run` | Print the curl command without executing |
 | `--no-silent` | Don't add `curl -sS` |
 | `-q, --quiet` | Suppress info/warning messages (errors still shown) |
@@ -174,6 +227,11 @@ pin-dns host target host/path                          # host/path (host strippe
 | Variable | Description |
 |---|---|
 | `PIN_DNS_CHROME_APP` | Override Chrome app path for User-Agent detection. Default: `/Applications/Google Chrome.app` |
+| `PIN_DNS_CHROME_MAJOR` | Pin the Chrome major (same as `--chrome-major`; the flag wins) |
+| `PIN_DNS_UA_OFFLINE` | Disable the network version fallback (Version History API) |
+| `PIN_DNS_UA_CACHE_TTL` | Version-cache freshness in seconds. Default: `86400` |
+| `PIN_DNS_VERSION_API_URL` | Override the Chrome Version History API base URL (advanced/testing) |
+| `XDG_CACHE_HOME` | Cache root; the version cache lives under `$XDG_CACHE_HOME/pin-dns` (default `$HOME/.cache/pin-dns`) |
 
 ### Exit codes
 
@@ -181,14 +239,17 @@ pin-dns host target host/path                          # host/path (host strippe
 |---|---|
 | `0` | Success |
 | `2` | Usage / argument error |
-| `3` | Dependency error (curl or dig missing) |
+| `3` | Dependency error (curl or dig missing; or --engine impersonate set but curl-impersonate not on PATH) |
 | `4` | Resolution error (dig returned no results for TARGET) |
 
 ### Dependencies
 
 - `curl` (required)
 - `dig` (required only when TARGET is a hostname, not when it's an IP)
-- Google Chrome (for User-Agent detection; falls back to `sfcc-test` if unavailable)
+- Google Chrome (for local version detection; falls back to the Version History API, then a pinned major, if unavailable)
+- `jq` (only for the network version fallback)
+- `brotli` / `zstd` (only to decode those encodings on stdout; absence warns and emits raw)
+- `curl-impersonate` (optional; enables TLS/HTTP-2 fingerprint matching -- see [Browser impersonation](#browser-impersonation))
 
 ### Warnings
 
