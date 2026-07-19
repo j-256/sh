@@ -10,7 +10,7 @@
 #   -s, --shortcode SCAPI shortcode (required unless J_SHORTCODE is set)
 #   -r, --realm     Realm ID (required unless J_REALM is set)
 #   -i, --instance  Instance name (required unless J_INSTANCE is set)
-#   -n, --name      Target zone name substring (required unless J_TARGET is set)
+#   -t, --target    Target zone name substring (required unless J_TARGET is set)
 #   -h, --help      Show this help message
 #
 # Environment:
@@ -37,7 +37,7 @@ _find_zone_by_name() (
 NAME
   $SCRIPT_NAME - Salesforce Commerce Cloud SCAPI helper for finding a CDN zone by name
 SYNOPSIS
-  $SCRIPT_NAME -j ${s}jwt${r} -s ${s}shortcode${r} -r ${s}realm${r} -i ${s}instance${r} -n ${s}name${r}
+  $SCRIPT_NAME -j ${s}jwt${r} -s ${s}shortcode${r} -r ${s}realm${r} -i ${s}instance${r} -t ${s}name${r}
   J_JWT=... J_SHORTCODE=... J_REALM=... J_INSTANCE=... J_TARGET=... $SCRIPT_NAME
   $SCRIPT_NAME -h
 DESCRIPTION
@@ -51,15 +51,14 @@ OPTIONS
   -s, --shortcode ${s}shortcode${r}  SCAPI shortcode (required unless J_SHORTCODE set)
   -r, --realm ${s}realm${r}          Realm ID (required unless J_REALM set)
   -i, --instance ${s}instance${r}    Instance name (required unless J_INSTANCE set)
-  -n, --name ${s}name${r}            Target zone name substring (required unless J_TARGET set)
-  -t, --target ${s}name${r}          Alias for -n/--name
+  -t, --target ${s}name${r}          Target zone name substring (required unless J_TARGET set)
   -h, --help                 Show this help message
 ENVIRONMENT
   J_JWT        JWT bearer token (default for -j/--jwt)
   J_SHORTCODE  SCAPI shortcode (default for -s/--shortcode)
   J_REALM      Realm ID (default for -r/--realm)
   J_INSTANCE   Instance name (default for -i/--instance)
-  J_TARGET     Zone name substring (default for -n/--name)
+  J_TARGET     Zone name substring (default for -t/--target)
 DEPENDENCIES
   curl, jq
 EXIT STATUS
@@ -106,7 +105,7 @@ EOF
     local instance="$J_INSTANCE"
     local target="$J_TARGET"
 
-    _expand_short_opts "jsrint" "$@"
+    _expand_short_opts "jsrit" "$@"
     set -- "${_EXPANDED[@]}"; unset _EXPANDED
 
     # Parse command-line options
@@ -140,12 +139,12 @@ EOF
                 instance="${1#*=}"
                 [ -n "$instance" ] || { _error "-i|--instance requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift ;;
-            -n|--name|-t|--target)
-                [ -n "${2-}" ] || { _error "-n|--name requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+            -t|--target)
+                [ -n "${2-}" ] || { _error "-t|--target requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 target="$2"; shift 2 ;;
-            --name=*|--target=*)
+            --target=*)
                 target="${1#*=}"
-                [ -n "$target" ] || { _error "-n|--name requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                [ -n "$target" ] || { _error "-t|--target requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift ;;
             -h|--help)
                 _show_help
@@ -172,7 +171,7 @@ EOF
         return 2
     fi
     if [ -z "$target" ]; then
-        _error "target is required (use -n or J_TARGET). Run \`$SCRIPT_NAME -h\` for usage"
+        _error "target is required (use -t or J_TARGET). Run \`$SCRIPT_NAME -h\` for usage"
         return 2
     fi
 

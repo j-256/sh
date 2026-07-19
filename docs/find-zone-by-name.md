@@ -9,7 +9,7 @@ Useful when you remember part of a zone name but not the full hostname, or when 
 ## Quick start
 
 ```
-$ find-zone-by-name -s kv7kzm78 -r abcd -i stg -n example -j eyJ...
+$ find-zone-by-name -s kv7kzm78 -r abcd -i stg -t example -j eyJ...
 {
   "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "name": "stg-abcd-example-com.cc-ecdn.net",
@@ -23,7 +23,7 @@ $ find-zone-by-name -s kv7kzm78 -r abcd -i stg -n example -j eyJ...
 **Search for a zone by substring** (finds any zone whose name contains "staging"):
 
 ```bash
-find-zone-by-name -s kv7kzm78 -r abcd -i stg -n staging -j eyJ...
+find-zone-by-name -s kv7kzm78 -r abcd -i stg -t staging -j eyJ...
 ```
 
 **Use environment variables instead of flags:**
@@ -41,7 +41,7 @@ find-zone-by-name
 **Search for production zones:**
 
 ```bash
-find-zone-by-name -s kv7kzm78 -r abcd -i prd -n example -j eyJ...
+find-zone-by-name -s kv7kzm78 -r abcd -i prd -t example -j eyJ...
 ```
 
 ## Output format
@@ -67,7 +67,7 @@ The script returns immediately after finding the first match. If no zone is foun
 | `-s, --shortcode` | SCAPI shortcode (8-character lowercase alphanumeric) |
 | `-r, --realm` | Realm ID (4-character lowercase alphabetic) |
 | `-i, --instance` | Instance identifier (e.g., `prd`, `stg`, `dev`, `s01`-`s99`, `001`-`999`) |
-| `-n, --name, -t, --target` | Zone name substring to search for (case-sensitive, partial match) |
+| `-t, --target` | Zone name substring to search for (case-sensitive, partial match) |
 | `-h, --help` | Show help message |
 
 All options except `-h`/`--help` are required unless the corresponding environment variable is set.
@@ -80,7 +80,7 @@ All options except `-h`/`--help` are required unless the corresponding environme
 | `J_SHORTCODE` | SCAPI shortcode (alternative to `-s`/`--shortcode`) |
 | `J_REALM` | Realm ID (alternative to `-r`/`--realm`) |
 | `J_INSTANCE` | Instance identifier (alternative to `-i`/`--instance`) |
-| `J_TARGET` | Zone name substring (alternative to `-n`/`--name`) |
+| `J_TARGET` | Zone name substring (alternative to `-t`/`--target`) |
 
 ### Exit codes
 

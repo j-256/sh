@@ -54,25 +54,25 @@ test_help_output() {
 }
 
 test_missing_jwt() {
-    run_script -s "kv7kzm78" -r "xxxx" -i "stg" -n "example.com"
+    run_script -s "kv7kzm78" -r "xxxx" -i "stg" -t "example.com"
     assert_rc "missing jwt" 2
     assert_stderr_contains "missing jwt error" "jwt is required"
 }
 
 test_missing_shortcode() {
-    run_script -j "eyJ.test.token" -r "xxxx" -i "stg" -n "example.com"
+    run_script -j "eyJ.test.token" -r "xxxx" -i "stg" -t "example.com"
     assert_rc "missing shortcode" 2
     assert_stderr_contains "missing shortcode error" "shortcode is required"
 }
 
 test_missing_realm() {
-    run_script -j "eyJ.test.token" -s "kv7kzm78" -i "stg" -n "example.com"
+    run_script -j "eyJ.test.token" -s "kv7kzm78" -i "stg" -t "example.com"
     assert_rc "missing realm" 2
     assert_stderr_contains "missing realm error" "realm is required"
 }
 
 test_missing_instance() {
-    run_script -j "eyJ.test.token" -s "kv7kzm78" -r "xxxx" -n "example.com"
+    run_script -j "eyJ.test.token" -s "kv7kzm78" -r "xxxx" -t "example.com"
     assert_rc "missing instance" 2
     assert_stderr_contains "missing instance error" "instance is required"
 }
@@ -90,14 +90,14 @@ test_invalid_option() {
 }
 
 test_find_zone_happy_path() {
-    run_script -j "eyJ.test.token" -s "kv7kzm78" -r "xxxx" -i "stg" -n "stg-xxxx-example-com"
+    run_script -j "eyJ.test.token" -s "kv7kzm78" -r "xxxx" -i "stg" -t "stg-xxxx-example-com"
     assert_rc "finds zone" 0
     assert_stdout_contains "outputs zone" "zone-target"
     assert_stdout_contains "outputs name" "stg-xxxx-example-com.cc-ecdn.net"
 }
 
 test_url_construction() {
-    run_script -j "eyJ.test.token" -s "kv7kzm78" -r "abcd" -i "prd" -n "stg-xxxx-example-com"
+    run_script -j "eyJ.test.token" -s "kv7kzm78" -r "abcd" -i "prd" -t "stg-xxxx-example-com"
     assert_rc "url construction" 0
     local args
     args="$(get_curl_args)"
@@ -107,7 +107,7 @@ test_url_construction() {
 }
 
 test_curl_options() {
-    run_script -j "eyJ.test.token" -s "kv7kzm78" -r "xxxx" -i "stg" -n "stg-xxxx-example-com"
+    run_script -j "eyJ.test.token" -s "kv7kzm78" -r "xxxx" -i "stg" -t "stg-xxxx-example-com"
     assert_rc "curl options" 0
     local args
     args="$(get_curl_args)"
@@ -118,14 +118,14 @@ test_curl_options() {
     assert_contains "auth header" "$args" "Authorization: Bearer eyJ.test.token"
 }
 
-test_target_alias() {
-    run_script -j "eyJ.test.token" -s "kv7kzm78" -r "xxxx" -i "stg" -t "stg-xxxx-example-com"
-    assert_rc "target alias" 0
+test_target_long_form() {
+    run_script -j "eyJ.test.token" -s "kv7kzm78" -r "xxxx" -i "stg" --target "stg-xxxx-example-com"
+    assert_rc "target long form" 0
     assert_stdout_contains "target works" "stg-xxxx-example-com.cc-ecdn.net"
 }
 
 test_token_alias() {
-    run_script --token "eyJ.test.token" -s "kv7kzm78" -r "xxxx" -i "stg" -n "stg-xxxx-example-com"
+    run_script --token "eyJ.test.token" -s "kv7kzm78" -r "xxxx" -i "stg" -t "stg-xxxx-example-com"
     assert_rc "token alias" 0
     local args
     args="$(get_curl_args)"
