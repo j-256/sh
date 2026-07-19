@@ -397,6 +397,52 @@ test_impersonation_ua_backoff_combined_h() {
     assert_contains "accept still sent" "$(get_curl_args)" "Accept: text/html"
 }
 
+test_flag_platform_win() {
+    run_script --platform win "https://example.com" --target "edge.somesite.com"
+    assert_rc "platform-win" 0
+    assert_contains "win UA" "$(get_curl_args)" "Windows NT 10.0; Win64; x64"
+    assert_contains "win hint" "$(get_curl_args)" "sec-ch-ua-platform: \"Windows\""
+}
+
+test_flag_fetch_mode_cors() {
+    run_script --fetch-mode cors "https://example.com" --target "edge.somesite.com"
+    assert_rc "fetch-cors" 0
+    assert_contains "accept star" "$(get_curl_args)" "Accept: */*"
+    assert_contains "sf-mode cors" "$(get_curl_args)" "Sec-Fetch-Mode: cors"
+    assert_contains "sf-dest empty" "$(get_curl_args)" "Sec-Fetch-Dest: empty"
+    assert_not_contains "no sf-user in cors" "$(get_curl_args)" "Sec-Fetch-User"
+    assert_not_contains "no UIR in cors" "$(get_curl_args)" "Upgrade-Insecure-Requests"
+}
+
+test_flag_no_impersonate() {
+    run_script --no-impersonate "https://example.com" --target "edge.somesite.com"
+    assert_rc "no-imp" 0
+    assert_not_contains "no sec-ch-ua" "$(get_curl_args)" "sec-ch-ua"
+    assert_not_contains "no sec-fetch" "$(get_curl_args)" "Sec-Fetch"
+    assert_not_contains "no injected UA" "$(get_curl_args)" "Chrome/"
+    assert_contains "still pins DNS" "$(get_curl_args)" "--resolve"
+}
+
+test_flag_chrome_major_beats_env() {
+    export PIN_DNS_CHROME_MAJOR="111"
+    run_script --chrome-major 222 "https://example.com" --target "edge.somesite.com"
+    assert_rc "major-flag" 0
+    assert_contains "flag major wins" "$(get_curl_args)" "Chrome/222.0.0.0"
+}
+
+test_flag_platform_invalid() {
+    run_script --platform bsd "https://example.com" --target "edge.somesite.com"
+    assert_rc "bad-platform" 2
+    assert_stderr_contains "platform error" "Invalid --platform"
+}
+
+test_flag_equals_form() {
+    run_script --platform=linux "https://example.com" --target "edge.somesite.com"
+    assert_rc "eq-form" 0
+    assert_contains "linux UA" "$(get_curl_args)" "X11; Linux x86_64"
+    assert_contains "linux platform hint" "$(get_curl_args)" 'sec-ch-ua-platform: "Linux"'
+}
+
 # --- run ---
 
 run_tests "$@"

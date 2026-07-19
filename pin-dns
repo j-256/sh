@@ -640,10 +640,10 @@ EOF
     _looks_like_pin_dns_option_token() {
         local a="$1"
         case "$a" in
-            -h|--help|-q|--quiet|--curlrc|--dry-run|--no-silent)
+            -h|--help|-q|--quiet|--curlrc|--dry-run|--no-silent|--no-impersonate)
                 return 0
                 ;;
-            --host|--host=*|--target|--target=*|--path|--path=*|--resolver|--resolver=*|--scheme|--scheme=*|--port|--port=*)
+            --host|--host=*|--target|--target=*|--path|--path=*|--resolver|--resolver=*|--scheme|--scheme=*|--port|--port=*|--platform|--platform=*|--fetch-mode|--fetch-mode=*|--engine|--engine=*|--chrome-major|--chrome-major=*)
                 return 0
                 ;;
         esac
@@ -725,14 +725,15 @@ EOF
     }
 
     # Resolve the Chrome major to impersonate. Precedence (cache steps added later):
-    #   1. PIN_DNS_CHROME_MAJOR env (explicit override)
+    #   1. --chrome-major flag (chrome_major_override), else PIN_DNS_CHROME_MAJOR env
     #   2. local Chrome read
     #   3. Version History API (unless PIN_DNS_UA_OFFLINE)
     #   4. pinned fallback
     # Reads global `platform`. Always prints a major and returns 0
     _resolve_chrome_major() {
-        if [ -n "${PIN_DNS_CHROME_MAJOR:-}" ]; then
-            printf '%s\n' "$PIN_DNS_CHROME_MAJOR"
+        local override="${chrome_major_override:-${PIN_DNS_CHROME_MAJOR:-}}"
+        if [ -n "$override" ]; then
+            printf '%s\n' "$override"
             return 0
         fi
         local m
@@ -1032,6 +1033,8 @@ EOF
     local platform="mac"
     local fetch_mode="navigate"
     local no_impersonate=""
+    local engine="auto"
+    local chrome_major_override=""
     local dry_run=""
     local no_silent=""
     local quiet=""
@@ -1107,6 +1110,11 @@ EOF
                 i=$((i + 1))
                 continue
                 ;;
+            --no-impersonate)
+                no_impersonate="1"
+                i=$((i + 1))
+                continue
+                ;;
             --host=*)
                 host="${arg#*=}"
                 host_set_explicit="1"
@@ -1140,7 +1148,27 @@ EOF
                 i=$((i + 1))
                 continue
                 ;;
-            --host|--target|--path|--resolver|--scheme|--port)
+            --platform=*)
+                platform="${arg#*=}"
+                i=$((i + 1))
+                continue
+                ;;
+            --fetch-mode=*)
+                fetch_mode="${arg#*=}"
+                i=$((i + 1))
+                continue
+                ;;
+            --engine=*)
+                engine="${arg#*=}"
+                i=$((i + 1))
+                continue
+                ;;
+            --chrome-major=*)
+                chrome_major_override="${arg#*=}"
+                i=$((i + 1))
+                continue
+                ;;
+            --host|--target|--path|--resolver|--scheme|--port|--platform|--fetch-mode|--engine|--chrome-major)
                 local opt="$arg"
                 i=$((i + 1))
                 if [ "$i" -ge "${#pre_args[@]}" ]; then
@@ -1155,6 +1183,10 @@ EOF
                     --resolver) resolver="$val" ;;
                     --scheme) scheme="$val"; scheme_set_explicit="1" ;;
                     --port) port="$val"; port_set_explicit="1" ;;
+                    --platform) platform="$val" ;;
+                    --fetch-mode) fetch_mode="$val" ;;
+                    --engine) engine="$val" ;;
+                    --chrome-major) chrome_major_override="$val" ;;
                 esac
                 i=$((i + 1))
                 continue
@@ -1171,6 +1203,20 @@ EOF
 
     # Combine pre and post curl args
     curl_args=("${rest_pre_args[@]}" "${post_args[@]}")
+
+    # Validate impersonation enum flags (bad value -> usage error)
+    case "$platform" in
+        mac|win|linux) ;;
+        *) _error "Invalid --platform '$platform' (valid: mac|win|linux). Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+    esac
+    case "$fetch_mode" in
+        navigate|cors|no-cors) ;;
+        *) _error "Invalid --fetch-mode '$fetch_mode' (valid: navigate|cors|no-cors). Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+    esac
+    case "$engine" in
+        curl|impersonate|auto) ;;
+        *) _error "Invalid --engine '$engine' (valid: curl|impersonate|auto). Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+    esac
 
     # WARNING: useless -s / -S (only warn when pin-dns is still adding -sS)
     if [ -z "$no_silent" ] && _curl_args_has_silent_controls "${curl_args[@]}"; then
