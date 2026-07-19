@@ -683,6 +683,9 @@ EOF
     # Last set: 2026-04, Chrome stable 148
     local PIN_DNS_FALLBACK_MAJOR="148"
 
+    local PIN_DNS_CACHE_VERSION="1"
+    local MAX_STALE_SECS="7776000" # 90 days -- past this a cached major is not credibly "current"
+
     # Frozen reduced-UA shape per platform (Chrome reduced-UA policy)
     # https://developer.chrome.com/docs/privacy-security/user-agent-client-hints#user-agent-reduction
     _ua_for_platform() {
@@ -712,6 +715,102 @@ EOF
         printf '%s\n' "${ver%%.*}"
     }
 
+    _now_epoch() { date +%s; }
+
+    _cache_path() {
+        local root="${XDG_CACHE_HOME:-$HOME/.cache}/pin-dns"
+        printf '%s/chrome-major.%s\n' "$root" "$platform"
+    }
+
+    # Read one field from a key=value cache file. $1=file $2=key
+    _cache_field() {
+        local f="$1"
+        local k="$2"
+        local line
+        while IFS= read -r line; do
+            case "$line" in "$k="*) printf '%s\n' "${line#*=}"; return 0 ;; esac
+        done < "$f"
+        return 1
+    }
+
+    # Validate a cache file's structural integrity (version + platform match)
+    # Returns 0 and prints the major on structural validity; 1 otherwise
+    # Freshness is the caller's concern (fresh vs stale-if-error)
+    _cache_valid_major() {
+        local f="$1"
+        [ -f "$f" ] || return 1
+        local cv
+        cv="$(_cache_field "$f" cacheVersion)" || return 1
+        [ "$cv" = "$PIN_DNS_CACHE_VERSION" ] || return 1
+        local cp
+        cp="$(_cache_field "$f" platform)" || return 1
+        [ "$cp" = "$platform" ] || return 1
+        local mj
+        mj="$(_cache_field "$f" major)" || return 1
+        case "$mj" in ''|*[!0-9]*) return 1 ;; esac
+        printf '%s\n' "$mj"
+        return 0
+    }
+
+    # Fresh cache: structurally valid AND now < expiresAt
+    _cache_read() {
+        local f
+        f="$(_cache_path)"
+        local mj
+        mj="$(_cache_valid_major "$f")" || return 1
+        local exp
+        exp="$(_cache_field "$f" expiresAt)" || return 1
+        case "$exp" in ''|*[!0-9]*) return 1 ;; esac
+        local now
+        now="$(_now_epoch)"
+        [ "$now" -lt "$exp" ] || return 1
+        printf '%s\n' "$mj"
+        return 0
+    }
+
+    # Stale-if-error cache: structurally valid AND (now - fetchedAt) <= MAX_STALE_SECS
+    _cache_read_stale() {
+        local f
+        f="$(_cache_path)"
+        local mj
+        mj="$(_cache_valid_major "$f")" || return 1
+        local fetched
+        fetched="$(_cache_field "$f" fetchedAt)" || return 1
+        case "$fetched" in ''|*[!0-9]*) return 1 ;; esac
+        local now
+        now="$(_now_epoch)"
+        local age=$((now - fetched))
+        [ "$age" -le "$MAX_STALE_SECS" ] || return 1
+        printf '%s\n' "$mj"
+        return 0
+    }
+
+    _cache_write() {
+        local major="$1"
+        local f
+        f="$(_cache_path)"
+        local dir="${f%/*}"
+        mkdir -p "$dir" 2>/dev/null || return 1
+        local ttl="${PIN_DNS_UA_CACHE_TTL:-86400}"
+        case "$ttl" in ''|*[!0-9]*) ttl="86400" ;; esac
+        local now
+        now="$(_now_epoch)"
+        local exp=$((now + ttl))
+        local tmp
+        tmp="$(mktemp "$dir/.chrome-major.XXXXXX" 2>/dev/null)" || return 1
+        {
+            printf 'cacheVersion=%s\n' "$PIN_DNS_CACHE_VERSION"
+            printf 'source=versionhistory-api\n'
+            printf 'platform=%s\n' "$platform"
+            printf 'major=%s\n' "$major"
+            printf 'fetchedAt=%s\n' "$now"
+            printf 'ttl=%s\n' "$ttl"
+            printf 'expiresAt=%s\n' "$exp"
+        } > "$tmp"
+        mv -f "$tmp" "$f" 2>/dev/null || { rm -f "$tmp"; return 1; }
+        return 0
+    }
+
     # Read the local Chrome major via defaults (macOS). Prints major or returns 1
     _local_chrome_major() {
         local app_default="/Applications/Google Chrome.app"
@@ -724,29 +823,47 @@ EOF
         printf '%s\n' "${version%%.*}"
     }
 
-    # Resolve the Chrome major to impersonate. Precedence (cache steps added later):
-    #   1. --chrome-major flag (chrome_major_override), else PIN_DNS_CHROME_MAJOR env
-    #   2. local Chrome read
-    #   3. Version History API (unless PIN_DNS_UA_OFFLINE)
-    #   4. pinned fallback
+    # Resolve the Chrome major to impersonate. Precedence:
+    #   1-2. --chrome-major flag (chrome_major_override), else PIN_DNS_CHROME_MAJOR env
+    #   3.   local Chrome read (authoritative, uncached)
+    #   4.   fresh cache (within TTL)
+    #   5.   Version History API (writes cache), unless PIN_DNS_UA_OFFLINE
+    #   6.   stale-if-error cache (within MAX_STALE_SECS)
+    #   7.   pinned fallback
+    # Only the API result is cached, never the local read or an override
     # Reads global `platform`. Always prints a major and returns 0
     _resolve_chrome_major() {
+        # 1-2: explicit override (flag beats env)
         local override="${chrome_major_override:-${PIN_DNS_CHROME_MAJOR:-}}"
         if [ -n "$override" ]; then
             printf '%s\n' "$override"
             return 0
         fi
+        # 3: local read (authoritative, uncached)
         local m
         if m="$(_local_chrome_major)" && [ -n "$m" ]; then
             printf '%s\n' "$m"
             return 0
         fi
+        # 4: fresh cache
+        if m="$(_cache_read)" && [ -n "$m" ]; then
+            printf '%s\n' "$m"
+            return 0
+        fi
+        # 5: network fetch (writes cache), unless offline
         if [ -z "${PIN_DNS_UA_OFFLINE:-}" ]; then
             if m="$(_fetch_latest_major "$platform")" && [ -n "$m" ]; then
+                _cache_write "$m"
                 printf '%s\n' "$m"
                 return 0
             fi
         fi
+        # 6: stale-if-error cache (within max-stale)
+        if m="$(_cache_read_stale)" && [ -n "$m" ]; then
+            printf '%s\n' "$m"
+            return 0
+        fi
+        # 7: pinned fallback
         printf '%s\n' "$PIN_DNS_FALLBACK_MAJOR"
         return 0
     }

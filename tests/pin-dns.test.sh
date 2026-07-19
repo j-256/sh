@@ -63,11 +63,21 @@ assert_curl_arg_order() {
 write_shims() {
     # Reset UA-resolver overrides between tests: the runner calls each test in
     # the same shell, so an `export` in one test would otherwise leak forward
-    unset PIN_DNS_CHROME_MAJOR PIN_DNS_UA_OFFLINE PIN_DNS_VERSION_API_URL
+    unset PIN_DNS_CHROME_MAJOR PIN_DNS_UA_OFFLINE PIN_DNS_VERSION_API_URL PIN_DNS_UA_CACHE_TTL
+    export XDG_CACHE_HOME="$TEST_DIR/cache"
 
     # curl shim: log args one-per-line
     cat > "$SHIM_DIR/curl" <<'SHIM'
 #!/bin/bash
+# Version-fetch calls: any arg is a file:// URL under apiroot -> emit fixture
+for a in "$@"; do
+    case "$a" in
+        file://*/channels/stable/versions*|https://versionhistory*)
+            cat "$TEST_DIR/api.json" 2>/dev/null
+            exit 0
+            ;;
+    esac
+done
 printf '%s\n' "$@" > "$TEST_DIR/curl.args"
 printf '%s\n' "CURL_OK"
 exit 0
@@ -105,6 +115,17 @@ printf '%s\n' "122.1.2.3"
 exit 0
 SHIM
     chmod +x "$SHIM_DIR/defaults"
+
+    # jq shim: extract .versions[0].version from stdin JSON fixtures
+    cat > "$SHIM_DIR/jq" <<'SHIM'
+#!/bin/bash
+in="$(cat)"
+case "$*" in
+    *versions*) printf '%s\n' "$in" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p' | head -1 ;;
+    *) printf '%s\n' "$in" ;;
+esac
+SHIM
+    chmod +x "$SHIM_DIR/jq"
 
     # Fake Chrome app directory
     mkdir -p "$TEST_DIR/Google_Chrome.app/Contents"
@@ -441,6 +462,89 @@ test_flag_equals_form() {
     assert_rc "eq-form" 0
     assert_contains "linux UA" "$(get_curl_args)" "X11; Linux x86_64"
     assert_contains "linux platform hint" "$(get_curl_args)" 'sec-ch-ua-platform: "Linux"'
+}
+
+# --- cache tests ---
+
+# Write a Version History API JSON fixture and point the script at it
+_write_api_fixture() {
+    local major="$1"
+    printf '{"versions":[{"version":"%s.0.7000.99"}]}\n' "$major" > "$TEST_DIR/api.json"
+    export PIN_DNS_VERSION_API_URL="file://$TEST_DIR/apiroot"
+    # file:// path must expand to $TEST_DIR/apiroot/<plat>/channels/stable/versions?...
+    # curl shim (below) maps any file:// version URL to api.json
+}
+
+test_cache_writes_then_reads() {
+    export PIN_DNS_CHROME_APP="$TEST_DIR/NoSuchChrome.app"
+    export XDG_CACHE_HOME="$TEST_DIR/cache"
+    _write_api_fixture 199
+    # First call: network path writes cache
+    run_script "https://example.com" --target "edge.somesite.com"
+    assert_rc "first" 0
+    assert_contains "uses fetched major" "$(get_curl_args)" "Chrome/199.0.0.0"
+    assert_file_exists "cache written" "$TEST_DIR/cache/pin-dns/chrome-major.mac"
+    # Second call: change fixture to prove cache (not network) is used
+    _write_api_fixture 111
+    run_script "https://example.com" --target "edge.somesite.com"
+    assert_rc "second" 0
+    assert_contains "still cached 199" "$(get_curl_args)" "Chrome/199.0.0.0"
+}
+
+test_cache_ttl_zero_refetches() {
+    export PIN_DNS_CHROME_APP="$TEST_DIR/NoSuchChrome.app"
+    export XDG_CACHE_HOME="$TEST_DIR/cache"
+    export PIN_DNS_UA_CACHE_TTL="0"
+    _write_api_fixture 199
+    run_script "https://example.com" --target "edge.somesite.com"
+    _write_api_fixture 200
+    run_script "https://example.com" --target "edge.somesite.com"
+    assert_rc "refetch" 0
+    assert_contains "refetched 200" "$(get_curl_args)" "Chrome/200.0.0.0"
+}
+
+test_cache_corrupt_is_miss() {
+    export PIN_DNS_CHROME_APP="$TEST_DIR/NoSuchChrome.app"
+    export XDG_CACHE_HOME="$TEST_DIR/cache"
+    mkdir -p "$TEST_DIR/cache/pin-dns"
+    printf 'garbage not a record\n' > "$TEST_DIR/cache/pin-dns/chrome-major.mac"
+    _write_api_fixture 177
+    run_script "https://example.com" --target "edge.somesite.com"
+    assert_rc "corrupt-miss" 0
+    assert_contains "fetched despite corrupt" "$(get_curl_args)" "Chrome/177.0.0.0"
+}
+
+test_cache_stale_if_error_within_window() {
+    export PIN_DNS_CHROME_APP="$TEST_DIR/NoSuchChrome.app"
+    export XDG_CACHE_HOME="$TEST_DIR/cache"
+    export PIN_DNS_UA_OFFLINE="1" # force fetch to be skipped -> step 6
+    mkdir -p "$TEST_DIR/cache/pin-dns"
+    local now; now="$(date +%s)"
+    local fetched=$((now - 100000)) # ~1.15 days old: past 24h TTL, within 90d
+    {
+        printf 'cacheVersion=1\nsource=versionhistory-api\nplatform=mac\n'
+        printf 'major=155\nfetchedAt=%s\nttl=86400\nexpiresAt=%s\n' "$fetched" "$((fetched + 86400))"
+    } > "$TEST_DIR/cache/pin-dns/chrome-major.mac"
+    run_script "https://example.com" --target "edge.somesite.com"
+    assert_rc "stale-served" 0
+    assert_contains "serves stale 155 not pin" "$(get_curl_args)" "Chrome/155.0.0.0"
+}
+
+test_cache_stale_beyond_window_uses_pin() {
+    export PIN_DNS_CHROME_APP="$TEST_DIR/NoSuchChrome.app"
+    export XDG_CACHE_HOME="$TEST_DIR/cache"
+    export PIN_DNS_UA_OFFLINE="1"
+    mkdir -p "$TEST_DIR/cache/pin-dns"
+    local now; now="$(date +%s)"
+    local fetched=$((now - 9000000)) # ~104 days: beyond 90d max-stale
+    {
+        printf 'cacheVersion=1\nsource=versionhistory-api\nplatform=mac\n'
+        printf 'major=155\nfetchedAt=%s\nttl=86400\nexpiresAt=%s\n' "$fetched" "$((fetched + 86400))"
+    } > "$TEST_DIR/cache/pin-dns/chrome-major.mac"
+    run_script "https://example.com" --target "edge.somesite.com"
+    assert_rc "too-stale" 0
+    assert_contains "falls to pin 148" "$(get_curl_args)" "Chrome/148.0.0.0"
+    assert_not_contains "not stale 155" "$(get_curl_args)" "Chrome/155.0.0.0"
 }
 
 # --- run ---
