@@ -38,6 +38,10 @@ assert_curl_arg_count() {
 # --- shims ---
 
 write_shims() {
+    # Reset UA-resolver overrides between tests: the runner calls each test in
+    # the same shell, so an `export` in one test would otherwise leak forward
+    unset PIN_DNS_CHROME_MAJOR PIN_DNS_UA_OFFLINE PIN_DNS_VERSION_API_URL
+
     # curl shim: log args one-per-line
     cat > "$SHIM_DIR/curl" <<'SHIM'
 #!/bin/bash
@@ -197,8 +201,8 @@ test_ua_fallback_chrome_missing() {
     export PIN_DNS_CHROME_APP="$TEST_DIR/NoSuchChrome.app"
     run_script "https://example.com" --target "edge.somesite.com"
     assert_rc "ua-fallback" 0
-    assert_stderr_contains "warn about fallback" "falling back to 'sfcc-test'"
-    assert_contains "UA is sfcc-test" "$(get_curl_args)" "sfcc-test"
+    assert_not_contains "no sfcc-test fallback" "$(get_curl_args)" "sfcc-test"
+    assert_contains "pinned UA" "$(get_curl_args)" "Chrome/148.0.0.0"
 }
 
 test_url_host_mismatch() {
@@ -289,6 +293,30 @@ test_url_target_explicit_wins() {
     assert_rc "url-explicit" 0
     assert_contains "resolve uses explicit" "$(get_curl_args)" "example.com:443:192.0.2.11"
     assert_contains "bare host passed through" "$(get_curl_args)" "extra.host.com"
+}
+
+test_ua_major_from_local_read() {
+    run_script "https://example.com" --target "edge.somesite.com"
+    assert_rc "local-read" 0
+    # defaults shim returns 122.1.2.3 -> major 122
+    assert_contains "UA uses local major" "$(get_curl_args)" "Chrome/122.0.0.0"
+    assert_contains "UA is mac shape" "$(get_curl_args)" "Macintosh; Intel Mac OS X 10_15_7"
+}
+
+test_ua_pinned_fallback_no_chrome() {
+    export PIN_DNS_CHROME_APP="$TEST_DIR/NoSuchChrome.app"
+    run_script "https://example.com" --target "edge.somesite.com"
+    assert_rc "pinned-fallback" 0
+    # no local Chrome + curl shim returns non-JSON -> fetch yields empty -> pinned 148
+    assert_contains "UA uses pinned major" "$(get_curl_args)" "Chrome/148.0.0.0"
+    assert_stderr_not_contains "no sfcc-test" "sfcc-test"
+}
+
+test_ua_explicit_major_env() {
+    export PIN_DNS_CHROME_MAJOR="200"
+    run_script "https://example.com" --target "edge.somesite.com"
+    assert_rc "env-major" 0
+    assert_contains "UA uses env major" "$(get_curl_args)" "Chrome/200.0.0.0"
 }
 
 # --- run ---

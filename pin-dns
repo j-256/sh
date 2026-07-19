@@ -678,27 +678,76 @@ EOF
         return 1
     }
 
-    _get_user_agent() {
-        local chrome_app_default="/Applications/Google Chrome.app"
-        local chrome_app="${PIN_DNS_CHROME_APP:-$chrome_app_default}"
-        local info_plist=""
-        local chrome_version=""
-        local ua_version=""
+    # Pinned fallback major -- used when local read and network fetch both fail
+    # Update periodically; keep roughly in step with chrome-ua's FALLBACK_MAJOR
+    # Last set: 2026-04, Chrome stable 148
+    local PIN_DNS_FALLBACK_MAJOR="148"
 
-        if ! [ -d "$chrome_app" ]; then
-            _error "Google Chrome not found at '$chrome_app'"
-            return 1
+    # Frozen reduced-UA shape per platform (Chrome reduced-UA policy)
+    # https://developer.chrome.com/docs/privacy-security/user-agent-client-hints#user-agent-reduction
+    _ua_for_platform() {
+        local plat="$1"
+        local major="$2"
+        case "$plat" in
+            mac)   printf 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/%s.0.0.0 Safari/537.36\n' "$major" ;;
+            win)   printf 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/%s.0.0.0 Safari/537.36\n' "$major" ;;
+            linux) printf 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/%s.0.0.0 Safari/537.36\n' "$major" ;;
+        esac
+    }
+
+    # Fetch latest stable Chrome major from Google's Version History API
+    # Prints major to stdout; returns non-zero on any failure (missing tool,
+    # network error, empty result). Base URL overridable for tests
+    _fetch_latest_major() {
+        local plat="$1"
+        _cmd_exists curl || return 1
+        _cmd_exists jq || return 1
+        local base="${PIN_DNS_VERSION_API_URL:-https://versionhistory.googleapis.com/v1/chrome/platforms}"
+        local url="$base/$plat/channels/stable/versions?pageSize=1"
+        local body
+        body="$(curl -sS --max-time 5 "$url" 2>/dev/null)" || return 1
+        local ver
+        ver="$(printf '%s' "$body" | jq -r '.versions[0].version // empty' 2>/dev/null)"
+        [ -n "$ver" ] || return 1
+        printf '%s\n' "${ver%%.*}"
+    }
+
+    # Read the local Chrome major via defaults (macOS). Prints major or returns 1
+    _local_chrome_major() {
+        local app_default="/Applications/Google Chrome.app"
+        local app="${PIN_DNS_CHROME_APP:-$app_default}"
+        [ -d "$app" ] || return 1
+        local plist="$app/Contents/Info.plist"
+        local version
+        version="$(defaults read "$plist" CFBundleShortVersionString 2>/dev/null)"
+        [ -n "$version" ] || return 1
+        printf '%s\n' "${version%%.*}"
+    }
+
+    # Resolve the Chrome major to impersonate. Precedence (cache steps added later):
+    #   1. PIN_DNS_CHROME_MAJOR env (explicit override)
+    #   2. local Chrome read
+    #   3. Version History API (unless PIN_DNS_UA_OFFLINE)
+    #   4. pinned fallback
+    # Reads global `platform`. Always prints a major and returns 0
+    _resolve_chrome_major() {
+        if [ -n "${PIN_DNS_CHROME_MAJOR:-}" ]; then
+            printf '%s\n' "$PIN_DNS_CHROME_MAJOR"
+            return 0
         fi
-
-        info_plist="$chrome_app/Contents/Info.plist"
-        chrome_version="$(defaults read "$info_plist" CFBundleShortVersionString 2> /dev/null)"
-        if [ -z "$chrome_version" ]; then
-            _error "Unable to determine Chrome version (failed to read $info_plist)"
-            return 1
+        local m
+        if m="$(_local_chrome_major)" && [ -n "$m" ]; then
+            printf '%s\n' "$m"
+            return 0
         fi
-
-        ua_version="${chrome_version%%.*}.0.0.0"
-        echo "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/$ua_version Safari/537.36"
+        if [ -z "${PIN_DNS_UA_OFFLINE:-}" ]; then
+            if m="$(_fetch_latest_major "$platform")" && [ -n "$m" ]; then
+                printf '%s\n' "$m"
+                return 0
+            fi
+        fi
+        printf '%s\n' "$PIN_DNS_FALLBACK_MAJOR"
+        return 0
     }
 
     _curl_args_has_user_agent() {
@@ -832,6 +881,7 @@ EOF
     local resolver=""
     local scheme="https"
     local port="443"
+    local platform="mac"
     local dry_run=""
     local no_silent=""
     local quiet=""
@@ -1239,14 +1289,9 @@ EOF
     if _curl_args_has_user_agent "${curl_args[@]}"; then
         ua=""
     else
-        local ua_out; ua_out="$(_get_user_agent)"
-        local ua_rc=$?
-        if [ "$ua_rc" -ne 0 ] || [ -z "$ua_out" ]; then
-            _warn "User-Agent detection failed; falling back to 'sfcc-test'"
-            ua="sfcc-test"
-        else
-            ua="$ua_out"
-        fi
+        local chrome_major
+        chrome_major="$(_resolve_chrome_major)"
+        ua="$(_ua_for_platform "$platform" "$chrome_major")"
     fi
 
     # curl -q/--disable must be the very first curl argument to reliably disable curlrc
