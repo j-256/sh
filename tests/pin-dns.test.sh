@@ -12,6 +12,20 @@ UNDER_TEST="$SCRIPT_DIR/../pin-dns"
 
 get_curl_args() { cat "$TEST_DIR/curl.args" 2>/dev/null; }
 get_dig_log() { cat "$TEST_DIR/dig.log" 2>/dev/null; }
+get_impersonate_args() { cat "$TEST_DIR/curl-impersonate.args" 2>/dev/null; }
+
+# Install a recording curl-impersonate stub on this test's PATH. Only some tests
+# want it present (auto-detect must NOT see it in most tests), so it is opt-in
+# per-test rather than part of write_shims
+_install_impersonate_stub() {
+    cat > "$SHIM_DIR/curl-impersonate" <<'SHIM'
+#!/bin/bash
+printf '%s\n' "$@" > "$TEST_DIR/curl-impersonate.args"
+printf '%s\n' "IMPERSONATE_OK"
+exit 0
+SHIM
+    chmod +x "$SHIM_DIR/curl-impersonate"
+}
 
 assert_curl_arg_first() {
     local label="$1"
@@ -462,6 +476,50 @@ test_flag_equals_form() {
     assert_rc "eq-form" 0
     assert_contains "linux UA" "$(get_curl_args)" "X11; Linux x86_64"
     assert_contains "linux platform hint" "$(get_curl_args)" 'sec-ch-ua-platform: "Linux"'
+}
+
+# --- engine selection tests ---
+
+test_engine_auto_uses_impersonate() {
+    _install_impersonate_stub
+    run_script "https://example.com" --target "edge.somesite.com"
+    assert_rc "auto-imp" 0
+    assert_contains "impersonate called" "$(get_impersonate_args)" "--impersonate"
+    # defaults shim returns 122.1.2.3 -> major 122
+    assert_contains "impersonate chrome major" "$(get_impersonate_args)" "chrome122"
+    assert_contains "compressed passed" "$(get_impersonate_args)" "--compressed"
+    assert_contains "resolve passed through" "$(get_impersonate_args)" "example.com:443:192.0.2.11"
+    # User-supplied URL token flows through verbatim (no trailing slash added)
+    assert_contains "url passed through" "$(get_impersonate_args)" "https://example.com"
+    # No header suite injected on the impersonate path
+    assert_not_contains "no sec-ch-ua" "$(get_impersonate_args)" "sec-ch-ua"
+    assert_not_contains "no sec-fetch" "$(get_impersonate_args)" "Sec-Fetch"
+    assert_not_contains "no UA header on impersonate path" "$(get_impersonate_args)" "User-Agent:"
+    assert_not_contains "no Accept-Encoding on impersonate path" "$(get_impersonate_args)" "Accept-Encoding:"
+    # stock curl NOT used for the main request
+    assert_eq "stock curl not called" "$(get_curl_args)" ""
+}
+
+test_engine_curl_forces_stock() {
+    _install_impersonate_stub
+    run_script --engine curl "https://example.com" --target "edge.somesite.com"
+    assert_rc "force-curl" 0
+    assert_contains "stock curl used" "$(get_curl_args)" "--resolve"
+    assert_eq "impersonate not called" "$(get_impersonate_args)" ""
+    assert_contains "headers present on stock" "$(get_curl_args)" "Sec-Fetch-Mode: navigate"
+}
+
+test_engine_impersonate_required_missing() {
+    # no stub installed -> curl-impersonate absent
+    run_script --engine impersonate "https://example.com" --target "edge.somesite.com"
+    assert_rc "imp-missing" 3
+    assert_stderr_contains "imp missing error" "curl-impersonate"
+}
+
+test_engine_invalid_enum() {
+    run_script --engine=bogus "https://example.com" --target "edge.somesite.com"
+    assert_rc "bad-engine" 2
+    assert_stderr_contains "engine error" "Invalid --engine"
 }
 
 # --- cache tests ---

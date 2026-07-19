@@ -277,6 +277,25 @@ EOF
 
     _cmd_exists() { command -v "$1" >/dev/null 2>&1; }
 
+    # Resolve the engine binary. Honors the `engine` global:
+    #   curl        -> stock curl (prints nothing, returns 1)
+    #   impersonate -> require curl-impersonate (returns 1 if absent)
+    #   auto        -> use curl-impersonate if present, else stock curl
+    # Prints the impersonate binary name on success; empty + return 1 otherwise
+    _detect_impersonate_engine() {
+        case "$engine" in
+            curl) return 1 ;;
+            impersonate|auto)
+                if _cmd_exists curl-impersonate; then
+                    printf '%s\n' "curl-impersonate"
+                    return 0
+                fi
+                return 1
+                ;;
+        esac
+        return 1
+    }
+
     _is_ipv4() {
         local ip="$1"
         local a=""
@@ -1335,6 +1354,18 @@ EOF
         *) _error "Invalid --engine '$engine' (valid: curl|impersonate|auto). Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
     esac
 
+    # Resolve the request engine. Empty -> stock curl (inject UA + header suite);
+    # non-empty -> curl-impersonate (it sets headers + TLS together, so pin-dns
+    # injects no header suite). --engine impersonate with no binary is fatal
+    local engine_bin=""
+    if [ -z "$no_impersonate" ]; then
+        engine_bin="$(_detect_impersonate_engine)" || engine_bin=""
+        if [ "$engine" = "impersonate" ] && [ -z "$engine_bin" ]; then
+            _error "curl-impersonate not found on PATH (required by --engine impersonate). Install lexiforest/curl-impersonate or use --engine auto/curl"
+            return 3
+        fi
+    fi
+
     # WARNING: useless -s / -S (only warn when pin-dns is still adding -sS)
     if [ -z "$no_silent" ] && _curl_args_has_silent_controls "${curl_args[@]}"; then
         _warn "You passed curl -s/-S/--silent/--show-error, but $SCRIPT_NAME already adds curl -sS by default; use --no-silent if you want $SCRIPT_NAME to stop adding -sS"
@@ -1617,7 +1648,11 @@ EOF
 
     local -a cmd=()
 
-    cmd+=("curl")
+    if [ -n "$engine_bin" ]; then
+        cmd+=("$engine_bin")
+    else
+        cmd+=("curl")
+    fi
 
     if [ -z "$allow_curlrc" ]; then
         cmd+=("-q")
@@ -1631,10 +1666,20 @@ EOF
         cmd+=("-sS")
     fi
 
+    # Impersonate path: curl-impersonate's wrapper sets --compressed and the
+    # matching browser fingerprint via --impersonate chrome<major>, which also
+    # applies the Chrome header set (why the suite above is skipped). Placed
+    # before --resolve and user args so those pass through last, as curl expects
+    if [ -n "$engine_bin" ]; then
+        cmd+=("--compressed" "--impersonate" "chrome${chrome_major}")
+    fi
+
     # The pin-dns-generated User-Agent is emitted inside _emit_impersonation_headers
     # as -H at Chrome's canonical position, not via -A (curl -A always sends the UA
     # first on the wire). A user-supplied -A/-H User-Agent still flows via curl_args
-    if [ -z "$no_impersonate" ]; then
+    # Only for stock curl: curl-impersonate sets the browser header set itself, so
+    # the suite is skipped on that path (gated on empty engine_bin)
+    if [ -z "$no_impersonate" ] && [ -z "$engine_bin" ]; then
         _emit_impersonation_headers
     fi
 
