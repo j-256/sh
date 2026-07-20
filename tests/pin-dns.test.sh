@@ -91,7 +91,7 @@ assert_curl_arg_order() {
 write_shims() {
     # Reset UA-resolver overrides between tests: the runner calls each test in
     # the same shell, so an `export` in one test would otherwise leak forward
-    unset PIN_DNS_CHROME_MAJOR PIN_DNS_UA_OFFLINE PIN_DNS_VERSION_API_URL PIN_DNS_UA_CACHE_TTL
+    unset PIN_DNS_CHROME_MAJOR PIN_DNS_UA_OFFLINE PIN_DNS_VERSION_API_URL PIN_DNS_UA_CACHE_TTL PIN_DNS_ENGINE
     export XDG_CACHE_HOME="$TEST_DIR/cache"
 
     # curl shim: log args one-per-line
@@ -674,6 +674,56 @@ test_engine_invalid_enum() {
     run_script --engine=bogus "https://example.com" --target "edge.somesite.com"
     assert_rc "bad-engine" 2
     assert_stderr_contains "engine error" "Invalid --engine"
+}
+
+test_engine_env_sets_default() {
+    # PIN_DNS_ENGINE=curl forces stock curl even when curl-impersonate is present
+    _install_impersonate_stub
+    export PIN_DNS_ENGINE="curl"
+    run_script "https://example.com" --target "edge.somesite.com"
+    assert_rc "env-curl" 0
+    assert_contains "stock curl used" "$(get_curl_args)" "--resolve"
+    assert_eq "impersonate not called via env" "$(get_impersonate_args)" ""
+}
+
+test_engine_env_impersonate_routes_through_binary() {
+    # PIN_DNS_ENGINE=impersonate selects curl-impersonate without a flag
+    _install_impersonate_stub
+    export PIN_DNS_ENGINE="impersonate"
+    run_script "https://example.com" --target "edge.somesite.com"
+    assert_rc "env-imp" 0
+    assert_contains "impersonate called via env" "$(get_impersonate_args)" "--impersonate"
+    assert_eq "stock curl not called" "$(get_curl_args)" ""
+}
+
+test_engine_flag_beats_env() {
+    # An explicit --engine wins over PIN_DNS_ENGINE (flag > env > default).
+    # env=impersonate alone routes through the binary (see the env-impersonate
+    # test); --engine curl here must override that to stock curl, so the result
+    # distinguishes flag>env from env>flag rather than matching the auto default
+    _install_impersonate_stub
+    export PIN_DNS_ENGINE="impersonate"
+    run_script --engine curl "https://example.com" --target "edge.somesite.com"
+    assert_rc "flag-over-env" 0
+    assert_contains "flag forced stock curl" "$(get_curl_args)" "--resolve"
+    assert_eq "env impersonate overridden by flag" "$(get_impersonate_args)" ""
+}
+
+test_engine_env_invalid_value_errors() {
+    # A bad PIN_DNS_ENGINE is a usage error, same strict enum as the flag
+    export PIN_DNS_ENGINE="bogus"
+    run_script "https://example.com" --target "edge.somesite.com"
+    assert_rc "env-bad" 2
+    assert_stderr_contains "env engine error" "Invalid --engine"
+}
+
+test_engine_env_auto_is_noop() {
+    # PIN_DNS_ENGINE=auto matches the built-in default: impersonate if present
+    _install_impersonate_stub
+    export PIN_DNS_ENGINE="auto"
+    run_script "https://example.com" --target "edge.somesite.com"
+    assert_rc "env-auto" 0
+    assert_contains "auto uses impersonate when present" "$(get_impersonate_args)" "--impersonate"
 }
 
 # --- cache tests ---

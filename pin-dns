@@ -171,6 +171,12 @@
 #     PIN_DNS_CHROME_MAJOR
 #         Pin the Chrome major (same as --chrome-major; flag wins)
 #
+#     PIN_DNS_ENGINE
+#         Default engine when --engine is not given: curl|impersonate|auto
+#         (same as --engine; flag wins). auto is the built-in default, so
+#         PIN_DNS_ENGINE=auto is a no-op. Set curl to keep stock curl (and the
+#         live version) as the default, impersonate to require curl-impersonate
+#
 #     PIN_DNS_UA_OFFLINE
 #         Disable the network version fallback
 #
@@ -376,6 +382,10 @@ ENVIRONMENT
 
     PIN_DNS_CHROME_MAJOR
         Pin the Chrome major (same as --chrome-major; flag wins)
+
+    PIN_DNS_ENGINE
+        Default engine when --engine is absent: curl|impersonate|auto (same as
+        --engine; flag wins). auto is the default, so PIN_DNS_ENGINE=auto is a no-op
 
     PIN_DNS_UA_OFFLINE
         Disable the network version fallback
@@ -1438,7 +1448,7 @@ EOF
     local platform="mac"
     local fetch_mode="navigate"
     local no_impersonate=""
-    local engine="auto"
+    local engine=""    # empty until set by --engine; resolved to flag:-env:-auto post-parse
     local chrome_major_override=""
     local dry_run=""
     local no_silent=""
@@ -1618,6 +1628,11 @@ EOF
         navigate|cors|no-cors) ;;
         *) _error "Invalid --fetch-mode '$fetch_mode' (valid: navigate|cors|no-cors). Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
     esac
+    # Resolve engine precedence: --engine flag beats PIN_DNS_ENGINE env beats the
+    # auto default (same flag>env>default shape as chrome_major_effective). The
+    # enum check below then validates the resolved value, so a bad flag OR a bad
+    # env value hits one message -- they are the same knob
+    engine="${engine:-${PIN_DNS_ENGINE:-auto}}"
     case "$engine" in
         curl|impersonate|auto) ;;
         *) _error "Invalid --engine '$engine' (valid: curl|impersonate|auto). Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
