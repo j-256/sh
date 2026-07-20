@@ -27,6 +27,20 @@ SHIM
     chmod +x "$SHIM_DIR/curl-impersonate"
 }
 
+# Install the impersonate stub plus a roster of curl_chrome* wrapper scripts --
+# the set pin-dns discovers (co-located with curl-impersonate) to map a detected
+# Chrome major onto an installed --impersonate target. Args are target suffixes
+# as they appear after "curl_chrome" (e.g. 116 131 133a). Wrappers only need to
+# exist for discovery (a glob); pin-dns never executes them, so a stub body is fine
+_install_impersonate_roster() {
+    _install_impersonate_stub
+    local t
+    for t in "$@"; do
+        printf '#!/bin/bash\n:\n' > "$SHIM_DIR/curl_chrome$t"
+        chmod +x "$SHIM_DIR/curl_chrome$t"
+    done
+}
+
 assert_curl_arg_first() {
     local label="$1"
     local want="$2"
@@ -502,6 +516,142 @@ test_engine_auto_uses_impersonate() {
     assert_not_contains "no Accept-Encoding on impersonate path" "$(get_impersonate_args)" "Accept-Encoding:"
     # stock curl NOT used for the main request
     assert_eq "stock curl not called" "$(get_curl_args)" ""
+}
+
+test_engine_major_above_roster_clamps_to_max() {
+    # Detected major (148) exceeds the newest installed target (131) -> pin-dns
+    # must emit the highest available target, not the raw chrome148 that
+    # curl-impersonate rejects with "Unknown impersonation target" (exit 43)
+    _install_impersonate_roster 116 120 131
+    export PIN_DNS_CHROME_MAJOR="148"
+    run_script "https://example.com" --target "edge.somesite.com"
+    assert_rc "above-roster" 0
+    assert_contains "clamps to newest target" "$(get_impersonate_args)" "chrome131"
+    assert_not_contains "no raw over-roster target" "$(get_impersonate_args)" "chrome148"
+    assert_stderr_contains "warns about remap" "148"
+}
+
+test_engine_major_gap_rounds_down() {
+    # Requested major falls in a roster gap (130 with 124 and 131 present) ->
+    # round DOWN to 124: chrome124's fingerprint is the one real Chrome 130 shipped
+    # (curl-impersonate only adds a profile when the fingerprint changes)
+    _install_impersonate_roster 116 120 124 131
+    export PIN_DNS_CHROME_MAJOR="130"
+    run_script "https://example.com" --target "edge.somesite.com"
+    assert_rc "gap" 0
+    assert_contains "rounds down to 124" "$(get_impersonate_args)" "chrome124"
+    assert_not_contains "not up to 131" "$(get_impersonate_args)" "chrome131"
+    assert_stderr_contains "warns about remap" "130"
+}
+
+test_engine_major_suffixed_target_preserved() {
+    # The installed target is chrome133a (alpha suffix); plain chrome133 is NOT a
+    # valid target and would exit 43. Mapping must emit the full suffixed name
+    _install_impersonate_roster 116 131 133a
+    export PIN_DNS_CHROME_MAJOR="133"
+    run_script "https://example.com" --target "edge.somesite.com"
+    assert_rc "suffix" 0
+    assert_contains "emits suffixed target" "$(get_impersonate_args)" "chrome133a"
+    # The bare integer name must never be emitted for a suffixed-only target
+    assert_not_contains "no bare chrome133" "$(get_impersonate_args)" "impersonate
+chrome133
+"
+}
+
+test_engine_major_exact_match_no_warn() {
+    # Requested major exactly matches an installed target -> emit it, no warning
+    _install_impersonate_roster 116 120 131
+    export PIN_DNS_CHROME_MAJOR="120"
+    run_script "https://example.com" --target "edge.somesite.com"
+    assert_rc "exact" 0
+    assert_contains "emits exact target" "$(get_impersonate_args)" "chrome120"
+    assert_stderr_not_contains "no remap warning on exact" "no chrome120 profile"
+}
+
+test_engine_major_below_floor_clamps_to_min() {
+    # Requested major below the roster floor (95 with floor 116) -> clamp UP to the
+    # lowest installed target rather than emit an invalid over-old chrome95
+    _install_impersonate_roster 116 120 131
+    export PIN_DNS_CHROME_MAJOR="95"
+    run_script "https://example.com" --target "edge.somesite.com"
+    assert_rc "below-floor" 0
+    assert_contains "clamps to floor" "$(get_impersonate_args)" "chrome116"
+    assert_not_contains "no raw under-roster target" "$(get_impersonate_args)" "chrome95"
+}
+
+test_engine_roster_excludes_mobile_wrappers() {
+    # A real install ships curl_chrome131_android / curl_chrome99_android (and
+    # _ios variants). Those are NOT desktop --impersonate targets, so mapping must
+    # skip them: with desktop 116/120 and a mobile 131_android, a request for 148
+    # picks desktop chrome120, never chrome131_android or a bare chrome131
+    _install_impersonate_roster 116 120 131_android 140_ios
+    export PIN_DNS_CHROME_MAJOR="148"
+    run_script "https://example.com" --target "edge.somesite.com"
+    assert_rc "mobile-excluded" 0
+    assert_contains "picks highest desktop target" "$(get_impersonate_args)" "chrome120"
+    assert_not_contains "no android target" "$(get_impersonate_args)" "android"
+    assert_not_contains "no ios target" "$(get_impersonate_args)" "ios"
+    assert_not_contains "no bare major from mobile" "$(get_impersonate_args)" "chrome131"
+}
+
+test_engine_selection_is_numeric_not_lexical() {
+    # Glob yields curl_chrome100, curl_chrome116, curl_chrome99 in lexical order
+    # (100 < 116 < 99 as strings). Requesting 120 must select chrome116 by NUMERIC
+    # comparison -- the middle glob entry, so a first-match, last-match, or
+    # lexical-max bug all pick the wrong target and fail here
+    _install_impersonate_roster 99 100 116
+    export PIN_DNS_CHROME_MAJOR="120"
+    run_script "https://example.com" --target "edge.somesite.com"
+    assert_rc "numeric-select" 0
+    assert_contains "numeric floor is 116" "$(get_impersonate_args)" "chrome116"
+    assert_not_contains "not lexical-first 100" "$(get_impersonate_args)" "chrome100"
+}
+
+test_engine_below_floor_is_numeric_min() {
+    # Below-floor clamp must use the NUMERIC minimum (chrome99), not the
+    # lexical-first glob entry (chrome100). Request 90 with roster 99 100 116
+    _install_impersonate_roster 99 100 116
+    export PIN_DNS_CHROME_MAJOR="90"
+    run_script "https://example.com" --target "edge.somesite.com"
+    assert_rc "numeric-min" 0
+    assert_contains "numeric min is 99" "$(get_impersonate_args)" "chrome99"
+    assert_not_contains "not lexical-first 100" "$(get_impersonate_args)" "chrome100"
+}
+
+test_engine_ignores_malformed_roster_entries() {
+    # A curl_chrome* name with no numeric major (curl_chromeabc) is not a usable
+    # target; it must be skipped while valid entries still map normally
+    _install_impersonate_roster 116 131 abc
+    export PIN_DNS_CHROME_MAJOR="148"
+    run_script "https://example.com" --target "edge.somesite.com"
+    assert_rc "malformed-mixed" 0
+    assert_contains "valid entry still maps" "$(get_impersonate_args)" "chrome131"
+    assert_not_contains "junk entry not emitted" "$(get_impersonate_args)" "chromeabc"
+}
+
+test_engine_all_malformed_roster_passes_through() {
+    # If every curl_chrome* entry is unparseable, no roster is discoverable, so the
+    # detected major passes through unchanged (same as a binary-only install) rather
+    # than emitting a garbage target -- proves the numeric guard gates discovery
+    _install_impersonate_roster abc def
+    export PIN_DNS_CHROME_MAJOR="148"
+    run_script "https://example.com" --target "edge.somesite.com"
+    assert_rc "all-malformed" 0
+    assert_contains "raw major passes through" "$(get_impersonate_args)" "chrome148"
+    assert_not_contains "no junk target" "$(get_impersonate_args)" "chromeabc"
+    assert_stderr_not_contains "no remap warning" "nearest installed target"
+}
+
+test_engine_no_roster_passes_major_through() {
+    # Binary-only install: curl-impersonate present but no curl_chrome* wrappers to
+    # discover. pin-dns can't map, so it passes the detected major through unchanged
+    # (unchanged from pre-roster behavior; lets the binary succeed or fail on its own)
+    _install_impersonate_stub
+    export PIN_DNS_CHROME_MAJOR="148"
+    run_script "https://example.com" --target "edge.somesite.com"
+    assert_rc "no-roster" 0
+    assert_contains "raw major passes through" "$(get_impersonate_args)" "chrome148"
+    assert_stderr_not_contains "no remap warning without roster" "nearest installed target"
 }
 
 test_engine_curl_forces_stock() {

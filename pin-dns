@@ -156,6 +156,13 @@
 #     tool from github.com/lexiforest/curl-impersonate (prebuilt binaries) -- do
 #     NOT install the npm 'curl-impersonate' package, which is an unrelated stub
 #
+#     curl-impersonate only accepts a fixed roster of profiles (chrome131,
+#     chrome133a, ...) that lags live Chrome and skips versions; a raw
+#     --impersonate for a major it lacks fails hard. pin-dns discovers the roster
+#     from the curl_chrome* wrappers installed beside the binary and maps the
+#     detected major to the nearest installed target at or below it (warning when
+#     it differs). A binary-only install with no wrappers passes the major through
+#
 # ENVIRONMENT
 #     PIN_DNS_CHROME_APP
 #         Optional override for the Chrome app path used to determine version
@@ -357,6 +364,11 @@ IMPERSONATION
     github.com/lexiforest/curl-impersonate (prebuilt binaries) -- do NOT install
     the npm 'curl-impersonate' package, which is an unrelated stub.
 
+    curl-impersonate supports only a fixed roster of profiles that lags live
+    Chrome, so $SCRIPT_NAME maps the detected major to the nearest installed
+    target at or below it (discovered from the curl_chrome* wrappers beside the
+    binary), warning when it differs. A binary-only install passes it through.
+
 ENVIRONMENT
     PIN_DNS_CHROME_APP
         Optional override for the Chrome app path used to determine version.
@@ -411,6 +423,59 @@ EOF
                 ;;
         esac
         return 1
+    }
+
+    # Map a detected Chrome major onto an installed curl-impersonate target.
+    # curl-impersonate's --impersonate accepts only a discrete, curated roster of
+    # profiles (chrome116, chrome131, chrome133a, ...) that lags live Chrome and
+    # skips versions; a raw --impersonate chrome<liveMajor> fails hard ("Unknown
+    # impersonation target", exit 43). The roster is discovered from the curl_chrome*
+    # wrapper scripts shipped alongside the binary ($1 = its dir), so it reflects
+    # what THIS install supports rather than a hardcoded list that would drift.
+    #   $1 = directory holding curl-impersonate (and its curl_chrome* wrappers)
+    #   $2 = requested Chrome major (integer)
+    # Prints the chosen target NAME (e.g. chrome131, chrome133a) and returns 0 when
+    # a roster is found; prints nothing and returns 1 when none is discoverable
+    # (binary-only install), leaving the caller to pass the raw major through.
+    # Selection is floor-map: highest target whose numeric major is <= requested;
+    # if the request is below the roster floor, the lowest target; ties keep the
+    # first seen. Comparison is on the integer, but the emitted name keeps any
+    # suffix (chrome133a is a valid target; chrome133 is NOT)
+    _map_impersonate_target() {
+        local dir="$1"
+        local want="$2"
+        local best_name=""
+        local best_int=""
+        local min_name=""
+        local min_int=""
+        local f=""
+        local base=""
+        local name=""
+        local int=""
+        for f in "$dir"/curl_chrome*; do
+            [ -e "$f" ] || continue
+            base="${f##*/}"
+            case "$base" in *_android|*_ios) continue ;; esac
+            name="${base#curl_}"       # chrome133a (full emittable target)
+            int="${name#chrome}"       # 133a
+            int="${int%%[!0-9]*}"      # 133
+            case "$int" in ''|*[!0-9]*) continue ;; esac
+            if [ -z "$min_int" ] || [ "$int" -lt "$min_int" ]; then
+                min_int="$int"
+                min_name="$name"
+            fi
+            if [ "$int" -le "$want" ] && { [ -z "$best_int" ] || [ "$int" -gt "$best_int" ]; }; then
+                best_int="$int"
+                best_name="$name"
+            fi
+        done
+        [ -z "$min_name" ] && return 1   # no roster discovered
+        if [ -n "$best_name" ]; then
+            printf '%s\n' "$best_name"
+        else
+            printf '%s\n' "$min_name"    # request below floor -> lowest target
+        fi
+        return 0
     }
 
     _is_ipv4() {
@@ -1884,9 +1949,26 @@ EOF
     # Impersonate path: curl-impersonate's wrapper sets --compressed and the
     # matching browser fingerprint via --impersonate chrome<major>, which also
     # applies the Chrome header set (why the suite above is skipped). Placed
-    # before --resolve and user args so those pass through last, as curl expects
+    # before --resolve and user args so those pass through last, as curl expects.
+    # The detected major is mapped onto an installed target (see
+    # _map_impersonate_target): --impersonate rejects a major it has no profile
+    # for, and live Chrome routinely outruns the roster. When no roster is
+    # discoverable (binary-only install), the raw major passes through unchanged
     if [ -n "$engine_bin" ]; then
-        cmd+=("--compressed" "--impersonate" "chrome${chrome_major}")
+        local impersonate_target="chrome${chrome_major}"
+        local engine_dir
+        engine_dir="$(command -v "$engine_bin" 2>/dev/null)"
+        engine_dir="${engine_dir%/*}"
+        if [ -n "$engine_dir" ]; then
+            local mapped
+            if mapped="$(_map_impersonate_target "$engine_dir" "$chrome_major")"; then
+                if [ "$mapped" != "$impersonate_target" ]; then
+                    _warn "curl-impersonate has no chrome${chrome_major} profile; using nearest installed target '$mapped'"
+                fi
+                impersonate_target="$mapped"
+            fi
+        fi
+        cmd+=("--compressed" "--impersonate" "$impersonate_target")
     fi
 
     # The pin-dns-generated User-Agent is emitted inside _emit_impersonation_headers
