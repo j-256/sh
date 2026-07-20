@@ -191,7 +191,7 @@ _pin_dns() (
     # ANSI palette for diagnostics, computed once (no per-call _color subshell):
     # empty unless stderr is a TTY (or CLICOLOR_FORCE is set) and NO_COLOR is
     # unset, so pipes/redirects and the test harness stay plain by default while
-    # CLICOLOR_FORCE=1 lets a capture keep color. NO_COLOR wins when both are set.
+    # CLICOLOR_FORCE=1 lets a capture keep color. NO_COLOR wins when both are set
     # https://no-color.org/
     local C_ERR=""    # ERR severity: red
     local C_WRN=""    # WRN severity: yellow
