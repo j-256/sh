@@ -30,7 +30,7 @@ Each row's primary link opens the doc; the `script` link opens the raw script.
 
 | Tool | Description |
 |------|-------------|
-| [`pin-dns`](docs/pin-dns.md?html) · [script](pin-dns) | curl wrapper that overrides DNS resolution for a hostname without touching /etc/hosts |
+| [`pin-dns`](docs/pin-dns.md?html) · [script](pin-dns) | curl wrapper that overrides DNS resolution for a hostname without touching /etc/hosts, and sends a full, internally consistent Chrome request (client hints, Sec-Fetch, ordered Accept headers; TLS/JA3 + HTTP-2 fingerprint too when curl-impersonate is installed) |
 | [`chrome-ua`](docs/chrome-ua.md?html) · [script](chrome-ua) | Print a realistic Chrome User-Agent from the local install or Google's live API |
 | [`chrome-debug`](docs/chrome-debug.md?html) · [script](chrome-debug) | Launch a Chromium browser in remote-debugging mode for MCP/CDP attach, with an auto-picked port from your .mcp.json pool |
 | [`httpcode`](docs/httpcode.md?html) · [script](httpcode) | Quick HTTP status code lookup — standard codes plus Cloudflare, nginx, and IIS non-standard codes, all offline |

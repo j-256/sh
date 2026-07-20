@@ -14,8 +14,8 @@ A few that might be worth a look before you scroll the catalog. These are mostly
 - [`prompt`](docs/prompt.md?html) ([script](prompt)) – sourced interactive prompt with default value and placeholder
 - [`tsd`](docs/tsd.md?html) ([script](tsd)) – paste any number, get back a timestamp or a duration
 - [`inflate`](docs/inflate.md?html) ([script](inflate)) – historical USD amounts adjusted for inflation
+- [`pin-dns`](docs/pin-dns.md?html) ([script](pin-dns)) – curl wrapper that overrides DNS without touching `/etc/hosts`, and impersonates a real Chrome: full headers by default, plus TLS/JA3 fingerprint when `curl-impersonate` is installed
 - [`curl-timing`](docs/curl-timing.md?html) ([script](curl-timing)) – time HTTP requests and compare URLs head-to-head
-- [`pin-dns`](docs/pin-dns.md?html) ([script](pin-dns)) – curl wrapper that overrides DNS without touching `/etc/hosts`
 - [`explode`](docs/explode.md?html) ([script](explode)) – move a directory's contents up one level after a nested-folder unzip
 
 ## Usage

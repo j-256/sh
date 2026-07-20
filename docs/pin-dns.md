@@ -4,7 +4,9 @@
 
 curl wrapper that overrides DNS resolution for a hostname -- bypass CDNs, hit origin servers, or pin requests to a specific IP, without touching /etc/hosts or system DNS.
 
-Under the hood it builds a `curl --resolve` command for you and adds sensible defaults (silent mode, realistic User-Agent, curlrc disabled).
+It also makes the request *look like a real browser*. By default `pin-dns` sends a full, internally consistent Chrome request -- not just a User-Agent, but client hints (`Sec-CH-UA*`), `Sec-Fetch-*`, and correctly ordered `Accept` headers, with the Chrome version auto-detected from your local install. That defeats header-based bot filtering; when [`curl-impersonate`](#tls-fingerprinting-curl-impersonate) is installed, it also matches Chrome's TLS/JA3 and HTTP-2 fingerprint.
+
+Under the hood it builds a `curl --resolve` command for you and adds sensible defaults (silent mode, curlrc disabled).
 
 ## Quick start
 
@@ -146,6 +148,15 @@ them, install [`lexiforest/curl-impersonate`](https://github.com/lexiforest/curl
 `PATH`, `pin-dns` uses it automatically (`--engine auto`) to match the TLS + HTTP-2
 signature as well; `--engine impersonate` requires it, `--engine curl` forces stock curl.
 
+curl-impersonate ships a fixed roster of browser profiles (e.g. `chrome131`, `chrome133a`)
+that lags live Chrome and skips versions, and a `--impersonate` target it doesn't have
+fails hard. `pin-dns` handles this for you: it discovers the installed profiles (from the
+`curl_chrome*` wrappers beside the binary) and maps your detected Chrome major to the
+nearest available target at or below it, warning when the two differ. Nothing to configure.
+
+To keep stock curl (and its live, un-mapped version string) as the default without typing
+`--engine curl` every time, set `PIN_DNS_ENGINE=curl`; a `--engine` flag still wins per call.
+
 > **Warning:** the npm package named `curl-impersonate` (v0.0.0) is an unrelated stub,
 > not the real tool. Do not install it. Use the GitHub Releases binaries.
 
@@ -228,6 +239,7 @@ pin-dns host target host/path                          # host/path (host strippe
 |---|---|
 | `PIN_DNS_CHROME_APP` | Override Chrome app path for User-Agent detection. Default: `/Applications/Google Chrome.app` |
 | `PIN_DNS_CHROME_MAJOR` | Pin the Chrome major (same as `--chrome-major`; the flag wins) |
+| `PIN_DNS_ENGINE` | Default engine when `--engine` is absent: `curl\|impersonate\|auto` (same as `--engine`; the flag wins). `auto` is the default, so `PIN_DNS_ENGINE=auto` is a no-op |
 | `PIN_DNS_UA_OFFLINE` | Disable the network version fallback (Version History API) |
 | `PIN_DNS_UA_CACHE_TTL` | Version-cache freshness in seconds. Default: `86400` |
 | `PIN_DNS_VERSION_API_URL` | Override the Chrome Version History API base URL (advanced/testing) |
