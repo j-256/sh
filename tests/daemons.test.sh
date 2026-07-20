@@ -271,6 +271,20 @@ test_check_last_exit_nonzero() {
     run_script check
     assert_rc "nonzero last exit exits 1" 1
     assert_stdout_contains "alerts last run failed" "last run failed"
+    # Message names the numeric code cleanly, e.g. "(exit 3)"
+    assert_stdout_contains "names the exit code" "exit 3"
+}
+
+# launchd reports "last exit code = (never exited)" for a loaded service that
+# has not run yet this boot -- the state every WatchPaths daemon is in right
+# after a restart, before its trigger first fires. That is NOT a failure, and
+# the value is not an integer: parsing it as one must not fabricate an alert
+test_check_never_exited_is_not_failure() {
+    seed_registry
+    printf '(never exited)\n' > "$TEST_DIR/exit_usr.test.one"
+    run_script check
+    assert_rc "never-exited is healthy" 0
+    assert_stdout_not_contains "never-exited is not a failure" "last run failed"
 }
 
 run_tests "$@"

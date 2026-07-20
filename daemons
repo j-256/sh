@@ -243,11 +243,19 @@ EOF
                 _alert "$label points at a missing script ($script) -- re-run its install"
                 printf '1' > "$flag"; continue
             fi
-            local last_exit; last_exit="$(printf '%s\n' "$state" | awk '/last exit code/ {print $NF}')"
-            if [ -n "$last_exit" ] && [ "$last_exit" != 0 ]; then
-                _alert "$label last run failed (exit $last_exit)"
-                printf '1' > "$flag"
-            fi
+            # launchd prints "last exit code = (never exited)" for a loaded
+            # service that has not run yet this boot (every WatchPaths daemon,
+            # right after a restart, before its trigger first fires) -- that is
+            # not a failure. Read the value after "= " (not $NF, which would
+            # pluck "exited)" off "(never exited)") and alert only on a non-zero
+            # integer exit code (codes are 0-255, always digits); a non-numeric
+            # value like "(never exited)" means no run recorded, so skip it
+            local last_exit; last_exit="$(printf '%s\n' "$state" | awk -F' = ' '/last exit code/ {print $2; exit}')"
+            case "$last_exit" in
+                ''|0) ;; # no code recorded, or a clean exit
+                *[!0-9]*) ;; # non-numeric (e.g. "(never exited)") -- not a failure
+                *) _alert "$label last run failed (exit $last_exit)"; printf '1' > "$flag" ;;
+            esac
         done
         problems="$(cat "$flag")"; rm -f "$flag"
         [ "$problems" = 0 ]
