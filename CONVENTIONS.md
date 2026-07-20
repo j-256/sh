@@ -476,7 +476,7 @@ Scripts implement this via a preprocessor block that runs once before the parse 
 
 ### Canonical short options
 
-Reuse these letters with these meanings across scripts. New scripts that need one of these behaviors must use the listed letter; new scripts that pick a short option for a different purpose must avoid these letters.
+Reuse these letters with these meanings across scripts. The reservation is *behavior-scoped*, not global: a canonical letter is claimed only in a script that has the behavior. `-h`/`-v`/`-q` are effectively universal because help/verbose/quiet exist in almost every script. `-n` and `-f` are claimed only where the behavior is present -- a script with a dry-run mode spells it `-n`, a script with a force (semantically, e.g. `chrome-debug --fresh` forces a clean profile) spells it `-f` -- but a script lacking that behavior may use the letter for something else (`curl-timing -n/--num`, `tsd -n/--nano`). The claim is one-directional: if the behavior is present, the short (if it has one) is the canonical letter; but a reserved-namespace script overrides even that -- `pin-dns` forwards curl's single-letter flags (`-H`, `-d`, `-o`, ...) straight through, so its own options (`--host`, `--target`, `--dry-run`) stay long-only because the short space is spoken for.
 
 | Short | Long | Meaning |
 |-------|------|---------|
@@ -491,8 +491,8 @@ Reuse these letters with these meanings across scripts. New scripts that need on
 
 Short and long forms follow two asymmetric rules:
 
-- **Every short option must have a long form**, the sole exception being a deliberately undocumented short (rare -- prefer documenting and pairing). The long form is what appears in scripts, docs, and error messages; the short is a typing shortcut, and a shortcut with no long form behind it is a dead end.
-- **A long option need not have a short form.** The short-letter namespace is small and collision-prone, so spend a letter only when the option is typed often enough to earn one. Long-only is the natural default for options that are rarely hand-typed, that negate (`--no-save`, `--no-extensions` -- negation flags conventionally carry no short), that would collide with a letter already in use, or whose short space is spoken for (`pin-dns` reserves its entire short space for curl passthrough, so none of its own options can take one).
+- **Every option gets a short by default.** Give a new option both a short and a long form unless a listed exception applies. The short is the ergonomic path for a toolkit you type yourself; the mandatory long form (below) keeps `--help`, docs, and errors legible, so short-by-default costs nothing in readability.
+- **Every short must have a long; a long may go short-less only by exception.** The long form is what appears in scripts, docs, and error messages. Going long-only requires one of: **reserved namespace** (`pin-dns` gives its whole short space to curl passthrough); **negation flag** (`--no-save`, `--no-extensions` conventionally carry no short); **collision** (the letter is taken by a more-deserving option, or is a canonical letter for a behavior this script has); or **genuinely never hand-typed** (machine-facing or diagnostic flags like `--print-pool`). A long-only option carries a one-line comment naming which exception applies, mirroring the value-opts-exclusion comment rule below.
 
 ### Preprocessor
 
