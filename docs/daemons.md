@@ -161,7 +161,7 @@ Each daemon owns one log file, `<name>.log`, in [`DAEMONS_LOG_DIR`](#environment
 | `append <name> <event> [detail]` | Append one record to `<name>`'s log (creating the log dir on first write). `<event>` is `trigger`, `noop`, `change`, or `error`. Pass `--detail-stdin` in place of `[detail]` to read the detail from stdin |
 | `status` | Per-daemon summary from the registry: loaded in launchd? plus last activity (event + timestamp) and all-time event counts. Shows `never fired` when a daemon has no log yet |
 | `check` | Health gate: exits nonzero with a loud alert for any daemon not loaded, pointing at a missing script, or whose last run exited nonzero |
-| `log [name\|--all] [-f]` | Render a log human-readably. `--all` (or no name) merges every daemon in timestamp order; `-f` follows like `tail -f` |
+| `log [name\|--all] [-f\|--follow]` | Render a log human-readably. `--all` (or no name) merges every daemon in timestamp order; `-f`/`--follow` follows like `tail -f` |
 | `query [name\|--all] [--event E] [--since T] [--jq EXPR]` | Emit raw JSONL records matching the filters. `--event` keeps one event type; `--since` keeps records at or after a time; `--jq` pipes matches through a jq expression |
 | `-h, --help` | Show help |
 

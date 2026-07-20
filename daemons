@@ -5,7 +5,7 @@
 #   daemons append <name> <event> [detail|--detail-stdin]   Append one activity record
 #   daemons status                           Summarize all daemons (loaded? last activity + counts)
 #   daemons check                            Health+activity gate (returns nonzero on problem)
-#   daemons log [name|--all] [-f]            Render the log (human-readable)
+#   daemons log [name|--all] [-f|--follow]   Render the log (human-readable)
 #   daemons query [name|--all] [options]     Filter/extract JSONL records
 #   daemons -h | --help
 #
@@ -35,7 +35,7 @@ SYNOPSIS
   $SCRIPT_NAME append <${s}name${r}> <${s}event${r}> [${s}detail${r}|--detail-stdin]
   $SCRIPT_NAME status
   $SCRIPT_NAME check
-  $SCRIPT_NAME log [${s}name${r}|--all] [-f]
+  $SCRIPT_NAME log [${s}name${r}|--all] [-f|--follow]
   $SCRIPT_NAME query [${s}name${r}|--all] [--event ${s}E${r}] [--since ${s}T${r}] [--jq ${s}EXPR${r}]
 DESCRIPTION
   Writes and reads per-daemon activity logs (JSONL) under \$DAEMONS_LOG_DIR.
@@ -45,7 +45,7 @@ SUBCOMMANDS
   append   Append one activity record (creates the log dir on first write). Pass --detail-stdin in place of [detail] to read the detail from stdin
   status   Per-daemon summary: loaded? + last activity (event + timestamp) + all-time event counts; "never fired" when no log
   check    Health+activity gate; nonzero + loud alerts on any problem
-  log      Render the log human-readably (--all merges; -f follows)
+  log      Render the log human-readably (--all merges; -f/--follow follows)
   query    Filter/extract JSONL by --event/--since/--all/--jq
            --since accepts NNN[smh] (e.g. 1h, 30m), a bare date YYYY-MM-DD (midnight UTC), or a full ISO-8601 UTC timestamp
 ENVIRONMENT

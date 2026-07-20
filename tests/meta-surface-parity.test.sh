@@ -52,9 +52,7 @@ _is_bash_script() {
 #                       dropped --token alias precedent) vs. document, then un-exclude
 #   snippet             --start-pattern/--end-pattern/--trim-start/--trim-end are
 #                       aliases of documented flags; same drop-vs-document decision
-#   daemons             --follow (long form of the documented -f) is absent from -h;
-#                       excluded only because another surface owns daemons right now
-EXCLUDE="$_META_OPT_EXCLUDE client-credentials snippet daemons"
+EXCLUDE="$_META_OPT_EXCLUDE client-credentials snippet"
 _is_excluded() { case " $EXCLUDE " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 
 # Flag tokens documented anywhere in a script's --help output. Matches -x and
