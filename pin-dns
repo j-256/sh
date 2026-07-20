@@ -84,16 +84,17 @@
 #         Request profile: Accept + Sec-Fetch-* set. Default: navigate
 #         navigate = page load; cors/no-cors = in-page fetch/XHR
 #
-#     --engine curl|impersonate|auto
+#     --client curl|impersonate|auto
 #         auto (default) uses curl-impersonate if on PATH, else stock curl
 #         impersonate requires it (exit 3 if absent); curl forces stock curl
+#         curl-impersonate is accepted as an alias for impersonate
 #
 #     --chrome-major N
 #         Pin the Chrome major version; skips all version detection
 #
 #     --no-impersonate
 #         Send a bare request (DNS pin only); emit no impersonation headers
-#         Master off-switch: overrides --engine (impersonate + no-impersonate
+#         Master off-switch: overrides --client (impersonate + no-impersonate
 #         is still a bare request, not an error)
 #
 #     --dry-run
@@ -142,8 +143,8 @@
 #         navigate (default) models a top-level page load; cors/no-cors model an
 #         in-page fetch/XHR (Accept: */*, no Sec-Fetch-User/Upgrade-Insecure)
 #     --no-impersonate sends a bare request (DNS pin only), no added headers.
-#         It is the master off-switch: --engine impersonate combined with
-#         --no-impersonate still yields a bare request, not an engine error
+#         It is the master off-switch: --client impersonate combined with
+#         --no-impersonate still yields a bare request, not a client error
 #
 #     Any header you pass (-H/-A) wins: pin-dns will not duplicate it. If you set
 #     a non-Chrome User-Agent, the Chrome-only client hints are suppressed so the
@@ -151,10 +152,11 @@
 #
 #     TLS/JA3 note: stock curl cannot match Chrome's TLS or HTTP/2 fingerprint,
 #     only its headers. If a curl-impersonate binary is on PATH, pin-dns routes
-#     through it (--engine auto) to also match the TLS/HTTP-2 signature. Force
-#     with --engine impersonate, or disable with --engine curl. Install the real
-#     tool from github.com/lexiforest/curl-impersonate (prebuilt binaries) -- do
-#     NOT install the npm 'curl-impersonate' package, which is an unrelated stub
+#     through it (--client auto) to also match the TLS/HTTP-2 signature. Force
+#     with --client impersonate (or the curl-impersonate alias), or disable with
+#     --client curl. Install the real tool from github.com/lexiforest/curl-impersonate
+#     (prebuilt binaries) -- do NOT install the npm 'curl-impersonate' package,
+#     which is an unrelated stub
 #
 #     curl-impersonate only accepts a fixed roster of profiles (chrome131,
 #     chrome133a, ...) that lags live Chrome and skips versions; a raw
@@ -171,10 +173,10 @@
 #     PIN_DNS_CHROME_MAJOR
 #         Pin the Chrome major (same as --chrome-major; flag wins)
 #
-#     PIN_DNS_ENGINE
-#         Default engine when --engine is not given: curl|impersonate|auto
-#         (same as --engine; flag wins). auto is the built-in default, so
-#         PIN_DNS_ENGINE=auto is a no-op. Set curl to keep stock curl (and the
+#     PIN_DNS_CLIENT
+#         Default client when --client is not given: curl|impersonate|auto
+#         (same as --client; flag wins). auto is the built-in default, so
+#         PIN_DNS_CLIENT=auto is a no-op. Set curl to keep stock curl (and the
 #         live version) as the default, impersonate to require curl-impersonate
 #
 #     PIN_DNS_UA_OFFLINE
@@ -192,7 +194,7 @@
 # EXIT STATUS
 #     0   Success
 #     2   Usage / argument error
-#     3   Dependency error (e.g. curl missing; dig missing when TARGET is a hostname; or --engine impersonate set but curl-impersonate not on PATH)
+#     3   Dependency error (e.g. curl missing; dig missing when TARGET is a hostname; or --client impersonate set but curl-impersonate not on PATH)
 #     4   Resolution error (dig returned no A/AAAA result)
 #
 _pin_dns() (
@@ -306,17 +308,18 @@ OPTIONS
         Request profile: Accept + Sec-Fetch-* set. Default: navigate
         navigate = page load; cors/no-cors = in-page fetch/XHR
 
-    --engine curl|impersonate|auto
+    --client curl|impersonate|auto
         auto (default) uses curl-impersonate if on PATH, else stock curl.
-        impersonate requires it (exit 3 if absent); curl forces stock curl
+        impersonate requires it (exit 3 if absent); curl forces stock curl.
+        curl-impersonate is accepted as an alias for impersonate
 
     --chrome-major N
         Pin the Chrome major version; skips all version detection
 
     --no-impersonate
         Send a bare request (DNS pin only); emit no impersonation headers.
-        Master off-switch: --engine impersonate + --no-impersonate is still
-        a bare request, not an engine error
+        Master off-switch: --client impersonate + --no-impersonate is still
+        a bare request, not a client error
 
     --dry-run
         Do not execute curl. Print the resolved mapping and the curl command to stderr.
@@ -364,11 +367,11 @@ IMPERSONATION
     self-consistent.
 
     Stock curl matches Chrome's headers but not its TLS/JA3 or HTTP/2
-    fingerprint. If a curl-impersonate binary is on PATH, --engine auto routes
-    through it to match those too; --engine impersonate requires it, --engine
-    curl forces stock curl. Install the real tool from
-    github.com/lexiforest/curl-impersonate (prebuilt binaries) -- do NOT install
-    the npm 'curl-impersonate' package, which is an unrelated stub.
+    fingerprint. If a curl-impersonate binary is on PATH, --client auto routes
+    through it to match those too; --client impersonate (or the curl-impersonate
+    alias) requires it, --client curl forces stock curl. Install the real tool
+    from github.com/lexiforest/curl-impersonate (prebuilt binaries) -- do NOT
+    install the npm 'curl-impersonate' package, which is an unrelated stub.
 
     curl-impersonate supports only a fixed roster of profiles that lags live
     Chrome, so $SCRIPT_NAME maps the detected major to the nearest installed
@@ -383,9 +386,9 @@ ENVIRONMENT
     PIN_DNS_CHROME_MAJOR
         Pin the Chrome major (same as --chrome-major; flag wins)
 
-    PIN_DNS_ENGINE
-        Default engine when --engine is absent: curl|impersonate|auto (same as
-        --engine; flag wins). auto is the default, so PIN_DNS_ENGINE=auto is a no-op
+    PIN_DNS_CLIENT
+        Default client when --client is absent: curl|impersonate|auto (same as
+        --client; flag wins). auto is the default, so PIN_DNS_CLIENT=auto is a no-op
 
     PIN_DNS_UA_OFFLINE
         Disable the network version fallback
@@ -408,7 +411,7 @@ DEPENDENCIES
 EXIT STATUS
     0   Success
     2   Usage / argument error
-    3   Dependency error (e.g. curl missing; dig missing when TARGET is a hostname; or --engine impersonate set but curl-impersonate not on PATH)
+    3   Dependency error (e.g. curl missing; dig missing when TARGET is a hostname; or --client impersonate set but curl-impersonate not on PATH)
     4   Resolution error (dig returned no A/AAAA result)
 
 EOF
@@ -416,13 +419,13 @@ EOF
 
     _cmd_exists() { command -v "$1" >/dev/null 2>&1; }
 
-    # Resolve the engine binary. Honors the `engine` global:
+    # Resolve the client binary. Honors the `client` global:
     #   curl        -> stock curl (prints nothing, returns 1)
     #   impersonate -> require curl-impersonate (returns 1 if absent)
     #   auto        -> use curl-impersonate if present, else stock curl
     # Prints the impersonate binary name on success; empty + return 1 otherwise
     _detect_impersonate_engine() {
-        case "$engine" in
+        case "$client" in
             curl) return 1 ;;
             impersonate|auto)
                 if _cmd_exists curl-impersonate; then
@@ -854,7 +857,7 @@ EOF
             -h|--help|-q|--quiet|--curlrc|--dry-run|--no-silent|--no-impersonate)
                 return 0
                 ;;
-            --host|--host=*|--target|--target=*|--path|--path=*|--resolver|--resolver=*|--scheme|--scheme=*|--port|--port=*|--platform|--platform=*|--fetch-mode|--fetch-mode=*|--engine|--engine=*|--chrome-major|--chrome-major=*)
+            --host|--host=*|--target|--target=*|--path|--path=*|--resolver|--resolver=*|--scheme|--scheme=*|--port|--port=*|--platform|--platform=*|--fetch-mode|--fetch-mode=*|--client|--client=*|--chrome-major|--chrome-major=*)
                 return 0
                 ;;
         esac
@@ -1448,7 +1451,7 @@ EOF
     local platform="mac"
     local fetch_mode="navigate"
     local no_impersonate=""
-    local engine=""    # empty until set by --engine; resolved to flag:-env:-auto post-parse
+    local client=""    # empty until set by --client; resolved to flag:-env:-auto post-parse
     local chrome_major_override=""
     local dry_run=""
     local no_silent=""
@@ -1573,8 +1576,8 @@ EOF
                 i=$((i + 1))
                 continue
                 ;;
-            --engine=*)
-                engine="${arg#*=}"
+            --client=*)
+                client="${arg#*=}"
                 i=$((i + 1))
                 continue
                 ;;
@@ -1583,7 +1586,7 @@ EOF
                 i=$((i + 1))
                 continue
                 ;;
-            --host|--target|--path|--resolver|--scheme|--port|--platform|--fetch-mode|--engine|--chrome-major)
+            --host|--target|--path|--resolver|--scheme|--port|--platform|--fetch-mode|--client|--chrome-major)
                 local opt="$arg"
                 i=$((i + 1))
                 if [ "$i" -ge "${#pre_args[@]}" ]; then
@@ -1600,7 +1603,7 @@ EOF
                     --port) port="$val"; port_set_explicit="1" ;;
                     --platform) platform="$val" ;;
                     --fetch-mode) fetch_mode="$val" ;;
-                    --engine) engine="$val" ;;
+                    --client) client="$val" ;;
                     --chrome-major) chrome_major_override="$val" ;;
                 esac
                 i=$((i + 1))
@@ -1628,14 +1631,20 @@ EOF
         navigate|cors|no-cors) ;;
         *) _error "Invalid --fetch-mode '$fetch_mode' (valid: navigate|cors|no-cors). Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
     esac
-    # Resolve engine precedence: --engine flag beats PIN_DNS_ENGINE env beats the
+    # Resolve client precedence: --client flag beats PIN_DNS_CLIENT env beats the
     # auto default (same flag>env>default shape as chrome_major_effective). The
     # enum check below then validates the resolved value, so a bad flag OR a bad
     # env value hits one message -- they are the same knob
-    engine="${engine:-${PIN_DNS_ENGINE:-auto}}"
-    case "$engine" in
+    client="${client:-${PIN_DNS_CLIENT:-auto}}"
+    # curl-impersonate is an alias for impersonate; normalize immediately so
+    # every downstream check (the enum validator, _detect_impersonate_engine,
+    # the missing-binary error) only ever sees the single canonical value
+    case "$client" in
+        curl-impersonate) client="impersonate" ;;
+    esac
+    case "$client" in
         curl|impersonate|auto) ;;
-        *) _error "Invalid --engine '$engine' (valid: curl|impersonate|auto). Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+        *) _error "Invalid --client '$client' (valid: curl|impersonate|auto). Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
     esac
     # Validate the effective Chrome major (flag beats env, same precedence as
     # _resolve_chrome_major). It is interpolated verbatim into the UA as
@@ -1649,14 +1658,14 @@ EOF
         esac
     fi
 
-    # Resolve the request engine. Empty -> stock curl (inject UA + header suite);
+    # Resolve the request client. Empty -> stock curl (inject UA + header suite);
     # non-empty -> curl-impersonate (it sets headers + TLS together, so pin-dns
-    # injects no header suite). --engine impersonate with no binary is fatal
-    local engine_bin=""
+    # injects no header suite). --client impersonate with no binary is fatal
+    local client_bin=""
     if [ -z "$no_impersonate" ]; then
-        engine_bin="$(_detect_impersonate_engine)" || engine_bin=""
-        if [ "$engine" = "impersonate" ] && [ -z "$engine_bin" ]; then
-            _error "curl-impersonate not found on PATH (required by --engine impersonate). Install lexiforest/curl-impersonate or use --engine auto/curl"
+        client_bin="$(_detect_impersonate_engine)" || client_bin=""
+        if [ "$client" = "impersonate" ] && [ -z "$client_bin" ]; then
+            _error "curl-impersonate not found on PATH (required by --client impersonate). Install lexiforest/curl-impersonate or use --client auto/curl"
             return 3
         fi
     fi
@@ -1943,8 +1952,8 @@ EOF
 
     local -a cmd=()
 
-    if [ -n "$engine_bin" ]; then
-        cmd+=("$engine_bin")
+    if [ -n "$client_bin" ]; then
+        cmd+=("$client_bin")
     else
         cmd+=("curl")
     fi
@@ -1969,14 +1978,14 @@ EOF
     # _map_impersonate_target): --impersonate rejects a major it has no profile
     # for, and live Chrome routinely outruns the roster. When no roster is
     # discoverable (binary-only install), the raw major passes through unchanged
-    if [ -n "$engine_bin" ]; then
+    if [ -n "$client_bin" ]; then
         local impersonate_target="chrome${chrome_major}"
-        local engine_dir
-        engine_dir="$(command -v "$engine_bin" 2>/dev/null)"
-        engine_dir="${engine_dir%/*}"
-        if [ -n "$engine_dir" ]; then
+        local client_dir
+        client_dir="$(command -v "$client_bin" 2>/dev/null)"
+        client_dir="${client_dir%/*}"
+        if [ -n "$client_dir" ]; then
             local mapped
-            if mapped="$(_map_impersonate_target "$engine_dir" "$chrome_major")"; then
+            if mapped="$(_map_impersonate_target "$client_dir" "$chrome_major")"; then
                 if [ "$mapped" != "$impersonate_target" ]; then
                     _warn "curl-impersonate has no chrome${chrome_major} profile; using nearest installed target '$mapped'"
                 fi
@@ -1990,8 +1999,8 @@ EOF
     # as -H at Chrome's canonical position, not via -A (curl -A always sends the UA
     # first on the wire). A user-supplied -A/-H User-Agent still flows via curl_args
     # Only for stock curl: curl-impersonate sets the browser header set itself, so
-    # the suite is skipped on that path (gated on empty engine_bin)
-    if [ -z "$no_impersonate" ] && [ -z "$engine_bin" ]; then
+    # the suite is skipped on that path (gated on empty client_bin)
+    if [ -z "$no_impersonate" ] && [ -z "$client_bin" ]; then
         _emit_impersonation_headers
     fi
 
@@ -2000,7 +2009,7 @@ EOF
     # full Accept-Encoding is already skipped for these inside
     # _emit_impersonation_headers. Single append so --compressed is added at most
     # once even when both predicates match (e.g. -i together with -o file)
-    if [ -z "$no_impersonate" ] && [ -z "$engine_bin" ] \
+    if [ -z "$no_impersonate" ] && [ -z "$client_bin" ] \
         && { _curl_args_write_to_file -- "${curl_args[@]}" \
             || _curl_args_wants_raw_headers -- "${curl_args[@]}"; }; then
         cmd+=("--compressed")
@@ -2061,10 +2070,10 @@ EOF
     fi
 
     # Decide execution mode:
-    #   - impersonate engine, file output, headers-only, or raw-header idioms
+    #   - impersonate client, file output, headers-only, or raw-header idioms
     #     (-i/-D) -> exec directly (curl owns any decoding)
     #   - stock curl + stdout + impersonating -> capture + decode
-    if [ -n "$engine_bin" ] || [ -n "$no_impersonate" ] \
+    if [ -n "$client_bin" ] || [ -n "$no_impersonate" ] \
         || _curl_args_write_to_file -- "${curl_args[@]}" \
         || _curl_args_headers_only -- "${curl_args[@]}" \
         || _curl_args_wants_raw_headers -- "${curl_args[@]}"; then
