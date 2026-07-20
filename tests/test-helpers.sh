@@ -178,6 +178,108 @@ assert_captured() {
     assert_eq "$label" "$got" "$want"
 }
 
+# --- option-arm parsing (shared by the surface-parity and canonical-letter meta-tests) ---
+
+# Scripts excluded from the option-surface meta-tests, space-separated. The shared
+# base is pin-dns: a curl wrapper whose helper functions case-match curl's own
+# short flags to classify borrowed args before forwarding them. _option_flags and
+# _option_pairs scan every case...esac, so they can't tell those recognizer arms
+# from real option arms and over-report pin-dns's surface -- a tooling limit, not a
+# spec violation (pin-dns's authored surface is in sync). Each meta-test appends its
+# own exemptions on top of this base (EXCLUDE="$_META_OPT_EXCLUDE extra-script")
+# rather than editing this constant, so a test-specific exemption doesn't leak
+# across tests -- e.g. the canonical-letter test additionally exempts pin-dns for a
+# different, real reason (it reserves its whole short space for curl passthrough, so
+# its own options are long-only by design; see CONVENTIONS), which is an authored
+# exception to the canonical-binding rule, not the extractor artifact excluded here.
+# (Non-bash scripts like render-md are dropped by the shebang filter, not here.)
+_META_OPT_EXCLUDE="pin-dns"
+
+# Emit the set of option flags a script's argument parser accepts, one per line,
+# sorted and deduplicated. Reads case-arm labels inside every `case ... esac`
+# block in the script (the main parse loop plus any in sub-functions), so a flag
+# handled anywhere is captured. Both option-surface meta-tests consume this, so
+# they share one arm-parser rather than drifting with two independent ones
+#
+# What it extracts, and what it skips:
+#   -j|--jwt)        -> -j, --jwt   short and long both emitted
+#   --jwt=*)         -> --jwt       the =* value-form collapses onto the bare long
+#   -*)  *)  --)     -> skipped     catch-alls and the -- passthru: no letter follows
+#   -[a-zA-Z]?* --*  -> skipped     glob arms (e.g. in _expand_short_opts), not flags
+#   append) status)  -> skipped     subcommand arms start with a letter, not with -
+#
+# A token counts as a flag only if it matches ^--?[a-zA-Z][a-zA-Z0-9-]*$ after the
+# =* strip: that admits -x and --long-name and rejects globs, quotes, and a bare --
+#
+# An arm whose label line carries a `# hidden` comment (e.g. `--print-pool) # hidden
+# diagnostic`) is skipped: a deliberately-undocumented option is not part of the
+# surface a user is expected to discover, so it is exempt from the self-sufficiency
+# checks. This keeps the rest of the script's flags checked, unlike excluding it
+_option_flags() {
+    awk '
+        /^[[:space:]]*case[[:space:]]/       { depth++; next }
+        /^[[:space:]]*esac([[:space:]]|;|$)/ { if (depth > 0) depth--; next }
+        depth > 0 {
+            pos = index($0, ")")
+            if (pos == 0) next
+            if (substr($0, pos) ~ /#[[:space:]]*hidden/) next
+            label = substr($0, 1, pos - 1)
+            gsub(/[[:space:]]/, "", label)
+            if (label !~ /^-/) next
+            n = split(label, toks, "|")
+            for (i = 1; i <= n; i++) {
+                t = toks[i]
+                sub(/=\*$/, "", t)
+                if (t ~ /^--?[a-zA-Z][a-zA-Z0-9-]*$/) print t
+            }
+        }
+    ' "$1"  | sort -u
+}
+
+# Emit each short option paired with the long form(s) it shares a case arm with,
+# one line per short: "<short>\t<long>[,<long>...]", sorted by short. A short whose
+# long field is empty has NO long form in any arm -- the violation the pairing
+# invariant flags (every short must have a long; the reverse is not required, so
+# long-only options are simply not emitted here). Sibling to _option_flags: same
+# arm-scan and same skip rules, but preserves the short<->long correspondence that
+# _option_flags's flat set discards. Aggregates across arms, so a short paired in
+# any arm counts as paired. Skips `# hidden`-marked arms, same as _option_flags
+_option_pairs() {
+    awk '
+        /^[[:space:]]*case[[:space:]]/       { depth++; next }
+        /^[[:space:]]*esac([[:space:]]|;|$)/ { if (depth > 0) depth--; next }
+        depth > 0 {
+            pos = index($0, ")")
+            if (pos == 0) next
+            if (substr($0, pos) ~ /#[[:space:]]*hidden/) next
+            label = substr($0, 1, pos - 1)
+            gsub(/[[:space:]]/, "", label)
+            if (label !~ /^-/) next
+            ns = 0; nl = 0
+            n = split(label, toks, "|")
+            for (i = 1; i <= n; i++) {
+                t = toks[i]
+                sub(/=\*$/, "", t)
+                if (t !~ /^--?[a-zA-Z][a-zA-Z0-9-]*$/) continue
+                if (t ~ /^--/) longs[++nl] = t; else shorts[++ns] = t
+            }
+            for (i = 1; i <= ns; i++) {
+                s = shorts[i]
+                if (!(s in seen_short)) { seen_short[s] = 1; order[++norder] = s; joined[s] = "" }
+                for (j = 1; j <= nl; j++) {
+                    k = s SUBSEP longs[j]
+                    if (k in seen_pair) continue
+                    seen_pair[k] = 1
+                    joined[s] = (joined[s] == "" ? longs[j] : joined[s] "," longs[j])
+                }
+            }
+        }
+        END {
+            for (i = 1; i <= norder; i++) print order[i] "\t" joined[order[i]]
+        }
+    ' "$1" | sort
+}
+
 # --- test runner ---
 
 run_tests() {

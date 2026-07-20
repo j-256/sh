@@ -243,6 +243,7 @@ Most test files target one script: `<name>.test.sh` exercises `../<name>`, and d
 | `meta-curl-pipe.test.sh` | Every script works when piped or process-substituted (`curl \| bash`, `bash <(...)`, `. <(...)`) (CONVENTIONS "Use `$SCRIPT_NAME`") |
 | `meta-coverage.test.sh` | The script↔test bijection holds: every bash script has a test, and every non-`meta-` test has a matching script |
 | `meta-comment-style.test.sh` | No comment ends in a trailing `.` or `!` (CONVENTIONS Style rule); internal sentence-separating periods in a multi-line block are allowed |
+| `meta-surface-parity.test.sh` | Every option the parser accepts is documented in `-h`, and every short option has a long form (CONVENTIONS "Self-sufficiency"). Uses the shared `_option_flags`/`_option_pairs` extractors; skips arms marked `# hidden` and scripts in `$_META_OPT_EXCLUDE` plus its own tracked exclusions |
 
 Conventions for a meta-test:
 
