@@ -226,6 +226,7 @@ OPTIONS
   -s, --server ${s}ip${r}   DNS server to query (default: 8.8.8.8)
   -d, --domain ${s}dom${r}  Anchor %{d} macros when input is a raw record
   --tcp             Force TCP instead of UDP for dig queries
+  --record          (flatten only) Emit a single quoted TXT record
   -q, --quiet       Errors only (suppress warnings)
   -v, --verbose     Show the resolution trace ([INF] lines)
   -h, --help        Show this help message (or per-verb: $SCRIPT_NAME ${s}verb${r} -h)
