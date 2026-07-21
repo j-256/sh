@@ -67,7 +67,7 @@ $ daemons log reconcile
 2026-07-16T04:30:12Z reconcile CHANGE reconciled 3 drifted keys
 ```
 
-Because timestamps are ISO-8601 UTC they sort lexically, which is how `--all` interleaves daemons correctly. Add `-f` to follow the log as new records land, like `tail -f`:
+Because timestamps are ISO-8601 UTC they sort lexically, which is how `-a`/`--all` interleaves daemons correctly. Add `-f`/`--follow` to follow the log as new records land, like `tail -f`:
 
 ```bash
 daemons log --all -f
@@ -77,13 +77,13 @@ daemons log --all -f
 
 Unlike `log --all` (which merge-sorts every daemon's records by timestamp), `query --all` emits records grouped by daemon, in log-file order - not globally time-sorted. Pipe through `jq -s 'sort_by(.ts)'` if you need one global time order across daemons.
 
-**Keep one event type** with `--event`:
+**Keep one event type** with `-e`/`--event`:
 
 ```bash
 daemons query reconcile --event error
 ```
 
-**Keep recent records** with `--since`, which accepts three forms:
+**Keep recent records** with `-s`/`--since`, which accepts three forms:
 
 - a relative span, `NNN[smh]` - `1h`, `30m`, `90s` (that long before now)
 - a bare date, `YYYY-MM-DD` - midnight UTC that day
@@ -93,13 +93,13 @@ daemons query reconcile --event error
 daemons query --all --event error --since 1h
 ```
 
-**Reshape the output** by piping matches through a jq expression with `--jq`:
+**Reshape the output** by piping matches through a jq expression with `-j`/`--jq`:
 
 ```bash
 daemons query reconcile --event change --jq '.detail'
 ```
 
-A bare `log` or `query` with no name (and no `--all`) defaults to all daemons. Querying a daemon that has never logged is not an error - it simply prints nothing and exits 0.
+A bare `log` or `query` with no name (and no `-a`/`--all`) defaults to all daemons. Querying a daemon that has never logged is not an error - it simply prints nothing and exits 0.
 
 ## Health-checking (`check`)
 
@@ -161,11 +161,11 @@ Each daemon owns one log file, `<name>.log`, in [`DAEMONS_LOG_DIR`](#environment
 | `append <name> <event> [detail]` | Append one record to `<name>`'s log (creating the log dir on first write). `<event>` is `trigger`, `noop`, `change`, or `error`. Pass `--detail-stdin` in place of `[detail]` to read the detail from stdin |
 | `status` | Per-daemon summary from the registry: loaded in launchd? plus last activity (event + timestamp) and all-time event counts. Shows `never fired` when a daemon has no log yet |
 | `check` | Health gate: exits nonzero with a loud alert for any daemon not loaded, pointing at a missing script, or whose last run exited nonzero |
-| `log [name\|--all] [-f\|--follow]` | Render a log human-readably. `--all` (or no name) merges every daemon in timestamp order; `-f`/`--follow` follows like `tail -f` |
-| `query [name\|--all] [--event E] [--since T] [--jq EXPR]` | Emit raw JSONL records matching the filters. `--event` keeps one event type; `--since` keeps records at or after a time; `--jq` pipes matches through a jq expression |
+| `log [name\|-a\|--all] [-f\|--follow]` | Render a log human-readably. `-a`/`--all` (or no name) merges every daemon in timestamp order; `-f`/`--follow` follows like `tail -f` |
+| `query [name\|-a\|--all] [-e\|--event E] [-s\|--since T] [-j\|--jq EXPR]` | Emit raw JSONL records matching the filters. `-e`/`--event` keeps one event type; `-s`/`--since` keeps records at or after a time; `-j`/`--jq` pipes matches through a jq expression |
 | `-h, --help` | Show help |
 
-`--since T` accepts a relative span (`NNN[smh]`, e.g. `1h`), a bare date (`YYYY-MM-DD`, midnight UTC), or a full ISO-8601 UTC timestamp.
+`-s`/`--since T` accepts a relative span (`NNN[smh]`, e.g. `1h`), a bare date (`YYYY-MM-DD`, midnight UTC), or a full ISO-8601 UTC timestamp.
 
 ### Environment variables
 

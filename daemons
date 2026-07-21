@@ -5,8 +5,8 @@
 #   daemons append <name> <event> [detail|--detail-stdin]   Append one activity record
 #   daemons status                           Summarize all daemons (loaded? last activity + counts)
 #   daemons check                            Health+activity gate (returns nonzero on problem)
-#   daemons log [name|--all] [-f|--follow]   Render the log (human-readable)
-#   daemons query [name|--all] [options]     Filter/extract JSONL records
+#   daemons log [name|-a|--all] [-f|--follow]   Render the log (human-readable)
+#   daemons query [name|-a|--all] [-e|--event E] [-s|--since T] [-j|--jq EXPR]   Filter/extract JSONL records
 #   daemons -h | --help
 #
 # Environment:
@@ -25,6 +25,36 @@ _daemons() (
 
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
 
+    _expand_short_opts() {
+        # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
+        # $2..$N = "$@"
+        # Populates _EXPANDED; caller does: set -- "${_EXPANDED[@]}"; unset _EXPANDED
+        local value_opts="$1"; shift
+        _EXPANDED=()
+        local passthru=""
+        local arg
+        local rest
+        local c
+        for arg in "$@"; do
+            if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
+            case "$arg" in
+                --)       passthru=1; _EXPANDED+=("$arg") ;;
+                --*|-|"") _EXPANDED+=("$arg") ;;
+                -[a-zA-Z]?*)
+                    rest="${arg#-}"
+                    while [ -n "$rest" ]; do
+                        c="${rest%"${rest#?}"}"; rest="${rest#?}"
+                        _EXPANDED+=("-$c")
+                        case "$value_opts" in *"$c"*)
+                            [ -n "$rest" ] && _EXPANDED+=("$rest")
+                            rest="" ;;
+                        esac
+                    done ;;
+                *)        _EXPANDED+=("$arg") ;;
+            esac
+        done
+    }
+
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
@@ -35,8 +65,8 @@ SYNOPSIS
   $SCRIPT_NAME append <${s}name${r}> <${s}event${r}> [${s}detail${r}|--detail-stdin]
   $SCRIPT_NAME status
   $SCRIPT_NAME check
-  $SCRIPT_NAME log [${s}name${r}|--all] [-f|--follow]
-  $SCRIPT_NAME query [${s}name${r}|--all] [--event ${s}E${r}] [--since ${s}T${r}] [--jq ${s}EXPR${r}]
+  $SCRIPT_NAME log [${s}name${r}|-a|--all] [-f|--follow]
+  $SCRIPT_NAME query [${s}name${r}|-a|--all] [-e|--event ${s}E${r}] [-s|--since ${s}T${r}] [-j|--jq ${s}EXPR${r}]
 DESCRIPTION
   Writes and reads per-daemon activity logs (JSONL) under \$DAEMONS_LOG_DIR.
   Each record is {ts, daemon, event, detail}; event is trigger|noop|change|error.
@@ -45,9 +75,9 @@ SUBCOMMANDS
   append   Append one activity record (creates the log dir on first write). Pass --detail-stdin in place of [detail] to read the detail from stdin
   status   Per-daemon summary: loaded? + last activity (event + timestamp) + all-time event counts; "never fired" when no log
   check    Health+activity gate; nonzero + loud alerts on any problem
-  log      Render the log human-readably (--all merges; -f/--follow follows)
-  query    Filter/extract JSONL by --event/--since/--all/--jq
-           --since accepts NNN[smh] (e.g. 1h, 30m), a bare date YYYY-MM-DD (midnight UTC), or a full ISO-8601 UTC timestamp
+  log      Render the log human-readably (-a/--all merges; -f/--follow follows)
+  query    Filter/extract JSONL by -e/--event, -s/--since, -a/--all, -j/--jq
+           -s/--since accepts NNN[smh] (e.g. 1h, 30m), a bare date YYYY-MM-DD (midnight UTC), or a full ISO-8601 UTC timestamp
 ENVIRONMENT
   DAEMONS_LOG_DIR   Directory of <name>.log files (default: \$XDG_STATE_HOME/daemons or ~/.local/state/daemons)
   DAEMONS_REGISTRY  Registry TSV (default: \$XDG_CONFIG_HOME/daemons/daemons.tsv or ~/.config/daemons/daemons.tsv)
@@ -132,14 +162,17 @@ EOF
         local event=""
         local since=""
         local jqexpr="."
+        # -e/-s/-j take values; -a is a flag (kept out of the value-opts string)
+        _expand_short_opts "esj" "$@"
+        set -- "${_EXPANDED[@]}"; unset _EXPANDED
         while [ $# -gt 0 ]; do
             case "$1" in
-                --all) target="--all"; shift ;;
-                --event) [ $# -ge 2 ] || { _error "--event requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }; event="$2"; shift 2 ;;
+                -a|--all) target="--all"; shift ;;
+                -e|--event) [ $# -ge 2 ] || { _error "--event requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }; event="$2"; shift 2 ;;
                 --event=*) event="${1#*=}"; shift ;;
-                --since) [ $# -ge 2 ] || { _error "--since requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }; since="$2"; shift 2 ;;
+                -s|--since) [ $# -ge 2 ] || { _error "--since requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }; since="$2"; shift 2 ;;
                 --since=*) since="${1#*=}"; shift ;;
-                --jq) [ $# -ge 2 ] || { _error "--jq requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }; jqexpr="$2"; shift 2 ;;
+                -j|--jq) [ $# -ge 2 ] || { _error "--jq requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }; jqexpr="$2"; shift 2 ;;
                 --jq=*) jqexpr="${1#*=}"; [ -n "$jqexpr" ] || { _error "--jq requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }; shift ;;
                 -*) _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
                 *) target="$1"; shift ;;
@@ -264,10 +297,13 @@ EOF
     _do_log() {
         local follow=""
         local target=""
+        # log's shorts (-f, -a) are all flags, so value-opts is empty
+        _expand_short_opts "" "$@"
+        set -- "${_EXPANDED[@]}"; unset _EXPANDED
         while [ $# -gt 0 ]; do
             case "$1" in
                 -f|--follow) follow=1; shift ;;
-                --all) target="--all"; shift ;;
+                -a|--all) target="--all"; shift ;;
                 -*) _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
                 *) target="$1"; shift ;;
             esac

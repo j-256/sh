@@ -148,6 +148,69 @@ test_query_event_equals_form() {
     assert_eq "equals-form matches the error record" "boom" "$(get_stdout | jq -r .detail)"
 }
 
+# --- short options + _expand_short_opts (query: -e/--event, -s/--since, -j/--jq, -a/--all) ---
+
+test_query_short_event() {
+    # -e is the short for --event; spaced form must reach the same filter
+    seed_log reconcile \
+        '{"ts":"2026-07-15T10:00:00Z","daemon":"reconcile","event":"trigger","detail":"a"}' \
+        '{"ts":"2026-07-15T10:00:01Z","daemon":"reconcile","event":"error","detail":"boom"}'
+    run_script query reconcile -e error
+    assert_rc "-e is --event" 0
+    assert_eq "one match" "1" "$(get_stdout | grep -c .)"
+    assert_eq "-e matched the error record" "boom" "$(get_stdout | jq -r .detail)"
+}
+
+test_query_short_event_glued() {
+    # Glued form (-eerror) must split via _expand_short_opts "esj"
+    seed_log reconcile \
+        '{"ts":"2026-07-15T10:00:00Z","daemon":"reconcile","event":"trigger","detail":"a"}' \
+        '{"ts":"2026-07-15T10:00:01Z","daemon":"reconcile","event":"error","detail":"boom"}'
+    run_script query reconcile -eerror
+    assert_rc "-eerror glued splits via preprocessor" 0
+    assert_eq "one match" "1" "$(get_stdout | grep -c .)"
+    assert_eq "-eerror matched the error record" "boom" "$(get_stdout | jq -r .detail)"
+}
+
+test_query_short_since() {
+    # -s is the short for --since
+    seed_log reconcile \
+        '{"ts":"2026-07-14T10:00:00Z","daemon":"reconcile","event":"noop","detail":"old"}' \
+        '{"ts":"2026-07-15T10:00:00Z","daemon":"reconcile","event":"noop","detail":"new"}'
+    run_script query reconcile -s 2026-07-15
+    assert_rc "-s is --since" 0
+    assert_eq "-s keeps only the new record" "new" "$(get_stdout | jq -r .detail)"
+}
+
+test_query_short_jq() {
+    # -j is the short for --jq; glued form too since -j takes a value
+    seed_log reconcile '{"ts":"2026-07-15T10:00:00Z","daemon":"reconcile","event":"change","detail":"3 deltas"}'
+    run_script query reconcile -j.detail
+    assert_rc "-j.detail glued is --jq" 0
+    assert_eq "-j applied the jq expr" "3 deltas" "$(get_stdout | tr -d '"')"
+}
+
+test_query_short_all() {
+    # -a is the flag short for --all (NOT a value-taker); merges every daemon
+    seed_log reconcile '{"ts":"2026-07-15T10:00:00Z","daemon":"reconcile","event":"noop","detail":"r"}'
+    seed_log screenshot-rename '{"ts":"2026-07-15T11:00:00Z","daemon":"screenshot-rename","event":"change","detail":"s"}'
+    run_script query -a
+    assert_rc "-a is --all" 0
+    assert_eq "-a merges both daemons" "2" "$(get_stdout | grep -c .)"
+}
+
+test_query_short_bundled_flag_then_value() {
+    # -ae error bundles the -a flag with the value-taking -e: -a stays a flag,
+    # -e swallows the following "error". A stray letter in the value-opts string
+    # (or -a wrongly listed) would break this
+    seed_log reconcile '{"ts":"2026-07-15T10:00:00Z","daemon":"reconcile","event":"noop","detail":"r"}'
+    seed_log screenshot-rename '{"ts":"2026-07-15T11:00:00Z","daemon":"screenshot-rename","event":"error","detail":"boom"}'
+    run_script query -ae error
+    assert_rc "-ae error bundles flag + value-opt" 0
+    assert_eq "one error across all daemons" "1" "$(get_stdout | grep -c .)"
+    assert_eq "-ae kept the error record" "boom" "$(get_stdout | jq -r .detail)"
+}
+
 test_log_renders_human() {
     seed_log reconcile '{"ts":"2026-07-15T10:00:00Z","daemon":"reconcile","event":"change","detail":"3 deltas"}'
     run_script log reconcile
@@ -187,6 +250,16 @@ test_log_empty_detail_renders_blank() {
     assert_rc "log exits 0" 0
     assert_stdout_not_contains "no literal null" "null"
     assert_stdout_contains "shows event upper" "NOOP"
+}
+
+test_log_short_all() {
+    # -a is the flag short for --all in log too; merge-sorts every daemon
+    seed_log reconcile '{"ts":"2026-07-15T11:00:00Z","daemon":"reconcile","event":"noop","detail":"later"}'
+    seed_log screenshot-rename '{"ts":"2026-07-15T10:00:00Z","daemon":"screenshot-rename","event":"change","detail":"earlier"}'
+    run_script log -a
+    assert_rc "-a is --all in log too" 0
+    assert_stdout_contains "-a merged reconcile" "later"
+    assert_stdout_contains "-a merged screenshot-rename" "earlier"
 }
 
 write_shims() {
