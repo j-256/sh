@@ -24,6 +24,11 @@ test_short_help_flag() {
     assert_stdout_contains "-h shows NAME section" "NAME"
 }
 
+test_help_names_all_short() {
+    run_script -h
+    assert_stdout_contains "help names -a short" "-a, --all"
+}
+
 test_unknown_flag_errors() {
     run_script --banana
     assert_rc "unknown flag exits 2" 2
@@ -445,6 +450,34 @@ test_all_flag_installs_catalog() {
     for n in alpha bravo charlie delta echo-tool; do
         assert_file_exists "$n installed via --all" "$target/$n"
     done
+}
+
+test_all_short_installs_catalog() {
+    # -a is the short for --all; it should install the full catalog too
+    local target="$TEST_DIR/bin"
+    mkdir -p "$target"
+    env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR:$PATH" INSTALL_DIR="$target" \
+        /bin/bash "$UNDER_TEST" -a >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
+    printf '%s\n' "$?" > "$TEST_DIR/rc"
+    assert_rc "-a exits 0" 0
+    for n in alpha bravo charlie delta echo-tool; do
+        assert_file_exists "$n installed via -a" "$target/$n"
+    done
+}
+
+test_all_short_with_names_errors() {
+    # -a shares --all's mutual exclusion with explicit script names
+    run_script -a tsd
+    assert_rc "-a mixed with names exits 2" 2
+    assert_stderr_contains "stderr mentions conflict" "--all"
+}
+
+test_bundled_help_all_short() {
+    # -ha bundles -h and -a; _expand_short_opts (added with the -a flag) splits
+    # it into -h -a, and -h wins by appearing first, so help prints and exits 0
+    run_script -ha
+    assert_rc "-ha bundled shorts exit 0" 0
+    assert_stdout_contains "-ha prints help" "NAME"
 }
 
 test_summary_line_format() {

@@ -3,7 +3,7 @@
 #
 # Usage:
 #   get [script ...]
-#   get --all
+#   get -a|--all
 #   get -h
 #
 # Downloads scripts from https://toolio.sh and installs them to $INSTALL_DIR
@@ -25,7 +25,7 @@ NAME
   $SCRIPT_NAME - install scripts from toolio.sh into a directory on \$PATH
 SYNOPSIS
   $SCRIPT_NAME [${s}script${r} ${s}...${r}]
-  $SCRIPT_NAME --all
+  $SCRIPT_NAME -a|--all
   $SCRIPT_NAME -h
 DESCRIPTION
   Downloads scripts from https://toolio.sh and installs them to
@@ -35,7 +35,7 @@ DESCRIPTION
   Re-running is the upgrade path: unchanged files are left alone,
   changed files are replaced atomically.
 OPTIONS
-  --all         Install every script in the catalog
+  -a, --all     Install every script in the catalog
   -h, --help    Show this help message
 ENVIRONMENT
   INSTALL_DIR   Override the install directory (default: ~/.local/bin)
@@ -64,6 +64,36 @@ EOF
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
     _warn()  { echo "[WRN][$SCRIPT_NAME] $*" >&2; }
     _info()  { echo "[INF][$SCRIPT_NAME] $*" >&2; }
+
+    _expand_short_opts() {
+        # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
+        # $2..$N = "$@"
+        # Populates _EXPANDED; caller does: set -- "${_EXPANDED[@]}"; unset _EXPANDED
+        local value_opts="$1"; shift
+        _EXPANDED=()
+        local passthru=""
+        local arg
+        local rest
+        local c
+        for arg in "$@"; do
+            if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
+            case "$arg" in
+                --)       passthru=1; _EXPANDED+=("$arg") ;;
+                --*|-|"") _EXPANDED+=("$arg") ;;
+                -[a-zA-Z]?*)
+                    rest="${arg#-}"
+                    while [ -n "$rest" ]; do
+                        c="${rest%"${rest#?}"}"; rest="${rest#?}"
+                        _EXPANDED+=("-$c")
+                        case "$value_opts" in *"$c"*)
+                            [ -n "$rest" ] && _EXPANDED+=("$rest")
+                            rest="" ;;
+                        esac
+                    done ;;
+                *)        _EXPANDED+=("$arg") ;;
+            esac
+        done
+    }
 
     _fetch_catalog() {
         local url="${_GET_TEST_INDEX_URL:-https://toolio.sh/INDEX.md}"
@@ -191,13 +221,17 @@ EOF
 
     local all_mode=0
     local requested=()
+
+    _expand_short_opts "" "$@"
+    set -- "${_EXPANDED[@]}"; unset _EXPANDED
+
     while [ $# -gt 0 ]; do
         case "$1" in
             -h|--help)
                 _show_help
                 return 0
                 ;;
-            --all)
+            -a|--all)
                 all_mode=1
                 ;;
             -*)

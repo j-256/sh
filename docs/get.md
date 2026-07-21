@@ -50,7 +50,7 @@ Re-running is the upgrade path. Unchanged files stay put; changed files are repl
 |------|-------------|
 | (no args) | Print the catalog grouped by category, exit 0 |
 | `<name>...` | Install each named script |
-| `--all` | Install every script in the catalog |
+| `-a`, `--all` | Install every script in the catalog |
 | `-h`, `--help` | Show help |
 
 ### Environment variables
