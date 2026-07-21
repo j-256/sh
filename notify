@@ -186,7 +186,7 @@ EOF
                 ;;
             --sound=*)
                 sound="${1#*=}"
-                [ -n "$sound" ] || { _error "--sound requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                [ -n "$sound" ] || { _error "-S|--sound requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift
                 ;;
             --)
