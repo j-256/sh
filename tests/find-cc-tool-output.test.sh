@@ -86,6 +86,7 @@ test_help_exits_zero() {
     assert_stdout_contains "help has --match" "--match"
     assert_stdout_contains "help has --all" "--all"
     assert_stdout_contains "help has --include-meta" "--include-meta"
+    assert_stdout_contains "help names -i short" "-i, --include-meta"
 }
 
 test_missing_substring_exits_2() {
@@ -212,6 +213,29 @@ test_include_meta_keeps_self_match() {
     # With meta included, two unique outputs -> exit 2, listing both
     assert_rc "include-meta -> multi-match exits 2" 2
     assert_stderr_contains "lists 2 outputs" "2 unique output(s)"
+}
+
+test_include_meta_short_flag() {
+    # -i is the short for --include-meta; same behavior as the long form
+    local proj="$TEST_DIR/home/.claude/projects/-meta-test"
+    make_jsonl "$proj/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.jsonl" \
+        "$(tool_result $'[INF][find-cc-tool-output] 2 unique output(s):\n  [1] METAMARKER stuff')" \
+        "$(tool_result 'real body containing METAMARKER text')"
+    run_script -i "METAMARKER"
+    assert_rc "-i -> multi-match exits 2" 2
+    assert_stderr_contains "-i lists 2 outputs" "2 unique output(s)"
+}
+
+test_include_meta_short_bundled() {
+    # -iv bundles the -i and -v flags; -i must stay a flag (not in value-opts),
+    # so it doesn't swallow the following substring argument
+    local proj="$TEST_DIR/home/.claude/projects/-meta-test"
+    make_jsonl "$proj/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.jsonl" \
+        "$(tool_result $'[INF][find-cc-tool-output] 2 unique output(s):\n  [1] METAMARKER stuff')" \
+        "$(tool_result 'real body containing METAMARKER text')"
+    run_script -iv "METAMARKER"
+    assert_rc "-iv -> multi-match exits 2" 2
+    assert_stderr_contains "-iv lists 2 outputs" "2 unique output(s)"
 }
 
 test_session_friendly_name_filters() {

@@ -9,7 +9,7 @@
 #   -d, --dir <path>           Limit to one project directory
 #   -m, --match <N>            Print the Nth unique output from a multi-match listing
 #   -a, --all                  Dump every unique matching body
-#       --include-meta         Don't filter out this script's own listing output
+#   -i, --include-meta         Don't filter out this script's own listing output
 #   -v, --verbose              Verbose progress output
 #   -h, --help                 Show help message
 
@@ -53,7 +53,7 @@ OPTIONS
   -m, --match ${s}N${r}         Print the Nth unique output from the previous
                        listing (1-based). Mutex with --all
   -a, --all            Dump every unique body, separated by headers
-      --include-meta   Don't filter out this script's own listing output
+  -i, --include-meta   Don't filter out this script's own listing output
                        (which otherwise self-matches when captured by a
                        later tool call)
   -v, --verbose        Verbose progress output
@@ -136,7 +136,7 @@ EOF
             -h|--help) _show_help; return 0 ;;
             -v|--verbose) verbose=1; shift ;;
             -a|--all) all_mode=1; shift ;;
-            --include-meta) include_meta=1; shift ;;
+            -i|--include-meta) include_meta=1; shift ;;
             -s|--session)
                 [ -n "${2-}" ] || { _error "--session requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 session="$2"; shift 2 ;;

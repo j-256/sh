@@ -97,7 +97,7 @@ This script's own listing output starts with `[INF][find-cc-tool-output]`. When 
 | `-d, --dir <path>` | Limit to one project directory. Accepts absolute paths (encoded automatically) or the already-encoded basename |
 | `-m, --match <N>` | Print the Nth unique output from a multi-match listing (1-based). Mutex with `--all` |
 | `-a, --all` | Dump every unique body, separated by headers |
-| `--include-meta` | Don't filter out this script's own listing output |
+| `-i, --include-meta` | Don't filter out this script's own listing output |
 | `-v, --verbose` | Verbose progress output |
 | `-h, --help` | Show help message |
 
