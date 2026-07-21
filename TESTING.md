@@ -265,7 +265,7 @@ tests/install-hooks.sh             # points core.hooksPath at tests/hooks/
 tests/install-hooks.sh --uninstall # restore the default
 ```
 
-The hook (`tests/hooks/pre-commit`) runs only the static, no-script-execution meta-tests listed in its `STATIC_METATESTS` variable (currently `meta-comment-style`), so it stays sub-second and there is no incentive to skip it. The slower fleet meta-tests and per-script suites are **not** run by the hook -- run those with `test-runner.sh` before pushing.
+The hook (`tests/hooks/pre-commit`) runs only the static, no-script-execution meta-tests listed in its `STATIC_METATESTS` variable (currently `meta-comment-style`, `meta-canonical-letters`, and `meta-coverage`), so it stays fast and there is no incentive to skip it. The slower fleet meta-tests and per-script suites are **not** run by the hook -- run those with `test-runner.sh` before pushing.
 
 The hook is a convenience gate, not a guarantee: `git commit --no-verify` bypasses it, and a clone that never runs `install` has no hook at all. Server-side CI is the only unskippable enforcement; until this repo has it, the hook plus a periodic full `test-runner.sh` run are the backstop.
 

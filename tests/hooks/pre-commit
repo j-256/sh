@@ -3,7 +3,7 @@
 #
 # Tracked hook (activated by tests/install-hooks.sh, which points git's
 # core.hooksPath here). Runs only the *static* convention meta-tests -- pure
-# text checks, no script execution -- so it stays sub-second and never tempts a
+# text checks, no script execution -- so it stays fast and never tempts a
 # bypass. The slower whole-fleet meta-tests (curl-pipe, cleanup-on-source) and
 # per-script suites are NOT run here; run those via tests/test-runner.sh.
 #
@@ -18,7 +18,7 @@ tests_dir="$(cd "$hook_dir/.." && pwd)"
 
 # Static convention meta-tests to gate on. Add fast (no-script-execution)
 # checks here as they are written; keep slow/executing tests out of the hook
-STATIC_METATESTS="meta-comment-style"
+STATIC_METATESTS="meta-comment-style meta-canonical-letters meta-coverage"
 
 rc=0
 for t in $STATIC_METATESTS; do
@@ -33,6 +33,6 @@ done
 if [ "$rc" -ne 0 ]; then
     echo "" >&2
     echo "pre-commit: convention check failed (see above)." >&2
-    echo "Fix the comments, or bypass with: git commit --no-verify" >&2
+    echo "Fix the reported violations, or bypass with: git commit --no-verify" >&2
 fi
 exit "$rc"
