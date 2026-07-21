@@ -3,11 +3,11 @@
 #
 # Usage:
 #   verify-p12 <hostname> <token> [p12_password] [p12_file]
-#   verify-p12 --basic <hostname> <user:pass> [p12_password] [p12_file]
+#   verify-p12 -b|--basic <hostname> <user:pass> [p12_password] [p12_file]
 #   verify-p12 -h
 #
 # Options:
-#   --basic         Use Basic auth instead of Bearer
+#   -b, --basic     Use Basic auth instead of Bearer
 #   hostname        Instance hostname (e.g. dev01-web-example.demandware.net)
 #   token           Bearer token for authorization (default auth mode)
 #   user:pass       Username and password for Basic auth (with --basic)
@@ -22,6 +22,36 @@ _verify_p12() (
 
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
 
+    _expand_short_opts() {
+        # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
+        # $2..$N = "$@"
+        # Populates _EXPANDED; caller does: set -- "${_EXPANDED[@]}"; unset _EXPANDED
+        local value_opts="$1"; shift
+        _EXPANDED=()
+        local passthru=""
+        local arg
+        local rest
+        local c
+        for arg in "$@"; do
+            if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
+            case "$arg" in
+                --)       passthru=1; _EXPANDED+=("$arg") ;;
+                --*|-|"") _EXPANDED+=("$arg") ;;
+                -[a-zA-Z]?*)
+                    rest="${arg#-}"
+                    while [ -n "$rest" ]; do
+                        c="${rest%"${rest#?}"}"; rest="${rest#?}"
+                        _EXPANDED+=("-$c")
+                        case "$value_opts" in *"$c"*)
+                            [ -n "$rest" ] && _EXPANDED+=("$rest")
+                            rest="" ;;
+                        esac
+                    done ;;
+                *)        _EXPANDED+=("$arg") ;;
+            esac
+        done
+    }
+
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
         local r; [ -t 1 ] && r=$'\033[24m'
@@ -30,7 +60,7 @@ NAME
   $SCRIPT_NAME - verify WebDAV cartridge access with Bearer or Basic auth
 SYNOPSIS
   $SCRIPT_NAME ${s}hostname${r} ${s}token${r} [${s}p12_password${r}] [${s}p12_file${r}]
-  $SCRIPT_NAME --basic ${s}hostname${r} ${s}user:pass${r} [${s}p12_password${r}] [${s}p12_file${r}]
+  $SCRIPT_NAME -b|--basic ${s}hostname${r} ${s}user:pass${r} [${s}p12_password${r}] [${s}p12_file${r}]
   $SCRIPT_NAME -h
 DESCRIPTION
   Sends a GET request to /webdav/Sites/Cartridges on ${s}hostname${r}.
@@ -43,7 +73,7 @@ DESCRIPTION
   authentication using the .p12 file. Default ${s}p12_file${r} is
   \$USER-${s}hostname${r}.p12 in the current directory.
 OPTIONS
-  --basic        Use Basic auth instead of Bearer
+  -b, --basic    Use Basic auth instead of Bearer
   ${s}hostname${r}       Instance hostname (e.g. dev01-web-example.demandware.net)
   ${s}token${r}          Bearer token for authorization (default auth mode)
   ${s}user:pass${r}      Username and password for Basic auth (with --basic)
@@ -73,10 +103,14 @@ EOF
 
     local auth_mode="bearer"
     local positional=()
+
+    _expand_short_opts "" "$@"
+    set -- "${_EXPANDED[@]}"; unset _EXPANDED
+
     while [ $# -gt 0 ]; do
         case "$1" in
             -h|--help) _show_help; return 0 ;;
-            --basic) auth_mode="basic"; shift ;;
+            -b|--basic) auth_mode="basic"; shift ;;
             *) positional+=("$1"); shift ;;
         esac
     done

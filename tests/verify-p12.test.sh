@@ -75,6 +75,7 @@ test_help_output() {
     assert_stdout_contains "help mentions Bearer" "Bearer"
     assert_stdout_contains "help mentions Basic" "Basic"
     assert_stdout_contains "help documents --basic" "--basic"
+    assert_stdout_contains "help names -b short" "-b, --basic"
     assert_stdout_contains "help references propfind-p12" "propfind-p12"
 }
 
@@ -155,6 +156,23 @@ test_basic_auth_no_p12() {
     assert_curl_not_contains "no bearer" "Authorization: Bearer"
     assert_curl_not_contains "no p12 args" "--cert-type"
     assert_eq "openssl receives credentials" "$(get_openssl_input)" "testuser:testpass"
+}
+
+test_basic_auth_short_flag() {
+    # -b is the short for --basic; spaced form takes the Basic-auth path
+    run_script -b "example.com" "testuser:testpass"
+    assert_rc "-b exits 0" 0
+    assert_curl_contains "basic auth header" "Authorization: Basic dGVzdHVzZXI6dGVzdHBhc3M="
+    assert_curl_not_contains "no bearer" "Authorization: Bearer"
+    assert_eq "openssl receives credentials" "$(get_openssl_input)" "testuser:testpass"
+}
+
+test_help_short_bundled_with_basic() {
+    # -bh bundles -b and -h; _expand_short_opts (added with -b) splits it into
+    # -b -h, and -h wins by appearing first, so help prints and exits 0
+    run_script -bh
+    assert_rc "-bh bundled shorts exit 0" 0
+    assert_stdout_contains "-bh prints help" "NAME"
 }
 
 test_basic_auth_with_p12_default_file() {

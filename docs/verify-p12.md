@@ -92,7 +92,7 @@ If you need full CA validation (server cert + client cert), use `propfind-p12` i
 
 | Flag | Description |
 |---|---|
-| `--basic` | Use Basic auth instead of Bearer |
+| `-b, --basic` | Use Basic auth instead of Bearer |
 | `hostname` | Instance hostname (e.g. `dev01-web-example.demandware.net`) |
 | `token` | Bearer token for authorization (default auth mode) |
 | `user:pass` | Username and password for Basic auth (with `--basic`) |
