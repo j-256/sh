@@ -40,13 +40,11 @@ _is_bash_script() {
     esac
 }
 
-# Scripts to skip: pin-dns has --dry-run but reserves -n for curl passthru
-# (--netrc). Hardcoded here so this test is self-contained. The concurrent
-# session is landing a shared _META_OPT_EXCLUDE="pin-dns" base in
-# test-helpers.sh; once it lands, converge to EXCLUDE="$_META_OPT_EXCLUDE"
-# (a follow-up, not a blocker -- see plan tail)
-EXCLUDE=" pin-dns "
-_is_excluded() { case "$EXCLUDE" in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
+# Excluded scripts: the shared base ($_META_OPT_EXCLUDE = pin-dns, curl
+# passthru wrapper whose -n reserves for --netrc). This test adds no
+# exemptions beyond the base.
+EXCLUDE="$_META_OPT_EXCLUDE"
+_is_excluded() { case " $EXCLUDE " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 
 # Echo a violation string if the flag set has a canonical long without its
 # canonical short. Empty output = conformant
