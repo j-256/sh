@@ -120,7 +120,7 @@ EOF
     # Parse parameters
     while [ $# -gt 0 ]; do
         case "$1" in
-            -s|--start|--start-pattern)
+            -s|--start)
                 # Required value: Ensure $2 exists
                 if [ -z "$2" ]; then
                     _error "Missing value for '$1'. Run \`$SCRIPT_NAME -h\` for usage"
@@ -129,12 +129,12 @@ EOF
                 start_pattern="$2"
                 shift 2
                 ;;
-            --start=*|--start-pattern=*)
+            --start=*)
                 start_pattern="${1#*=}"
                 [ -n "$start_pattern" ] || { _error "Missing value for '${1%%=*}'. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift
                 ;;
-            -e|--end|--end-pattern)
+            -e|--end)
                 # Required value: Ensure $2 exists
                 if [ -z "$2" ]; then
                     _error "Missing value for '$1'. Run \`$SCRIPT_NAME -h\` for usage"
@@ -143,13 +143,13 @@ EOF
                 end_pattern="$2"
                 shift 2
                 ;;
-            --end=*|--end-pattern=*)
+            --end=*)
                 end_pattern="${1#*=}"
                 [ -n "$end_pattern" ] || { _error "Missing value for '${1%%=*}'. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift
                 ;;
             # Drop first n lines of snippet
-            -f|--trim-first|--trim-start)
+            -f|--trim-first)
                 # Required value: Ensure $2 exists
                 if [ -z "$2" ]; then
                     _error "Missing value for '$1'. Run \`$SCRIPT_NAME -h\` for usage"
@@ -158,13 +158,13 @@ EOF
                 trim_first="$2"
                 shift 2
                 ;;
-            --trim-first=*|--trim-start=*)
+            --trim-first=*)
                 trim_first="${1#*=}"
                 [ -n "$trim_first" ] || { _error "Missing value for '${1%%=*}'. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift
                 ;;
             # Drop last n lines of snippet
-            -l|--trim-last|--trim-end)
+            -l|--trim-last)
                 # Required value: Ensure $2 exists
                 if [ -z "$2" ]; then
                     _error "Missing value for '$1'. Run \`$SCRIPT_NAME -h\` for usage"
@@ -173,7 +173,7 @@ EOF
                 trim_last="$2"
                 shift 2
                 ;;
-            --trim-last=*|--trim-end=*)
+            --trim-last=*)
                 trim_last="${1#*=}"
                 [ -n "$trim_last" ] || { _error "Missing value for '${1%%=*}'. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift

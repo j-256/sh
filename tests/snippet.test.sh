@@ -356,34 +356,6 @@ EOF
     assert_stdout_contains "has middle END" "END"
 }
 
-test_alt_start_pattern_option() {
-    write_test_file "test.txt"
-    run_script --start-pattern "START" -e "END" "$TEST_DIR/test.txt"
-    assert_rc "start-pattern" 0
-    assert_stdout_contains "works" "first line of snippet"
-}
-
-test_alt_end_pattern_option() {
-    write_test_file "test.txt"
-    run_script -s "START" --end-pattern "END" "$TEST_DIR/test.txt"
-    assert_rc "end-pattern" 0
-    assert_stdout_contains "works" "first line of snippet"
-}
-
-test_alt_trim_start_option() {
-    write_test_file "test.txt"
-    run_script -s "START" -e "END" --trim-start 1 "$TEST_DIR/test.txt"
-    assert_rc "trim-start" 0
-    assert_stdout_not_contains "excludes start" "START marker here"
-}
-
-test_alt_trim_end_option() {
-    write_test_file "test.txt"
-    run_script -s "START" -e "END" --trim-end 1 "$TEST_DIR/test.txt"
-    assert_rc "trim-end" 0
-    assert_stdout_not_contains "excludes end" "END marker here"
-}
-
 test_single_line_snippet() {
     cat > "$TEST_DIR/single.txt" <<'EOF'
 before

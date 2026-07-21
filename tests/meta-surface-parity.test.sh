@@ -41,16 +41,10 @@ _is_bash_script() {
     esac
 }
 
-# Excluded scripts: the shared base ($_META_OPT_EXCLUDE = pin-dns, an extractor
-# limitation) plus this test's own additions. Each addition names its reason so
-# the skip reads as tracked debt, not a silent hole -- see TESTING.md.
-#
-# TODO(surface-parity): the additions below are tracked violations to resolve,
-# then remove from this list:
-#   snippet             --start-pattern/--end-pattern/--trim-start/--trim-end are
-#                       aliases of documented flags; decide drop (per the dropped
-#                       --token alias precedent) vs. document, then un-exclude
-EXCLUDE="$_META_OPT_EXCLUDE snippet"
+# Excluded scripts: just the shared base ($_META_OPT_EXCLUDE = pin-dns, an
+# extractor limitation). Any script this test additionally excludes names its
+# reason so the skip reads as tracked debt, not a silent hole -- see TESTING.md.
+EXCLUDE="$_META_OPT_EXCLUDE"
 _is_excluded() { case " $EXCLUDE " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 
 # Flag tokens documented anywhere in a script's --help output. Matches -x and
