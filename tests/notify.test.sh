@@ -138,6 +138,18 @@ test_sound_equals_form() {
     assert_eq "sound set" "$(get_osascript_sound)" "Basso"
 }
 
+test_sound_short_form() {
+    run_script -S "Ping" "Test"
+    assert_rc "sound short" 0
+    assert_eq "sound set" "$(get_osascript_sound)" "Ping"
+}
+
+test_sound_short_glued() {
+    run_script -SPing "Test"
+    assert_rc "sound short glued" 0
+    assert_eq "glued value splits via value-opts" "$(get_osascript_sound)" "Ping"
+}
+
 test_no_sound_flag() {
     run_script -n "Test"
     assert_rc "no sound short" 0

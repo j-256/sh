@@ -68,7 +68,7 @@ Hero
 |---|---|
 | `-t, --title TITLE` | Notification title (default: "Notification") |
 | `-s, --subtitle SUBTITLE` | Notification subtitle |
-| `--sound SOUND` | Sound name (default: "Glass") |
+| `-S, --sound SOUND` | Sound name (default: "Glass") |
 | `-n, --no-sound` | Suppress notification sound |
 | `-l, --list-sounds` | List available sound names and exit |
 | `-h, --help` | Show help and exit |

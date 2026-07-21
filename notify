@@ -9,7 +9,7 @@
 # Options:
 #   -t, --title TITLE        Notification title (default: "Notification")
 #   -s, --subtitle SUBTITLE  Notification subtitle
-#       --sound SOUND        Sound name (default: "Glass")
+#   -S, --sound SOUND        Sound name (default: "Glass")
 #   -n, --no-sound           Suppress notification sound
 #   -l, --list-sounds        List available sound names and exit
 #   -h, --help               Show help and exit
@@ -59,7 +59,7 @@ DESCRIPTION
 OPTIONS
   -t, --title ${s}title${r}        Notification title (default: "Notification")
   -s, --subtitle ${s}subtitle${r}  Notification subtitle
-      --sound ${s}sound${r}        Sound name (default: "Glass")
+  -S, --sound ${s}sound${r}        Sound name (default: "Glass")
   -n, --no-sound           Suppress notification sound
   -l, --list-sounds        List available sound names and exit
   -h, --help               Show this help message
@@ -142,7 +142,7 @@ EOF
     local list_sounds=""
     local -a args=()
 
-    _expand_short_opts "ts" "$@"
+    _expand_short_opts "tsS" "$@"
     set -- "${_EXPANDED[@]}"; unset _EXPANDED
 
     while [ $# -gt 0 ]; do
@@ -179,8 +179,8 @@ EOF
                 [ -n "$subtitle" ] || { _error "-s|--subtitle requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift
                 ;;
-            --sound)
-                [ -n "${2-}" ] || { _error "--sound requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+            -S|--sound)
+                [ -n "${2-}" ] || { _error "-S|--sound requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 sound="$2"
                 shift 2
                 ;;
