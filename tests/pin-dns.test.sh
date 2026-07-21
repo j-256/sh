@@ -86,6 +86,30 @@ assert_curl_arg_order() {
     fi
 }
 
+# Assert exact line "flag" is immediately followed by exact line "value" in
+# curl.args (one arg per line) -- proves the parser kept a flag+operand pair
+# glued together as consecutive argv slots, not just present-somewhere
+assert_curl_arg_adjacent() {
+    local label="$1"
+    local flag="$2"
+    local value="$3"
+    local prev=""
+    local line
+    local found=""
+    while IFS= read -r line; do
+        if [ "$prev" = "$flag" ] && [ "$line" = "$value" ]; then
+            found="1"
+            break
+        fi
+        prev="$line"
+    done < "$TEST_DIR/curl.args"
+    if [ -n "$found" ]; then
+        _ok "$label"
+    else
+        _fail "$label: expected '$flag' immediately followed by '$value' in curl.args"
+    fi
+}
+
 # --- shims ---
 
 write_shims() {
@@ -692,6 +716,17 @@ test_client_alias_curl_impersonate() {
     assert_not_contains "alias value not leaked to impersonate argv" "$(get_impersonate_args)" "curl-impersonate"
 }
 
+test_client_alias_curl_impersonate_via_env() {
+    # Same alias as test_client_alias_curl_impersonate, but set via
+    # PIN_DNS_CLIENT instead of the --client flag (the env path was untested)
+    _install_impersonate_stub
+    export PIN_DNS_CLIENT="curl-impersonate"
+    run_script "https://example.com" --target "edge.somesite.com"
+    assert_rc "env-alias-curl-impersonate" 0
+    assert_contains "impersonate called via env alias" "$(get_impersonate_args)" "--impersonate"
+    assert_eq "stock curl not called via env alias" "$(get_curl_args)" ""
+}
+
 test_engine_passes_through_to_curl() {
     # --engine is curl's own crypto-engine flag. Now that pin-dns's own option
     # is --client, --engine must fall through untouched to the curl passthrough
@@ -700,6 +735,21 @@ test_engine_passes_through_to_curl() {
     assert_rc "engine-passthrough" 0
     assert_contains "curl sees --engine" "$(get_curl_args)" "--engine"
     assert_contains "curl sees engine value" "$(get_curl_args)" "foo"
+}
+
+test_engine_value_not_stolen_in_positional_mode() {
+    # curl's --engine takes a value (e.g. openssl); until --engine is added to
+    # _curl_opt_consumes_next, positional mode (HOSTNAME [TARGET] [PATH_OR_URL])
+    # misreads that value as the next free positional slot instead of forwarding
+    # it to curl alongside --engine. With HOSTNAME=example.com and
+    # TARGET=edge.somesite.com already filled, "openssl" falls into the
+    # PATH_OR_URL slot, corrupting the URL to https://example.com/openssl
+    run_script "example.com" "edge.somesite.com" --engine openssl
+    assert_rc "engine-value-not-stolen" 0
+    assert_curl_arg_adjacent "engine value glued to flag in curl argv" "--engine" "openssl"
+    assert_not_contains "value not folded into URL path" "$(get_curl_args)" "example.com/openssl"
+    assert_contains "resolve still keyed on real TARGET's IP" "$(get_curl_args)" "example.com:443:192.0.2.11"
+    assert_contains "TARGET still resolved via dig" "$(get_dig_log)" "edge.somesite.com"
 }
 
 test_engine_env_sets_default() {
