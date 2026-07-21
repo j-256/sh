@@ -494,6 +494,8 @@ Short and long forms follow two asymmetric rules:
 - **Every option gets a short by default.** Give a new option both a short and a long form unless a listed exception applies. The short is the ergonomic path for a toolkit you type yourself; the mandatory long form (below) keeps `--help`, docs, and errors legible, so short-by-default costs nothing in readability.
 - **Every short must have a long; a long may go short-less only by exception.** The long form is what appears in scripts, docs, and error messages. Going long-only requires one of: **reserved namespace** (`pin-dns` gives its whole short space to curl passthrough); **negation flag** (`--no-save`, `--no-extensions` conventionally carry no short); **collision** (the letter is taken by a more-deserving option, or is a canonical letter for a behavior this script has); or **genuinely never hand-typed** (machine-facing or diagnostic flags like `--print-pool`). A long-only option carries a one-line comment naming which exception applies, mirroring the value-opts-exclusion comment rule below.
 
+The behavior-scoped half of the canonical-letter rule is enforced by `tests/meta-canonical-letters.test.sh`, which asserts that a script whose option set contains `--force` also has `-f`, and `--dry-run` also has `-n` (see TESTING.md). The short-by-default direction itself is a judgment call, not mechanically checked.
+
 ### Preprocessor
 
 Every script with short options defines `_expand_short_opts` inside the wrapper function and calls it immediately above the parse loop. The function body is identical across scripts; the call-site argument lists the letters that take a value (`""` if none).
