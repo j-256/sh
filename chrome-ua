@@ -2,15 +2,15 @@
 # chrome-ua - print a realistic Chrome User-Agent string (local install or latest stable)
 #
 # Usage:
-#   chrome-ua [--platform mac|win|linux] [--app PATH]
-#   chrome-ua --latest [--platform mac|win|linux]
+#   chrome-ua [-p|--platform mac|win|linux] [-a|--app PATH]
+#   chrome-ua -l|--latest [-p|--platform mac|win|linux]
 #   chrome-ua -h
 #
 # Options:
-#   --latest                   Fetch the latest stable Chrome version from Google's API
-#   --platform mac|win|linux   UA shape and (with --latest) API path (default: mac)
-#   --app PATH                 Path to Chrome.app for local mode
-#   -h, --help                 Show help message
+#   -l, --latest                       Fetch the latest stable Chrome version from Google's API
+#   -p, --platform mac|win|linux       UA shape and (with --latest) API path (default: mac)
+#   -a, --app PATH                     Path to Chrome.app for local mode
+#   -h, --help                         Show help message
 
 _chrome_ua() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
@@ -27,8 +27,8 @@ _chrome_ua() (
 NAME
   $SCRIPT_NAME - print a realistic Chrome User-Agent string
 SYNOPSIS
-  $SCRIPT_NAME [--platform mac|win|linux] [--app ${s}path${r}]
-  $SCRIPT_NAME --latest [--platform mac|win|linux]
+  $SCRIPT_NAME [-p|--platform mac|win|linux] [-a|--app ${s}path${r}]
+  $SCRIPT_NAME -l|--latest [-p|--platform mac|win|linux]
   $SCRIPT_NAME -h
 DESCRIPTION
   Emits a Chrome UA string. By default, reads the installed Chrome's
@@ -54,11 +54,11 @@ DESCRIPTION
   Useful for bot-filtered endpoints:
     curl -A "\$($SCRIPT_NAME)" https://example.com
 OPTIONS
-  --latest                     Fetch the latest stable Chrome version from Google's API
-  --platform ${s}mac${r}|${s}win${r}|${s}linux${r}   UA shape and (with --latest) API path (default: mac)
-  --app ${s}path${r}                   Path to Chrome.app for local mode
-                               (default: /Applications/Google Chrome.app)
-  -h, --help                   Show this help message
+  -l, --latest                  Fetch the latest stable Chrome version from Google's API
+  -p, --platform ${s}mac${r}|${s}win${r}|${s}linux${r}  UA shape and (with --latest) API path (default: mac)
+  -a, --app ${s}path${r}                Path to Chrome.app for local mode
+                                (default: /Applications/Google Chrome.app)
+  -h, --help                    Show this help message
 ENVIRONMENT
   CHROME_UA_OFFLINE  If set (any non-empty value), disables the
                         automatic network fallback when local read
@@ -140,7 +140,7 @@ EOF
     local platform="mac"
     local app="/Applications/Google Chrome.app"
 
-    _expand_short_opts "" "$@"
+    _expand_short_opts "pa" "$@"
     set -- "${_EXPANDED[@]}"; unset _EXPANDED
 
     while [ $# -gt 0 ]; do
@@ -149,11 +149,11 @@ EOF
                 _show_help
                 return 0
                 ;;
-            --latest)
+            -l|--latest)
                 mode="latest"
                 shift
                 ;;
-            --platform)
+            -p|--platform)
                 shift
                 if [ $# -eq 0 ] || [ -z "$1" ]; then
                     _error "--platform requires a value (mac|win|linux). Run \`$SCRIPT_NAME -h\` for usage"
@@ -167,7 +167,7 @@ EOF
                 [ -n "$platform" ] || { _error "--platform requires a value (mac|win|linux). Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift
                 ;;
-            --app)
+            -a|--app)
                 shift
                 if [ $# -eq 0 ] || [ -z "$1" ]; then
                     _error "--app requires a path. Run \`$SCRIPT_NAME -h\` for usage"

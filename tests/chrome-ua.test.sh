@@ -75,6 +75,9 @@ test_help_output() {
     assert_stdout_contains "help has DEPENDENCIES" "DEPENDENCIES"
     assert_stdout_contains "help mentions --latest" "--latest"
     assert_stdout_contains "help mentions --platform" "--platform"
+    assert_stdout_contains "help names -l short" "-l, --latest"
+    assert_stdout_contains "help names -p short" "-p, --platform"
+    assert_stdout_contains "help names -a short" "-a, --app"
     assert_stdout_contains "help mentions env var" "CHROME_UA_OFFLINE"
 }
 
@@ -272,6 +275,45 @@ test_latest_with_platform_linux() {
     assert_contains "linux API path requested" "$curl_log" "platforms/linux"
     assert_stdout_contains "linux UA shape" "X11; Linux x86_64"
     assert_stdout_contains "linux version from API" "Chrome/147.0.0.0"
+}
+
+# --- test cases: short-option aliases (-l/-p/-a) ---
+
+test_short_latest() {
+    # -l is the short for --latest: skips local read, fetches from the API
+    run_script -l
+    assert_rc "-l exits 0" 0
+    local curl_log; curl_log="$(cat "$TEST_DIR/curl.log")"
+    assert_contains "-l hits version API (latest mode)" "$curl_log" "versionhistory.googleapis.com"
+    assert_stdout_contains "-l emits latest UA" "Chrome/148.0.0.0"
+}
+
+test_short_platform() {
+    # -p is the short for --platform: sets the UA shape
+    run_script -p win --app "$TEST_DIR/Chrome.app"
+    assert_rc "-p exits 0" 0
+    assert_stdout_contains "-p sets Windows UA shape" "Windows NT 10.0; Win64; x64"
+}
+
+test_short_platform_glued() {
+    # -p takes a value; the glued form (-pVALUE) must survive _expand_short_opts "pa"
+    run_script -pwin --app "$TEST_DIR/Chrome.app"
+    assert_rc "-pwin exits 0" 0
+    assert_stdout_contains "-pwin sets Windows UA shape" "Windows NT 10.0; Win64; x64"
+}
+
+test_short_app() {
+    # -a is the short for --app: points local mode at a specific Chrome.app
+    run_script -a "$TEST_DIR/Chrome.app"
+    assert_rc "-a exits 0" 0
+    assert_stdout_contains "-a reads that app's version" "Chrome/133.0.0.0"
+}
+
+test_short_app_glued() {
+    # -a takes a value; the glued form (-aPATH) must survive _expand_short_opts "pa"
+    run_script -a"$TEST_DIR/Chrome.app"
+    assert_rc "-a<path> exits 0" 0
+    assert_stdout_contains "-a<path> reads that app's version" "Chrome/133.0.0.0"
 }
 
 # --- run ---

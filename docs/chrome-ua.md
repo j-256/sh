@@ -90,9 +90,9 @@ Set `CHROME_UA_OFFLINE=1` (or any non-empty value) to block the automatic networ
 
 | Flag | Description |
 |---|---|
-| `--latest` | Fetch the latest stable Chrome major version from Google's Version History API |
-| `--platform mac\|win\|linux` | UA shape (and, with `--latest`, the API path). Default: `mac` |
-| `--app PATH` | Path to Chrome.app for local mode (default: `/Applications/Google Chrome.app`) |
+| `-l, --latest` | Fetch the latest stable Chrome major version from Google's Version History API |
+| `-p, --platform mac\|win\|linux` | UA shape (and, with `--latest`, the API path). Default: `mac` |
+| `-a, --app PATH` | Path to Chrome.app for local mode (default: `/Applications/Google Chrome.app`) |
 | `-h, --help` | Display help |
 
 ### Environment variables
