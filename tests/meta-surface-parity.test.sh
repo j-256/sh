@@ -19,7 +19,7 @@
 # other half of the Self-sufficiency rule's meta-testable claim) is a documented
 # follow-up, not yet enforced here.
 #
-# shellcheck source-path=SCRIPTDIR disable=SC2329
+# shellcheck source-path=SCRIPTDIR disable=SC2329,SC2016
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=test-helpers.sh
@@ -40,9 +40,11 @@ _is_bash_script() {
     esac
 }
 
-# Excluded scripts: just the shared base ($_META_OPT_EXCLUDE = pin-dns, an
-# extractor limitation). Any script this test additionally excludes names its
-# reason so the skip reads as tracked debt, not a silent hole -- see TESTING.md.
+# Excluded scripts: just the shared base ($_META_OPT_EXCLUDE, currently empty).
+# Extractor false positives are handled inline with `# meta:not-options` markers, not by
+# excluding a whole script here (see the failure hint below and TESTING.md). Any
+# script this test additionally excludes names its reason so the skip reads as
+# tracked debt, not a silent hole -- see TESTING.md.
 EXCLUDE="$_META_OPT_EXCLUDE"
 _is_excluded() { case " $EXCLUDE " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 
@@ -59,6 +61,14 @@ _help_flags() {
         } }' | sort -u
 }
 
+# Folded into the failure labels below (assert_eq prints "label: expected ... got
+# ..."). The #1 false positive here is a `case` that recognizes ANOTHER tool's flags
+# -- e.g. a curl wrapper whose helpers match curl's -H/-o/-d to classify borrowed
+# args. Those are not this script's options. Do NOT fix a failure by adding the
+# foreign flags to -h or padding _META_OPT_EXCLUDE; mark that recognizer `case ... in`
+# line `# meta:not-options` so the extractor skips the block. See TESTING.md.
+_SURFACE_HINT='[if the extra tokens are another tool'\''s flags matched by a recognizer case, mark that case `# meta:not-options` -- do not add them to -h or _META_OPT_EXCLUDE; see TESTING.md]'
+
 test_every_option_is_documented_in_help() {
     local script
     for script in "$REPO_DIR"/*; do
@@ -69,7 +79,7 @@ test_every_option_is_documented_in_help() {
         local help; help="$(_help_flags "$script")"
         local missing; missing="$(comm -23 <(printf '%s\n' "$code") <(printf '%s\n' "$help") | tr '\n' ' ')"
         missing="${missing% }"
-        assert_eq "$s: every parsed option appears in -h" "$missing" ""
+        assert_eq "$s: every parsed option appears in -h $_SURFACE_HINT" "$missing" ""
     done
 }
 
@@ -81,7 +91,7 @@ test_every_short_has_a_long() {
         _is_excluded "$s" && continue
         local unpaired; unpaired="$(_option_pairs "$script" | awk -F'\t' '$2 == "" { print $1 }' | tr '\n' ' ')"
         unpaired="${unpaired% }"
-        assert_eq "$s: every short option has a long form" "$unpaired" ""
+        assert_eq "$s: every short option has a long form $_SURFACE_HINT" "$unpaired" ""
     done
 }
 

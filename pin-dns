@@ -832,7 +832,7 @@ EOF
     # If you find a curl option missing here, pin-dns may wrongly interpret the next token as a pin-dns option
     _curl_opt_consumes_next() {
         local a="$1"
-        case "$a" in
+        case "$a" in # meta:not-options -- recognizes curl's flags, not pin-dns's own
             -H|--header|-A|--user-agent|-d|--data|--data-raw|--data-binary|--data-urlencode|-F|--form|-e|--referer|-u|--user|-x|--proxy|-b|--cookie|-c|--cookie-jar|-o|--output|-D|--dump-header|-T|--upload-file|-X|--request|--url|--resolve|--connect-to|-K|--config|--cacert|--capath|--cert|--cert-type|--key|--key-type|--pass|--ciphers|--interface|--dns-servers|--range|-r|--max-time|-m|--connect-timeout|--retry|--retry-delay|--retry-max-time|--limit-rate|--local-port|--unix-socket|--stderr|--proxy-user|--proxy-password|--mail-from|--mail-rcpt|--request-target|--engine)
                 return 0
                 ;;
@@ -882,7 +882,7 @@ EOF
         # Detect curl flags that try to control silence; used for the "useless -s / -S" warning
         local a=""
         for a in "$@"; do
-            case "$a" in
+            case "$a" in # meta:not-options -- recognizes curl's flags, not pin-dns's own
                 --silent|--show-error) return 0 ;;
             esac
             if _short_opts_contains_silent "$a"; then
@@ -1073,7 +1073,7 @@ EOF
             a="$1"
             shift
 
-            case "$a" in
+            case "$a" in # meta:not-options -- recognizes curl's flags, not pin-dns's own
                 -A|--user-agent)
                     return 0
                     ;;
@@ -1119,7 +1119,7 @@ EOF
             a="$1"
             shift
             h=""
-            case "$a" in
+            case "$a" in # meta:not-options -- recognizes curl's flags, not pin-dns's own
                 -H|--header) h="$1" ;;
                 --header=*) h="${a#*=}" ;;
                 -H?*) h="${a#-H}" ;;
@@ -1142,7 +1142,7 @@ EOF
             a="$1"
             shift
             v=""
-            case "$a" in
+            case "$a" in # meta:not-options -- recognizes curl's flags, not pin-dns's own
                 -A|--user-agent) v="$1" ;;
                 --user-agent=*) v="${a#*=}" ;;
                 -A?*) v="${a#-A}" ;;
@@ -1168,7 +1168,7 @@ EOF
         while [ "$#" -gt 0 ]; do
             a="$1"
             shift
-            case "$a" in
+            case "$a" in # meta:not-options -- recognizes curl's flags, not pin-dns's own
                 -o|--output|-O|--remote-name|-J|--remote-header-name) return 0 ;;
                 -o?*|--output=*|-O*|-J*) return 0 ;;
             esac
@@ -1182,7 +1182,7 @@ EOF
         [ "$1" = "--" ] && shift
         local a
         for a in "$@"; do
-            case "$a" in
+            case "$a" in # meta:not-options -- recognizes curl's flags, not pin-dns's own
                 -I|--head) return 0 ;;
             esac
         done
@@ -1204,7 +1204,7 @@ EOF
         while [ "$#" -gt 0 ]; do
             a="$1"
             shift
-            case "$a" in
+            case "$a" in # meta:not-options -- recognizes curl's flags, not pin-dns's own
                 -i|--include|-D|--dump-header) return 0 ;;
                 -D?*|--dump-header=*) return 0 ;;
             esac
@@ -1498,7 +1498,7 @@ EOF
                 i=$((i + 1))
                 continue
                 ;;
-            --dry-run)
+            --dry-run) # meta:canonical-exempt: reserved namespace -- -n is curl's --netrc, so --dry-run is long-only (see CONVENTIONS "Canonical short options")
                 dry_run="1"
                 i=$((i + 1))
                 continue
