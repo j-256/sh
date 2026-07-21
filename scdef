@@ -14,7 +14,7 @@
 #   -o, --open      Open the wiki page in a browser
 #   -s, --search    Search index by description (case-insensitive substring)
 #   -l, --list      Print the full index
-#       --refresh   Force refresh of the cached index
+#   -R, --refresh   Force refresh of the cached index
 #   -v, --verbose   Print [DBG] diagnostics (renderer choice, fetches, cache)
 #   -h, --help      Show help
 #
@@ -60,7 +60,7 @@ OPTIONS
   -o, --open               Open the wiki page in a browser
   -s, --search ${s}pattern${r}     Search index by description (substring, case-insensitive)
   -l, --list               Print the full index (SC####<TAB>description)
-      --refresh            Force refresh of the cached index (7-day TTL)
+  -R, --refresh            Force refresh of the cached index (7-day TTL)
   -v, --verbose            Print [DBG] diagnostics (renderer, fetches, cache)
   -h, --help               Show this help message
 EXAMPLES
@@ -629,7 +629,7 @@ EOF
             -o|--open)    open_in_browser=1; shift ;;
             -l|--list)    list=1; shift ;;
             -v|--verbose) verbose=1; shift ;;
-            --refresh)    refresh=1; shift ;;
+            -R|--refresh) refresh=1; shift ;;
 
             -s|--search)
                 [ -n "${2-}" ] || { _error "--search requires a <pattern>. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }

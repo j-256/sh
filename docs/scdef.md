@@ -177,7 +177,7 @@ If a refresh fails (network down, wiki HTML changed) and a cache file already ex
 | `-o, --open` | Open the wiki page in a browser |
 | `-s, --search <pattern>` | Search index by description (case-insensitive substring) |
 | `-l, --list` | Print the full index (`SC####<TAB>description`) |
-| `--refresh` | Force refresh of the cached index (7-day TTL) |
+| `-R, --refresh` | Force refresh of the cached index (7-day TTL) |
 | `-v, --verbose` | Print `[DBG]` diagnostics to stderr (renderer choice, fetches, cache decisions) |
 | `-h, --help` | Show help message |
 

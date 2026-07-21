@@ -112,6 +112,7 @@ test_help_output() {
     assert_stdout_contains "help has EXIT STATUS" "EXIT STATUS"
     assert_stdout_contains "help has DEPENDENCIES" "DEPENDENCIES"
     assert_stdout_contains "help documents --verbose" "--verbose"
+    assert_stdout_contains "help names -R short" "-R, --refresh"
 }
 
 test_h_short_flag() {
@@ -412,6 +413,24 @@ test_refresh_forces_refetch() {
     run_script --refresh --list
     assert_rc "refresh exits 0" 0
     assert_stderr_contains "refresh refetches" "Refreshing index"
+}
+
+test_refresh_short_flag() {
+    # -R is the short for --refresh (capital: -r is --raw); same forced refetch
+    run_script --list
+    run_script -R --list
+    assert_rc "-R exits 0" 0
+    assert_stderr_contains "-R refetches" "Refreshing index"
+}
+
+test_refresh_short_bundled() {
+    # -Rv bundles the refresh (-R) and verbose (-v) flags; -R is case-distinct
+    # from -r (--raw), and neither is in the value-opts string ("s")
+    run_script --list
+    run_script -Rv --list
+    assert_rc "-Rv exits 0" 0
+    assert_stderr_contains "-Rv refetches" "Refreshing index"
+    assert_stderr_contains "-Rv is verbose" "[DBG]"
 }
 
 # Stale-cache fallback: cache exists but the network breaks
