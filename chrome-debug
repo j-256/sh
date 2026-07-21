@@ -382,7 +382,7 @@ EOF
                 [ -n "$user_data_dir" ] || { _error "--user-data-dir requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift ;;
             --) shift; while [ $# -gt 0 ]; do chrome_args+=("$1"); shift; done ;;
-            --print-pool) # hidden diagnostic: dump parsed pool, sorted
+            --print-pool) # meta:hidden diagnostic: dump parsed pool, sorted
                 if ! _parse_pool | sort -n | grep .; then
                     _error "no chrome-devtools entries with a resolvable port in $(_mcp_json_display)"
                     return 1

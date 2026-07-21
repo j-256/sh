@@ -179,20 +179,23 @@ assert_captured() {
 
 # --- option-arm parsing (shared by the surface-parity and canonical-letter meta-tests) ---
 
-# Scripts excluded from the option-surface meta-tests, space-separated. The shared
-# base is pin-dns: a curl wrapper whose helper functions case-match curl's own
-# short flags to classify borrowed args before forwarding them. _option_flags and
-# _option_pairs scan every case...esac, so they can't tell those recognizer arms
-# from real option arms and over-report pin-dns's surface -- a tooling limit, not a
-# spec violation (pin-dns's authored surface is in sync). Each meta-test appends its
-# own exemptions on top of this base (EXCLUDE="$_META_OPT_EXCLUDE extra-script")
-# rather than editing this constant, so a test-specific exemption doesn't leak
-# across tests -- e.g. the canonical-letter test additionally exempts pin-dns for a
-# different, real reason (it reserves its whole short space for curl passthrough, so
-# its own options are long-only by design; see CONVENTIONS), which is an authored
-# exception to the canonical-binding rule, not the extractor artifact excluded here.
-# (Non-bash scripts like render-md are dropped by the shebang filter, not here.)
-_META_OPT_EXCLUDE="pin-dns"
+# Scripts excluded WHOLESALE from the option-surface meta-tests, space-separated --
+# a shared base both tests start from. Currently empty: exemptions are expressed
+# inline at the source instead of by name here, which keeps every other arm in the
+# affected script checked rather than blinding a test to the whole file. Two inline
+# mechanisms cover the cases that used to need a name here (both in the `# meta:`
+# marker namespace these meta-tests read -- grep `# meta:` to see the whole family):
+#   - `# meta:not-options` on a `case ... in` line makes _option_flags/_option_pairs
+#     skip a block that recognizes another tool's flags (e.g. pin-dns's curl-arg
+#     helpers), so surface-parity no longer sees curl's flags as pin-dns's own options
+#   - `# meta:canonical-exempt` on an option arm tells meta-canonical-letters that a
+#     long-only option is an authored exception (e.g. pin-dns's --dry-run, whose -n
+#     is reserved for curl's --netrc); that marker lives in that test, see it
+# A script still belongs here only if a test must skip it ENTIRELY (no inline marker
+# fits). Each test may append its own base-plus exemptions (EXCLUDE="$_META_OPT_EXCLUDE
+# extra-script") so a test-specific skip doesn't leak across tests. (Non-bash scripts
+# like render-md are dropped by the shebang filter, not here.)
+_META_OPT_EXCLUDE=""
 
 # Emit the set of option flags a script's argument parser accepts, one per line,
 # sorted and deduplicated. Reads case-arm labels inside every `case ... esac`
@@ -210,18 +213,34 @@ _META_OPT_EXCLUDE="pin-dns"
 # A token counts as a flag only if it matches ^--?[a-zA-Z][a-zA-Z0-9-]*$ after the
 # =* strip: that admits -x and --long-name and rejects globs, quotes, and a bare --
 #
-# An arm whose label line carries a `# hidden` comment (e.g. `--print-pool) # hidden
-# diagnostic`) is skipped: a deliberately-undocumented option is not part of the
-# surface a user is expected to discover, so it is exempt from the self-sufficiency
-# checks. This keeps the rest of the script's flags checked, unlike excluding it
+# An arm whose label line carries a `# meta:hidden` comment (e.g. `--print-pool)
+# # meta:hidden diagnostic`) is skipped: a deliberately-undocumented option is not
+# part of the surface a user is expected to discover, so it is exempt from the
+# self-sufficiency checks. This keeps the rest of the script's flags checked, unlike
+# excluding it
+#
+# The skip markers share a `# meta:` prefix -- the namespace these meta-tests read
+# off arm/case comments (grep `# meta:` for the whole family). Two granularities,
+# both honored by _option_flags and _option_pairs so the extractors stay in lockstep:
+#   - per-arm  `# meta:hidden`      on one arm's label line -> that arm only
+#   - per-block `# meta:not-options` on a `case ... in` line -> the whole case...esac,
+#     nested cases included (depth-tracked: skip begins at that case's depth and
+#     resumes at the matching esac)
+# `# meta:not-options` marks a case that recognizes ANOTHER tool's flags rather than the
+# script's own options -- e.g. a curl wrapper whose helpers case-match curl's -H/-o/-d
+# to classify borrowed args before forwarding. Those arms are not this script's
+# option surface, so scanning them over-reports it (a tooling limit, not a spec gap).
+# Marking the block excludes exactly those arms while keeping every real option arm
+# elsewhere in the script checked -- strictly better than excluding the whole script
 _option_flags() {
     awk '
-        /^[[:space:]]*case[[:space:]]/       { depth++; next }
-        /^[[:space:]]*esac([[:space:]]|;|$)/ { if (depth > 0) depth--; next }
+        /^[[:space:]]*case[[:space:]]/       { depth++; if (!skip && $0 ~ /#[[:space:]]*meta:not-options/) { skip = 1; skip_depth = depth } next }
+        /^[[:space:]]*esac([[:space:]]|;|$)/ { if (skip && depth == skip_depth) skip = 0; if (depth > 0) depth--; next }
+        skip                                 { next }
         depth > 0 {
             pos = index($0, ")")
             if (pos == 0) next
-            if (substr($0, pos) ~ /#[[:space:]]*hidden/) next
+            if (substr($0, pos) ~ /#[[:space:]]*meta:hidden/) next
             label = substr($0, 1, pos - 1)
             gsub(/[[:space:]]/, "", label)
             if (label !~ /^-/) next
@@ -242,15 +261,17 @@ _option_flags() {
 # long-only options are simply not emitted here). Sibling to _option_flags: same
 # arm-scan and same skip rules, but preserves the short<->long correspondence that
 # _option_flags's flat set discards. Aggregates across arms, so a short paired in
-# any arm counts as paired. Skips `# hidden`-marked arms, same as _option_flags
+# any arm counts as paired. Honors both skip markers, same as _option_flags: the
+# per-arm `# meta:hidden` and the per-block `# meta:not-options` (see _option_flags above)
 _option_pairs() {
     awk '
-        /^[[:space:]]*case[[:space:]]/       { depth++; next }
-        /^[[:space:]]*esac([[:space:]]|;|$)/ { if (depth > 0) depth--; next }
+        /^[[:space:]]*case[[:space:]]/       { depth++; if (!skip && $0 ~ /#[[:space:]]*meta:not-options/) { skip = 1; skip_depth = depth } next }
+        /^[[:space:]]*esac([[:space:]]|;|$)/ { if (skip && depth == skip_depth) skip = 0; if (depth > 0) depth--; next }
+        skip                                 { next }
         depth > 0 {
             pos = index($0, ")")
             if (pos == 0) next
-            if (substr($0, pos) ~ /#[[:space:]]*hidden/) next
+            if (substr($0, pos) ~ /#[[:space:]]*meta:hidden/) next
             label = substr($0, 1, pos - 1)
             gsub(/[[:space:]]/, "", label)
             if (label !~ /^-/) next
