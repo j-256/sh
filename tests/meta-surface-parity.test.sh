@@ -47,12 +47,10 @@ _is_bash_script() {
 #
 # TODO(surface-parity): the additions below are tracked violations to resolve,
 # then remove from this list:
-#   client-credentials  --client/--secret/--scope are aliases of the documented
-#                       --client-id/--client-secret/--scopes; decide drop (per the
-#                       dropped --token alias precedent) vs. document, then un-exclude
 #   snippet             --start-pattern/--end-pattern/--trim-start/--trim-end are
-#                       aliases of documented flags; same drop-vs-document decision
-EXCLUDE="$_META_OPT_EXCLUDE client-credentials snippet"
+#                       aliases of documented flags; decide drop (per the dropped
+#                       --token alias precedent) vs. document, then un-exclude
+EXCLUDE="$_META_OPT_EXCLUDE snippet"
 _is_excluded() { case " $EXCLUDE " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 
 # Flag tokens documented anywhere in a script's --help output. Matches -x and

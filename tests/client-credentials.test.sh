@@ -188,18 +188,6 @@ test_short_option_shortcode() {
     assert_contains "short -C works" "$(get_curl_args)" "kv7kzm78.api.commercecloud.salesforce.com"
 }
 
-test_alias_option_client() {
-    run_script --endpoint am --client "client123" --secret "secret456"
-    assert_rc "alias options exit 0" 0
-    assert_contains "alias --client works" "$(get_curl_args)" "base64:client123:secret456"
-}
-
-test_alias_option_scope() {
-    run_script --endpoint am --client-id "client123" --client-secret "secret456" --scope "read"
-    assert_rc "alias --scope exits 0" 0
-    assert_contains "alias --scope works" "$(get_curl_body)" "scope=read"
-}
-
 test_curl_not_found() {
     rm "$SHIM_DIR/curl"
     PATH="$SHIM_DIR" run_script --endpoint am --client-id "client123" --client-secret "secret456"
