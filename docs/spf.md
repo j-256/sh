@@ -321,7 +321,7 @@ This is the SPF equivalent of hardcoding a CNAME target's IP instead of using th
 |---|---|
 | `-s, --server ip` | DNS server to query (default: 8.8.8.8) |
 | `-d, --domain dom` | Anchor `%{d}` macros when input is a raw record |
-| `--tcp` | Force TCP instead of UDP for dig queries |
+| `-t, --tcp` | Force TCP instead of UDP for dig queries |
 | `-q, --quiet` | Errors only -- suppress warnings and the resolution trace |
 | `-v, --verbose` | Show the resolution trace (`[INF]` lines) on stderr |
 | `-h, --help` | Show the top-level help; `spf <verb> -h` (or `spf -h <verb>`) shows per-verb detail |

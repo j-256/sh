@@ -165,6 +165,7 @@ test_top_help() {
     assert_stdout_contains "help lists flatten" "flatten"
     assert_stdout_contains "help lists check" "check"
     assert_stdout_contains "help lists tree" "tree"
+    assert_stdout_contains "help names -t short" "-t, --tcp"
 }
 
 # --- per-subcommand help (Task 8) ---
@@ -214,6 +215,29 @@ test_show_prints_record() {
     assert_rc "show exits 0" 0
     assert_stdout_contains "prints the published record" "v=spf1 ip4:198.51.100.0/24 include:_spf.example.net ~all"
 }
+test_tcp_short_flag() {
+    # -t is the short for --tcp; it should add +tcp to the dig query
+    run_script -t show example.com
+    assert_rc "-t exits 0" 0
+    assert_contains "-t passes +tcp to dig" "$(cat "$TEST_DIR/dig.log" 2>/dev/null)" "+tcp"
+}
+
+test_tcp_long_flag_still_works() {
+    # regression: the long form must still work after gaining the -t short
+    run_script --tcp show example.com
+    assert_rc "--tcp exits 0" 0
+    assert_contains "--tcp passes +tcp to dig" "$(cat "$TEST_DIR/dig.log" 2>/dev/null)" "+tcp"
+}
+
+test_tcp_short_bundled() {
+    # -tv bundles the -t and -v flags; -t is a flag (not in value-opts "sd"),
+    # so it doesn't swallow the following verb/domain
+    run_script -tv show example.com
+    assert_rc "-tv exits 0" 0
+    assert_contains "-tv passes +tcp to dig" "$(cat "$TEST_DIR/dig.log" 2>/dev/null)" "+tcp"
+    assert_stdout_contains "-tv still shows the record" "v=spf1 ip4:198.51.100.0/24 include:_spf.example.net ~all"
+}
+
 test_show_is_not_resolved_tree() {
     # show prints the PUBLISHED record only -- it must NOT recurse the include
     # (the nested _spf.example.net ip4 belongs to tree/flatten, not show).

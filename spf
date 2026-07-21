@@ -14,7 +14,7 @@
 # Options:
 #   -s, --server <ip>   DNS server to query (default: 8.8.8.8)
 #   -d, --domain <dom>  Anchor %{d} macros when input is a raw record
-#   --tcp               Force TCP instead of UDP for dig queries
+#   -t, --tcp           Force TCP instead of UDP for dig queries
 #   -q, --quiet         Errors only (suppress warnings)
 #   -v, --verbose       Show the resolution trace
 #   -h, --help          Show help message (or per-verb: spf <verb> -h)
@@ -225,7 +225,7 @@ DESCRIPTION
 OPTIONS
   -s, --server ${s}ip${r}   DNS server to query (default: 8.8.8.8)
   -d, --domain ${s}dom${r}  Anchor %{d} macros when input is a raw record
-  --tcp             Force TCP instead of UDP for dig queries
+  -t, --tcp         Force TCP instead of UDP for dig queries
   --record          (flatten only) Emit a single quoted TXT record
   -q, --quiet       Errors only (suppress warnings)
   -v, --verbose     Show the resolution trace ([INF] lines)
@@ -1019,7 +1019,7 @@ EOF
                 DOMAIN_ANCHOR="${1#*=}"
                 [ -n "$DOMAIN_ANCHOR" ] || { _error "--domain requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift ;;
-            --tcp) USE_TCP=1; shift ;;
+            -t|--tcp) USE_TCP=1; shift ;;
             -q|--quiet)   VERBOSITY=0; shift ;;
             -v|--verbose) VERBOSITY=2; shift ;;
             --) shift; while [ $# -gt 0 ]; do args+=("$1"); shift; done ;;
