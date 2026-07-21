@@ -113,6 +113,7 @@ EOF
                 _show_help
                 return 0
             ;;
+            # long-only: never hand-typed (scripting primitive's stream selectors are pipeline plumbing, not REPL flags)
             --stderr)
                 out_mode="stderr" && shift
             ;;

@@ -289,7 +289,7 @@ EOF
                 user_agent="${1#*=}"
                 [ -n "$user_agent" ] || { _error "--user-agent requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift ;;
-            --no-save) save=""; shift ;;
+            --no-save) save=""; shift ;; # long-only: negation flag
             -q|--quiet) quiet=1; shift ;;
             --) shift; while [ "$#" -gt 0 ]; do urls+=("$1"); shift; done ;;
             -*)

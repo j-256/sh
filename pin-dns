@@ -1594,6 +1594,7 @@ EOF
                     return 2
                 fi
                 local val="${pre_args[$i]}"
+                # long-only: reserved namespace (pin-dns gives its whole short space to curl passthrough)
                 case "$opt" in
                     --host) host="$val"; host_set_explicit="1" ;;
                     --target) target="$val" ;;
