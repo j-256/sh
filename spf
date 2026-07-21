@@ -153,7 +153,7 @@ EOF
 NAME
   $SCRIPT_NAME flatten - print every IP/CIDR the record authorizes
 SYNOPSIS
-  $SCRIPT_NAME flatten ${s}domain${r} [--record]
+  $SCRIPT_NAME flatten ${s}domain${r} [-r|--record]
 DESCRIPTION
   Resolves the full include tree and prints each ip4/ip6 address, sorted
   and deduped, one per line. --record emits a single quoted TXT record
@@ -226,7 +226,7 @@ OPTIONS
   -s, --server ${s}ip${r}   DNS server to query (default: 8.8.8.8)
   -d, --domain ${s}dom${r}  Anchor %{d} macros when input is a raw record
   -t, --tcp         Force TCP instead of UDP for dig queries
-  --record          (flatten only) Emit a single quoted TXT record
+  -r, --record      (flatten only) Emit a single quoted TXT record
   -q, --quiet       Errors only (suppress warnings)
   -v, --verbose     Show the resolution trace ([INF] lines)
   -h, --help        Show this help message (or per-verb: $SCRIPT_NAME ${s}verb${r} -h)
@@ -946,7 +946,7 @@ EOF
         local arg
         for arg in "$@"; do
             case "$arg" in
-                --record) record_mode=1 ;;
+                -r|--record) record_mode=1 ;;
                 *) input="$arg" ;;
             esac
         done

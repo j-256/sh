@@ -166,6 +166,7 @@ test_top_help() {
     assert_stdout_contains "help lists check" "check"
     assert_stdout_contains "help lists tree" "tree"
     assert_stdout_contains "help names -t short" "-t, --tcp"
+    assert_stdout_contains "help names -r short" "-r, --record"
 }
 
 # --- per-subcommand help (Task 8) ---
@@ -429,6 +430,22 @@ test_flatten_record_mode() {
     assert_stdout_contains "starts v=spf1" 'v=spf1'
     assert_stdout_contains "keeps root all" '~all'
     assert_stdout_contains "quoted chunk" '"v=spf1'
+}
+
+test_flatten_record_short_flag() {
+    # -r is the short for --record; same quoted-TXT-record output
+    run_script flatten example.com -r
+    assert_rc "-r record mode exits 0" 0
+    assert_stdout_contains "-r starts v=spf1" 'v=spf1'
+    assert_stdout_contains "-r keeps root all" '~all'
+    assert_stdout_contains "-r quoted chunk" '"v=spf1'
+}
+
+test_flatten_record_long_flag_still_works() {
+    # regression: the long form must still work after gaining the -r short
+    run_script flatten example.com --record
+    assert_rc "--record still exits 0" 0
+    assert_stdout_contains "--record quoted chunk" '"v=spf1'
 }
 
 test_flatten_notes_unevaluable_exists() {

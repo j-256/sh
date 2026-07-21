@@ -325,7 +325,7 @@ This is the SPF equivalent of hardcoding a CNAME target's IP instead of using th
 | `-q, --quiet` | Errors only -- suppress warnings and the resolution trace |
 | `-v, --verbose` | Show the resolution trace (`[INF]` lines) on stderr |
 | `-h, --help` | Show the top-level help; `spf <verb> -h` (or `spf -h <verb>`) shows per-verb detail |
-| `--record` | (flatten only) Emit the result as a quoted TXT record string instead of one CIDR per line |
+| `-r, --record` | (flatten only) Emit the result as a quoted TXT record string instead of one CIDR per line |
 
 Verbosity levels (last flag wins when both are given):
 
