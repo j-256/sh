@@ -51,6 +51,8 @@ test_help_output() {
     assert_stdout_contains "help shows after example" "2025-08-04 12.05.57.png"
     assert_stdout_contains "help documents --path" "--path"
     assert_stdout_contains "help documents --format" "--format"
+    assert_stdout_contains "help names -p short" "-p, --path"
+    assert_stdout_contains "help names -F short" "-F, --format"
 }
 
 test_help_short() {
@@ -165,6 +167,22 @@ test_path_missing_value() {
     assert_stderr_contains "path err msg" "[ERR][screenshot-rename] --path requires a directory. Run \`screenshot-rename -h\` for usage"
 }
 
+test_path_short_flag() {
+    # -p is the short for --path; spaced form
+    mkdir -p "$TEST_DIR/short-custom"
+    run_script -p "$TEST_DIR/short-custom"
+    assert_rc "-p exits 0" 0
+    assert_stdout_contains "-p watches custom path" "$TEST_DIR/short-custom"
+}
+
+test_path_short_glued() {
+    # -p takes a value; the glued form (-p<path>) must survive _expand_short_opts "pF"
+    mkdir -p "$TEST_DIR/glued-custom"
+    run_script -p"$TEST_DIR/glued-custom"
+    assert_rc "-p<path> exits 0" 0
+    assert_stdout_contains "-p<path> watches custom path" "$TEST_DIR/glued-custom"
+}
+
 test_format_flag_accepted() {
     # We can't observe the format without triggering a rename, but we can at
     # least confirm the flag parses cleanly and the watcher starts
@@ -177,6 +195,20 @@ test_format_missing_value() {
     run_script --format
     assert_rc "missing format value exits 2" 2
     assert_stderr_contains "format err msg" "[ERR][screenshot-rename] --format requires a strftime pattern. Run \`screenshot-rename -h\` for usage"
+}
+
+test_format_short_flag() {
+    # -F is the short for --format (capital: -f is reserved for --force); spaced form
+    run_script -F "%Y%m%d-%H%M%S"
+    assert_rc "-F exits 0" 0
+    assert_stdout_contains "-F watcher starts" "Watching for new screenshots"
+}
+
+test_format_short_glued() {
+    # -F takes a value; the glued form (-F<fmt>) must survive _expand_short_opts "pF"
+    run_script -F"%Y%m%d-%H%M%S"
+    assert_rc "-F<fmt> exits 0" 0
+    assert_stdout_contains "-F<fmt> watcher starts" "Watching for new screenshots"
 }
 
 # --- run ---

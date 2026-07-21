@@ -51,8 +51,8 @@ The timestamp is captured at the moment of rename, not extracted from the origin
 
 | Flag | Description |
 |---|---|
-| `--path PATH` | Directory to watch (default: macOS screenshot location, or `~/Desktop`) |
-| `--format FORMAT` | strftime format for new filenames (default: `%Y-%m-%d %H.%M.%S`) |
+| `-p, --path PATH` | Directory to watch (default: macOS screenshot location, or `~/Desktop`) |
+| `-F, --format FORMAT` | strftime format for new filenames (default: `%Y-%m-%d %H.%M.%S`) |
 | `-u, --utc` | Use UTC timezone instead of local time |
 | `-h, --help` | Show help |
 
