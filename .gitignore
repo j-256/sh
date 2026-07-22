@@ -2,3 +2,4 @@
 test
 *.bak
 docs/superpowers/
+.claude/worktrees/
