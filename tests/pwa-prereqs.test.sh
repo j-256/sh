@@ -89,8 +89,7 @@ SHIM
 # Override run_script to use isolated PATH (only shims, no system PATH)
 run_script() {
     # We need bash in PATH for the script to work
-    local bash_path
-    bash_path="$(command -v bash)"
+    local bash_path; bash_path="$(command -v bash)"
     env TEST_DIR="$TEST_DIR" SHIM_DIR="$SHIM_DIR" HOME="$HOME" \
         PATH="$SHIM_DIR:/usr/bin:/bin" \
         "$bash_path" "$UNDER_TEST" "$@" >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
@@ -101,8 +100,7 @@ run_script() {
 # $1 = the SHELL value (e.g. /bin/zsh); remaining args pass through to the script
 run_script_shell() {
     local shell_val="$1"; shift
-    local bash_path
-    bash_path="$(command -v bash)"
+    local bash_path; bash_path="$(command -v bash)"
     env TEST_DIR="$TEST_DIR" SHIM_DIR="$SHIM_DIR" HOME="$HOME" SHELL="$shell_val" \
         PATH="$SHIM_DIR:/usr/bin:/bin" \
         "$bash_path" "$UNDER_TEST" "$@" >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
@@ -232,8 +230,7 @@ test_check_does_not_install() {
     # No shims: check mode must not touch curl or attempt installs
     run_script
     assert_rc "check-only missing exits 1" 1
-    local curl_log
-    curl_log="$(get_curl_log)"
+    local curl_log; curl_log="$(get_curl_log)"
     assert_eq "curl not called" "$curl_log" ""
     assert_eq "xcode-select --install not called" "$(get_xcode_install_log)" ""
 }
@@ -511,8 +508,7 @@ test_shell_none_valid_in_check_mode() {
     # none must pass validation even though check mode never wires
     run_script --shell none
     # exits 0 or 1 by host state, but NOT 2 (validation error)
-    local rc
-    rc="$(get_rc)"
+    local rc; rc="$(get_rc)"
     assert_eq "none is a valid choice (not rc 2)" "$([ "$rc" = "2" ] && echo bad || echo ok)" "ok"
 }
 

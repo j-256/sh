@@ -85,8 +85,7 @@ test_xml_structure() {
     mkdir -p "$TEST_DIR/my_cartridge"
     run_script "$TEST_DIR"
     assert_rc "xml test exits 0" 0
-    local content
-    content="$(cat "$TEST_DIR/my_cartridge/.project")"
+    local content; content="$(cat "$TEST_DIR/my_cartridge/.project")"
     assert_contains "xml declaration" "$content" '<?xml version="1.0" encoding="UTF-8"?>'
     assert_contains "project description" "$content" "<projectDescription>"
     assert_contains "project name" "$content" "<name>my_cartridge</name>"
@@ -99,8 +98,7 @@ test_special_chars_in_dirname() {
     run_script "$TEST_DIR"
     assert_rc "special chars exits 0" 0
     assert_stdout_contains "handles special chars" "Generated $TEST_DIR/cart-with-dash_and_underscore/.project"
-    local content
-    content="$(cat "$TEST_DIR/cart-with-dash_and_underscore/.project")"
+    local content; content="$(cat "$TEST_DIR/cart-with-dash_and_underscore/.project")"
     assert_contains "name matches dir" "$content" "<name>cart-with-dash_and_underscore</name>"
 }
 
@@ -119,8 +117,7 @@ test_overwrites_existing() {
     run_script "$TEST_DIR"
     assert_rc "overwrite exits 0" 0
     assert_stdout_contains "overwrites" "Generated $TEST_DIR/existing_cart/.project"
-    local content
-    content="$(cat "$TEST_DIR/existing_cart/.project")"
+    local content; content="$(cat "$TEST_DIR/existing_cart/.project")"
     assert_not_contains "old content replaced" "$content" "old content"
     assert_contains "new content" "$content" "<name>existing_cart</name>"
 }

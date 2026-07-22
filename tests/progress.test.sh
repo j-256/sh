@@ -120,8 +120,7 @@ test_basic_completion_non_tty() {
     # Non-TTY context: only output at completion
     run_script 100 100
     assert_rc "completion non-tty" 0
-    local out
-    out="$(get_stderr)"
+    local out; out="$(get_stderr)"
     assert_contains "has bar" "$out" "["
     assert_contains "has percentage" "$out" "100%"
     assert_contains "has closing bracket" "$out" "]"
@@ -163,16 +162,14 @@ test_clamp_current_above_max() {
 test_custom_width() {
     run_script --width 20 100 100
     assert_rc "custom width" 0
-    local out
-    out="$(get_stderr)"
+    local out; out="$(get_stderr)"
     assert_contains "has output" "$out" "100%"
 }
 
 test_custom_progress_char() {
     run_script --progress-char "=" 100 100
     assert_rc "custom progress char" 0
-    local out
-    out="$(get_stderr)"
+    local out; out="$(get_stderr)"
     assert_contains "has equals" "$out" "="
 }
 
@@ -199,16 +196,14 @@ test_short_remaining_char_option() {
 test_stdout_mode() {
     run_script --stdout 100 100
     assert_rc "stdout mode" 0
-    local out
-    out="$(get_stdout)"
+    local out; out="$(get_stdout)"
     assert_contains "stdout has output" "$out" "100%"
 }
 
 test_stderr_mode() {
     run_script --stderr 100 100
     assert_rc "stderr mode" 0
-    local out
-    out="$(get_stderr)"
+    local out; out="$(get_stderr)"
     assert_contains "stderr has output" "$out" "100%"
 }
 
@@ -230,8 +225,7 @@ test_options_mixed_with_positionals() {
 test_one_of_one() {
     run_script 1 1
     assert_rc "one of one" 0
-    local out
-    out="$(get_stderr)"
+    local out; out="$(get_stderr)"
     assert_contains "shows 100%" "$out" "100%"
 }
 
@@ -243,16 +237,14 @@ test_large_numbers() {
 test_same_current_and_max() {
     run_script 42 42
     assert_rc "same values" 0
-    local out
-    out="$(get_stderr)"
+    local out; out="$(get_stderr)"
     assert_contains "100% when equal" "$out" "100%"
 }
 
 test_width_one() {
     run_script --width 1 100 100
     assert_rc "width one" 0
-    local out
-    out="$(get_stderr)"
+    local out; out="$(get_stderr)"
     assert_contains "minimal width works" "$out" "100%"
 }
 

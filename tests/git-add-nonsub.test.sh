@@ -209,8 +209,7 @@ test_git_directory_restored_to_correct_location() {
     mkdir -p "$TEST_DIR/myrepo/.git"
     run_script "$TEST_DIR/myrepo"
     assert_rc "location check exits 0" 0
-    local mv_log
-    mv_log="$(get_mv_log)"
+    local mv_log; mv_log="$(get_mv_log)"
     assert_contains "restore to .git" "$mv_log" "$TEST_DIR/myrepo/.git"
 }
 

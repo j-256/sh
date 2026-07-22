@@ -641,8 +641,7 @@ EOF
         # Reassemble: join multi-string boundaries, strip quotes, keep v=spf1
         # records (same transform _dig_txt applies; inlined here so the quoted
         # raw form survives for the -v character-string count below)
-        local records
-        records="$(printf '%s\n' "$raw" | sed 's/" "//g; s/"//g' | grep -i '^v=spf1')"
+        local records; records="$(printf '%s\n' "$raw" | sed 's/" "//g; s/"//g' | grep -i '^v=spf1')"
         if [ -z "$records" ]; then
             _error "No SPF record found for $input"
             return 1
@@ -659,10 +658,8 @@ EOF
         # string caps at 255 bytes, so long records are split). The reassembled
         # form hides this; count quotes on the raw quoted line to recover it
         if [ "$VERBOSITY" -ge 2 ]; then
-            local rawline
-            rawline="$(printf '%s\n' "$raw" | grep -i '^"v=spf1' | head -n1)"
-            local nstr
-            nstr=$(( $(printf '%s' "$rawline" | tr -dc '"' | wc -c) / 2 ))
+            local rawline; rawline="$(printf '%s\n' "$raw" | grep -i '^"v=spf1' | head -n1)"
+            local nstr; nstr=$(( $(printf '%s' "$rawline" | tr -dc '"' | wc -c) / 2 ))
             # if (not &&): a false test as the function's last statement would
             # leak exit status 1 even though the record printed fine
             if [ "$nstr" -gt 1 ]; then _info "published as $nstr character-strings"; fi

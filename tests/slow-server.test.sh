@@ -72,8 +72,7 @@ test_socat_missing() {
 test_socat_fork_and_reuseaddr() {
     run_script 8080
     assert_rc "fork and reuseaddr" 0
-    local args
-    args="$(get_socat_args)"
+    local args; args="$(get_socat_args)"
     assert_contains "has fork" "$args" "fork"
     assert_contains "has reuseaddr" "$args" "reuseaddr"
 }
@@ -101,8 +100,7 @@ test_extra_args_ignored() {
 test_socat_args_order() {
     run_script 9999
     assert_rc "args order" 0
-    local args
-    args="$(get_socat_args)"
+    local args; args="$(get_socat_args)"
     local line1
     local line2
     line1="$(echo "$args" | head -n1)"

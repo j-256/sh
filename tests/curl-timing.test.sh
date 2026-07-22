@@ -91,16 +91,14 @@ test_default_num_requests() {
     run_script https://example.com
     assert_rc "default -n exits 0" 0
     # Default is 10 requests -> 10 curl invocations
-    local count
-    count=$(grep -c '^curl ' "$TEST_DIR/curl.log" 2>/dev/null | tr -d ' ')
+    local count; count=$(grep -c '^curl ' "$TEST_DIR/curl.log" 2>/dev/null | tr -d ' ')
     assert_eq "10 curl calls by default" "$count" "10"
 }
 
 test_num_requests_flag() {
     run_script -n 3 https://example.com
     assert_rc "-n 3 exits 0" 0
-    local count
-    count=$(grep -c '^curl ' "$TEST_DIR/curl.log" 2>/dev/null | tr -d ' ')
+    local count; count=$(grep -c '^curl ' "$TEST_DIR/curl.log" 2>/dev/null | tr -d ' ')
     assert_eq "3 curl calls with -n 3" "$count" "3"
 }
 
@@ -131,8 +129,7 @@ test_stats_file_written() {
 test_no_save_suppresses_files() {
     run_script --no-save -n 2 https://example.com
     assert_rc "exit 0" 0
-    local count
-    count=$(find "$TEST_DIR" -maxdepth 1 -name "*.txt" -type f 2>/dev/null | wc -l | tr -d ' ')
+    local count; count=$(find "$TEST_DIR" -maxdepth 1 -name "*.txt" -type f 2>/dev/null | wc -l | tr -d ' ')
     assert_eq "no .txt files with --no-save" "$count" "0"
 }
 
@@ -179,12 +176,10 @@ test_warmup_runs_excluded_from_log() {
     run_script -w 2 -n 3 https://example.com
     assert_rc "exit 0" 0
     # Log file should only contain 3 timings, not 5 (warmup excluded)
-    local line_count
-    line_count=$(grep -c . "$TEST_DIR/curl-timing.txt" 2>/dev/null | tr -d ' ')
+    local line_count; line_count=$(grep -c . "$TEST_DIR/curl-timing.txt" 2>/dev/null | tr -d ' ')
     assert_eq "log has 3 lines (warmup excluded)" "$line_count" "3"
     # curl was invoked 5 times total (2 warmup + 3 timed)
-    local curl_count
-    curl_count=$(grep -c '^curl ' "$TEST_DIR/curl.log" 2>/dev/null | tr -d ' ')
+    local curl_count; curl_count=$(grep -c '^curl ' "$TEST_DIR/curl.log" 2>/dev/null | tr -d ' ')
     assert_eq "curl called 5 times (warmup + timed)" "$curl_count" "5"
 }
 
@@ -201,8 +196,7 @@ test_quiet_suppresses_per_request() {
     run_script -q -n 3 https://example.com
     assert_rc "exit 0" 0
     # With -q, per-request lines like "(1/3)" should not appear
-    local stdout
-    stdout="$(cat "$TEST_DIR/stdout")"
+    local stdout; stdout="$(cat "$TEST_DIR/stdout")"
     assert_not_contains "no per-request line" "$stdout" "(1/3)"
     # But summary (Count:) should still appear
     assert_contains "summary still printed" "$stdout" "Count:"

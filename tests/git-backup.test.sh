@@ -219,8 +219,7 @@ test_utc_timestamp() {
     run_script "$TEST_DIR/test-repo"
     assert_rc "utc timestamp" 0
     assert_contains "TZ set to UTC" "$(get_date_log)" "date +%Y-%m-%d-%H%M.%S"
-    local date_invocation
-    date_invocation="$(get_date_log)"
+    local date_invocation; date_invocation="$(get_date_log)"
     # The shim doesn't check TZ env var, but the actual script calls `TZ=Etc/UTC date`
     # We verify the date command was called with the right format
     assert_contains "date format" "$date_invocation" "+%Y-%m-%d-%H%M.%S"
@@ -229,11 +228,9 @@ test_utc_timestamp() {
 test_backup_name_in_all_commands() {
     run_script "$TEST_DIR/test-repo"
     assert_rc "backup name used" 0
-    local log
-    log="$(get_git_log)"
+    local log; log="$(get_git_log)"
     # Count occurrences of backup name in log
-    local count
-    count="$(echo "$log" | grep -c "backup-2025-01-15-1430.45" || true)"
+    local count; count="$(echo "$log" | grep -c "backup-2025-01-15-1430.45" || true)"
     # Should appear in: stash save, tag, push, tag -d = 4 times
     # (commit uses timestamp only, no "backup-" prefix)
     if [ "$count" -ge 4 ]; then
@@ -246,11 +243,9 @@ test_backup_name_in_all_commands() {
 test_stash_apply_twice() {
     run_script "$TEST_DIR/test-repo"
     assert_rc "two stash applies" 0
-    local log
-    log="$(get_git_log)"
+    local log; log="$(get_git_log)"
     # First apply is after checkout --detach, second is after checkout -
-    local count
-    count="$(echo "$log" | grep -c "git stash apply" || true)"
+    local count; count="$(echo "$log" | grep -c "git stash apply" || true)"
     if [ "$count" -eq 2 ]; then
         _ok "stash apply called twice"
     else
@@ -277,8 +272,7 @@ test_dry_run() {
     assert_stdout_contains "dry-run header" "[DRY RUN] would back up"
     assert_stdout_contains "dry-run mentions push" "git push"
     # Real git should NOT be called (only shimmed date may be logged)
-    local git_log
-    git_log="$(get_git_log)"
+    local git_log; git_log="$(get_git_log)"
     assert_eq "no git commands ran" "$git_log" ""
 }
 
@@ -308,8 +302,7 @@ SHIM
     assert_rc "missing remote exits 2" 2
     assert_stderr_contains "missing remote error" "[ERR][git-backup] Remote 'origin' not configured"
     # Ensure no destructive commands ran after the pre-flight failure
-    local git_log
-    git_log="$(get_git_log)"
+    local git_log; git_log="$(get_git_log)"
     assert_not_contains "no stash save" "$git_log" "stash save"
     assert_not_contains "no checkout --detach" "$git_log" "checkout --detach"
     assert_not_contains "no push" "$git_log" "git push"

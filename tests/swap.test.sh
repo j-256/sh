@@ -146,10 +146,8 @@ test_swap_preserves_permissions() {
     chmod 644 "$TEST_DIR/normal2"
     run_script "$TEST_DIR/exec1" "$TEST_DIR/normal2"
     assert_rc "perms swap exits 0" 0
-    local perm1
-    perm1="$(stat -f '%Lp' "$TEST_DIR/exec1" 2>/dev/null || stat -c '%a' "$TEST_DIR/exec1" 2>/dev/null)"
-    local perm2
-    perm2="$(stat -f '%Lp' "$TEST_DIR/normal2" 2>/dev/null || stat -c '%a' "$TEST_DIR/normal2" 2>/dev/null)"
+    local perm1; perm1="$(stat -f '%Lp' "$TEST_DIR/exec1" 2>/dev/null || stat -c '%a' "$TEST_DIR/exec1" 2>/dev/null)"
+    local perm2; perm2="$(stat -f '%Lp' "$TEST_DIR/normal2" 2>/dev/null || stat -c '%a' "$TEST_DIR/normal2" 2>/dev/null)"
     assert_eq "exec1 now has 644" "$perm1" "644"
     assert_eq "normal2 now has 755" "$perm2" "755"
 }
@@ -178,10 +176,8 @@ test_swap_symlinks() {
     ln -s "$TEST_DIR/target2" "$TEST_DIR/link2"
     run_script "$TEST_DIR/link1" "$TEST_DIR/link2"
     assert_rc "symlink swap exits 0" 0
-    local resolved1
-    resolved1="$(readlink "$TEST_DIR/link1")"
-    local resolved2
-    resolved2="$(readlink "$TEST_DIR/link2")"
+    local resolved1; resolved1="$(readlink "$TEST_DIR/link1")"
+    local resolved2; resolved2="$(readlink "$TEST_DIR/link2")"
     assert_eq "link1 now points to target2" "$resolved1" "$TEST_DIR/target2"
     assert_eq "link2 now points to target1" "$resolved2" "$TEST_DIR/target1"
 }
@@ -211,10 +207,8 @@ test_swap_large_files() {
     dd if=/dev/zero of="$TEST_DIR/large2" bs=1024 count=100 2>/dev/null
     run_script "$TEST_DIR/large1" "$TEST_DIR/large2"
     assert_rc "large files swap exits 0" 0
-    local size1
-    size1="$(wc -c < "$TEST_DIR/large1" | tr -d ' ')"
-    local size2
-    size2="$(wc -c < "$TEST_DIR/large2" | tr -d ' ')"
+    local size1; size1="$(wc -c < "$TEST_DIR/large1" | tr -d ' ')"
+    local size2; size2="$(wc -c < "$TEST_DIR/large2" | tr -d ' ')"
     assert_eq "large1 size" "$size1" "102400"
     assert_eq "large2 size" "$size2" "102400"
 }
@@ -223,8 +217,7 @@ test_mv_shim_called() {
     touch "$TEST_DIR/file1" "$TEST_DIR/file2"
     run_script "$TEST_DIR/file1" "$TEST_DIR/file2"
     assert_rc "mv shim exits 0" 0
-    local mv_log
-    mv_log="$(cat "$TEST_DIR/mv.log" 2>/dev/null)"
+    local mv_log; mv_log="$(cat "$TEST_DIR/mv.log" 2>/dev/null)"
     assert_contains "mv called three times" "$mv_log" "mv "
     assert_contains "first mv to temp" "$mv_log" "$TEST_DIR/file1 /tmp/temp-swap-"
     assert_contains "second mv file2 to file1" "$mv_log" "$TEST_DIR/file2 $TEST_DIR/file1"

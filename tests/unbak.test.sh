@@ -164,8 +164,7 @@ test_multiple_files() {
     touch "$TEST_DIR/file2.txt.bak"
     run_script "$TEST_DIR/file1.txt.bak" "$TEST_DIR/file2.txt.bak"
     assert_rc "multiple files" 0
-    local log
-    log="$(get_mv_log)"
+    local log; log="$(get_mv_log)"
     assert_contains "moves file1" "$log" "mv $TEST_DIR/file1.txt.bak $TEST_DIR/file1.txt"
     assert_contains "moves file2" "$log" "mv $TEST_DIR/file2.txt.bak $TEST_DIR/file2.txt"
 }
@@ -178,8 +177,7 @@ test_multiple_files_one_fails() {
     # When any file fails, unbak returns non-zero
     # But it continues processing remaining files
     assert_rc "multiple files one fails returns 1" 1
-    local log
-    log="$(get_mv_log)"
+    local log; log="$(get_mv_log)"
     assert_contains "moves file1" "$log" "mv $TEST_DIR/file1.txt.bak $TEST_DIR/file1.txt"
     assert_stderr_contains "file2 error" "File already exists, skipping"
 }
@@ -210,8 +208,7 @@ test_stdin_multiple() {
     touch "$TEST_DIR/file2.txt.bak"
     printf '%s\n%s\n' "$TEST_DIR/file1.txt.bak" "$TEST_DIR/file2.txt.bak" | run_script
     assert_rc "stdin multiple" 0
-    local log
-    log="$(get_mv_log)"
+    local log; log="$(get_mv_log)"
     assert_contains "stdin moves file1" "$log" "mv $TEST_DIR/file1.txt.bak $TEST_DIR/file1.txt"
     assert_contains "stdin moves file2" "$log" "mv $TEST_DIR/file2.txt.bak $TEST_DIR/file2.txt"
 }
@@ -221,8 +218,7 @@ test_stdin_and_args() {
     touch "$TEST_DIR/file2.txt.bak"
     echo "$TEST_DIR/file1.txt.bak" | run_script "$TEST_DIR/file2.txt.bak"
     assert_rc "stdin and args" 0
-    local log
-    log="$(get_mv_log)"
+    local log; log="$(get_mv_log)"
     assert_contains "processes stdin" "$log" "mv $TEST_DIR/file1.txt.bak $TEST_DIR/file1.txt"
     assert_contains "processes args" "$log" "mv $TEST_DIR/file2.txt.bak $TEST_DIR/file2.txt"
 }

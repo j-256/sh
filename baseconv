@@ -121,15 +121,15 @@ EOF
     local num="${args[2]}"
 
     local in_base
-    in_base="$(_resolve_base "$(printf '%s' "$from_in" | tr '[:upper:]' '[:lower:]')")" || {
+    if ! in_base="$(_resolve_base "$(printf '%s' "$from_in" | tr '[:upper:]' '[:lower:]')")"; then
         _error "Invalid <from> base '$from_in' (valid: bin|b|2, oct|o|8, dec|d|10, hex|h|x|16). Run \`$SCRIPT_NAME -h\` for usage"
         return 2
-    }
+    fi
     local out_base
-    out_base="$(_resolve_base "$(printf '%s' "$to_in" | tr '[:upper:]' '[:lower:]')")" || {
+    if ! out_base="$(_resolve_base "$(printf '%s' "$to_in" | tr '[:upper:]' '[:lower:]')")"; then
         _error "Invalid <to> base '$to_in' (valid: bin|b|2, oct|o|8, dec|d|10, hex|h|x|16). Run \`$SCRIPT_NAME -h\` for usage"
         return 2
-    }
+    fi
 
     # bc requires uppercase hex digits, and case-insensitive input is the friendlier default
     local up_num; up_num="$(printf '%s' "$num" | tr '[:lower:]' '[:upper:]')"

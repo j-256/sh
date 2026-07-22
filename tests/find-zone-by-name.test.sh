@@ -99,8 +99,7 @@ test_find_zone_happy_path() {
 test_url_construction() {
     run_script -j "eyJ.test.token" -s "kv7kzm78" -r "abcd" -i "prd" -t "stg-xxxx-example-com"
     assert_rc "url construction" 0
-    local args
-    args="$(get_curl_args)"
+    local args; args="$(get_curl_args)"
     assert_contains "correct tenant" "$args" "f_ecom_abcd_prd"
     assert_contains "correct path" "$args" "/cdn/zones/v1/organizations/f_ecom_abcd_prd/zones/info"
     assert_contains "correct hostname" "$args" "kv7kzm78.api.commercecloud.salesforce.com"
@@ -109,8 +108,7 @@ test_url_construction() {
 test_curl_options() {
     run_script -j "eyJ.test.token" -s "kv7kzm78" -r "xxxx" -i "stg" -t "stg-xxxx-example-com"
     assert_rc "curl options" 0
-    local args
-    args="$(get_curl_args)"
+    local args; args="$(get_curl_args)"
     assert_contains "uses -fSsiL" "$args" "-fSsiL"
     assert_contains "uses GET" "$args" "-X"
     assert_contains "GET method" "$args" "GET"
@@ -127,8 +125,7 @@ test_target_long_form() {
 test_jwt_long_form() {
     run_script --jwt "eyJ.test.token" -s "kv7kzm78" -r "xxxx" -i "stg" -t "stg-xxxx-example-com"
     assert_rc "jwt long form" 0
-    local args
-    args="$(get_curl_args)"
+    local args; args="$(get_curl_args)"
     assert_contains "jwt works" "$args" "Bearer eyJ.test.token"
 }
 

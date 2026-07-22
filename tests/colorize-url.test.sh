@@ -21,8 +21,7 @@ get_stdout_stripped() {
 
 assert_has_ansi() {
     local label="$1"
-    local output
-    output="$(get_stdout)"
+    local output; output="$(get_stdout)"
     if printf '%s' "$output" | grep -q $'\033'; then
         _ok "$label"
     else
@@ -252,8 +251,7 @@ test_url_no_path_with_trailing_slash() {
 
 test_sourcing_with_args() {
     # Test that script can be sourced with args
-    local out
-    out="$(bash -c 'source "$1" "https://example.com"' -- "$UNDER_TEST" 2>&1 | strip_ansi)"
+    local out; out="$(bash -c 'source "$1" "https://example.com"' -- "$UNDER_TEST" 2>&1 | strip_ansi)"
     local rc=$?
     assert_eq "sourcing with args exits 0" "$rc" "0"
     assert_eq "sourcing with args content" "$out" "https://example.com"

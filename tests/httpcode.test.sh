@@ -143,8 +143,7 @@ test_source_mode_help() {
 test_jq_receives_status_code() {
     run_script 418
     assert_rc "jq invoked" 0
-    local args
-    args="$(cat "$TEST_DIR/jq.args")"
+    local args; args="$(cat "$TEST_DIR/jq.args")"
     assert_contains "jq gets -r flag" "$args" "-r"
     assert_contains "jq gets --arg code" "$args" "--arg"
     assert_contains "jq gets status code" "$args" "418"

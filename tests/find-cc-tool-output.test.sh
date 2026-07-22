@@ -34,15 +34,13 @@ make_jsonl() {
 # user/message/content/tool_result envelope used by Claude Code transcripts
 tool_result() {
     local text="$1"
-    local escaped
-    escaped=$(printf '%s' "$text" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')
+    local escaped; escaped=$(printf '%s' "$text" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')
     printf '{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":[{"type":"text","text":%s}]}]}}' "$escaped"
 }
 
 custom_title() {
     local title="$1"
-    local escaped
-    escaped=$(printf '%s' "$title" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')
+    local escaped; escaped=$(printf '%s' "$title" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')
     printf '{"type":"custom-title","customTitle":%s}' "$escaped"
 }
 

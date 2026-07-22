@@ -43,8 +43,7 @@ _is_bash_script() {
     local file="$1"
     [ -f "$file" ] || return 1
     case "$(basename "$file")" in *.md|*.sh|*.json) return 1 ;; esac
-    local first_line
-    first_line="$(head -1 "$file")"
+    local first_line; first_line="$(head -1 "$file")"
     case "$first_line" in
         '#!/bin/bash'|'#!/usr/bin/env bash') return 0 ;;
         *) return 1 ;;
@@ -81,11 +80,9 @@ test_all_scripts_comments_conform() {
     local script
     for script in "$REPO_DIR"/*; do
         _is_bash_script "$script" || continue
-        local s
-        s="$(basename "$script")"
+        local s; s="$(basename "$script")"
         _is_excluded "$s" && continue
-        local hits
-        hits="$(_violations "$script")"
+        local hits; hits="$(_violations "$script")"
         # assert_eq gives a useful diff (the offending "line: text") on failure
         assert_eq "$s: no comment ends in a trailing . or !" "$hits" ""
     done

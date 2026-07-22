@@ -173,8 +173,7 @@ assert_captured() {
     local label="$1"
     local var="$2"
     local want="$3"
-    local got
-    got="$(grep "^${var}=" "$TEST_DIR/captured" 2>/dev/null | head -1 | cut -d= -f2-)"
+    local got; got="$(grep "^${var}=" "$TEST_DIR/captured" 2>/dev/null | head -1 | cut -d= -f2-)"
     assert_eq "$label" "$got" "$want"
 }
 
@@ -302,8 +301,7 @@ run_tests() {
         shift
     done
 
-    local root
-    root="$(mktemp -d 2>/dev/null)" || root="$(mktemp -d -t test 2>/dev/null)"
+    local root; root="$(mktemp -d 2>/dev/null)" || root="$(mktemp -d -t test 2>/dev/null)"
     if [ ! -d "$root" ]; then
         echo "[ERR][test-helpers] Failed to create temp directory" >&2
         exit 1
@@ -311,8 +309,7 @@ run_tests() {
 
     # Filter to non-exported test_ functions only (avoids picking up
     # exported test_* functions from the user's environment)
-    local tests
-    tests="$(declare -F | awk '$2 == "-f" && $3 ~ /^test_/ {print $3}')"
+    local tests; tests="$(declare -F | awk '$2 == "-f" && $3 ~ /^test_/ {print $3}')"
     if [ -z "$tests" ]; then
         echo "[ERR][test-helpers] No test_ functions found" >&2
         rm -rf "$root"

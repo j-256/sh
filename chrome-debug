@@ -103,16 +103,14 @@ EOF
         if [ -d "$loc" ]; then
             loc="$(cd "$loc" 2>/dev/null && pwd)"
         elif [ -e "$loc" ]; then
-            local loc_dir
-            loc_dir="$(cd "$(dirname "$loc")" 2>/dev/null && pwd)"
+            local loc_dir; loc_dir="$(cd "$(dirname "$loc")" 2>/dev/null && pwd)"
             [ -n "$loc_dir" ] && loc="$loc_dir/$(basename "$loc")"
         fi
 
         # .app bundle: read CFBundleExecutable, join with Contents/MacOS
         _resolve_app() {
             local app="$1"
-            local exe
-            exe="$(defaults read "$app/Contents/Info" CFBundleExecutable 2>/dev/null)"
+            local exe; exe="$(defaults read "$app/Contents/Info" CFBundleExecutable 2>/dev/null)"
             if [ -z "$exe" ] || [ ! -x "$app/Contents/MacOS/$exe" ]; then
                 _error "Failed to resolve executable inside '$app'"
                 return 1
@@ -137,8 +135,7 @@ EOF
             # helper apps (Contents/Frameworks/.../Helpers/*.app) aren't candidates.
             # `sort -t. -k1,1 ... ` is unreliable across mixed segments, so sort the whole
             # path with `sort -V` (version sort) and take the last (highest)
-            local chosen
-            chosen="$(find "$loc" -type d -name '*.app' -prune 2>/dev/null | sort -V | tail -n 1)"
+            local chosen; chosen="$(find "$loc" -type d -name '*.app' -prune 2>/dev/null | sort -V | tail -n 1)"
             if [ -z "$chosen" ]; then
                 _error "no .app bundle found under '$loc'"
                 return 1
@@ -216,8 +213,7 @@ EOF
     # Render the discovered .mcp.json path(s) for error messages: comma-joined,
     # or a "(searched ...)" note naming the walk range when nothing was found
     _mcp_json_display() {
-        local paths
-        paths="$(_mcp_json_paths | paste -sd, -)"
+        local paths; paths="$(_mcp_json_paths | paste -sd, -)"
         if [ -n "$paths" ]; then
             printf '%s' "$paths"
         else
@@ -278,8 +274,7 @@ OUTER
     # rather than trying to start a second browser on the same profile (which
     # Chrome's process-singleton would abort). curl is guarded before this runs
     _port_serving_devtools() {
-        local body
-        body="$(curl -s --max-time 2 "http://127.0.0.1:$1/json/version" 2>/dev/null)"
+        local body; body="$(curl -s --max-time 2 "http://127.0.0.1:$1/json/version" 2>/dev/null)"
         case "$body" in
             *'"Browser"'*) return 0 ;;
         esac
@@ -289,8 +284,7 @@ OUTER
     # Sets `port` and `server_name`. Uses explicit `port` if set, else picks lowest
     # free pool port. Emits the off-pool warning. Returns 1 on all-busy / explicit-busy
     _select_port() {
-        local pool
-        pool="$(_parse_pool)"   # rc ignored: off-pool explicit port must work even if pool empty
+        local pool; pool="$(_parse_pool)"   # rc ignored: off-pool explicit port must work even if pool empty
 
         if [ -n "$port" ]; then
             if ! _port_free "$port"; then
@@ -317,8 +311,7 @@ OUTER
             _error "no chrome-devtools entries in $(_mcp_json_display); add one or pass -p"
             return 1
         fi
-        local candidates
-        candidates="$(printf '%s\n' "$pool" | sort -n)"
+        local candidates; candidates="$(printf '%s\n' "$pool" | sort -n)"
         local p
         local n
         while read -r p n; do
@@ -492,8 +485,7 @@ EOF
         # --fresh can't apply to a live browser (its profile is in use, and a
         # relaunch would singleton-abort), so say so rather than silently ignoring it
         [ -n "$fresh" ] && _warn "port :$port is already serving; --fresh ignored (close the browser first to start clean)"
-        local serving_ver
-        serving_ver="$(curl -s --max-time 2 "http://127.0.0.1:$port/json/version" 2>/dev/null | jq -r '.Browser // "unknown"' 2>/dev/null)"
+        local serving_ver; serving_ver="$(curl -s --max-time 2 "http://127.0.0.1:$port/json/version" 2>/dev/null | jq -r '.Browser // "unknown"' 2>/dev/null)"
         _print_attach_info "${serving_ver:-unknown}" serving
         return 0
     fi
@@ -533,8 +525,7 @@ EOF
         return 1
     fi
 
-    local browser_ver
-    browser_ver="$(printf '%s' "$version_json" | jq -r '.Browser // "unknown"' 2>/dev/null)"
+    local browser_ver; browser_ver="$(printf '%s' "$version_json" | jq -r '.Browser // "unknown"' 2>/dev/null)"
 
     _print_attach_info "${browser_ver:-unknown}" launched
 

@@ -14,8 +14,7 @@ UNDER_TEST="$SCRIPT_DIR/../genpw"
 setup_test_genpw() {
     # Create fake_random with many repetitions of all printable ASCII
     # Build character set: printable ASCII 32-126
-    local all_chars
-    all_chars="$(awk 'BEGIN{for(i=32;i<=126;i++)printf("%c",i)}')"
+    local all_chars; all_chars="$(awk 'BEGIN{for(i=32;i<=126;i++)printf("%c",i)}')"
 
     # Repeat 500 times to ensure enough data for any test (47500 chars total)
     local i
@@ -90,32 +89,28 @@ test_empty_charset_after_exclusions() {
 test_default_length() {
     run_script
     assert_rc "default length exits 0" 0
-    local output
-    output="$(get_stdout)"
+    local output; output="$(get_stdout)"
     assert_eq "default length is 32" "${#output}" "32"
 }
 
 test_custom_length_flag() {
     run_script --length 10
     assert_rc "custom length exits 0" 0
-    local output
-    output="$(get_stdout)"
+    local output; output="$(get_stdout)"
     assert_eq "custom length is 10" "${#output}" "10"
 }
 
 test_custom_length_positional() {
     run_script 10
     assert_rc "positional length exits 0" 0
-    local output
-    output="$(get_stdout)"
+    local output; output="$(get_stdout)"
     assert_eq "positional length is 10" "${#output}" "10"
 }
 
 test_short_flags() {
     run_script -l 5 -c "A"
     assert_rc "short flags exit 0" 0
-    local output
-    output="$(get_stdout)"
+    local output; output="$(get_stdout)"
     assert_eq "short flags length" "${#output}" "5"
     assert_stdout_contains "contains A" "A"
 }
@@ -125,8 +120,7 @@ test_exclude_flag() {
     run_script -l 5 -c "abcdefg" -e "aei"
     assert_rc "exclude exits 0" 0
     # Output should not contain 'a' or 'e' (note: 'i' not in charset)
-    local output
-    output="$(get_stdout)"
+    local output; output="$(get_stdout)"
     assert_not_contains "no 'a'" "$output" "a"
     assert_not_contains "no 'e'" "$output" "e"
 }
@@ -134,8 +128,7 @@ test_exclude_flag() {
 test_exclude_equals_form() {
     run_script --length=5 --charset="xyz" --exclude="x"
     assert_rc "exclude =-form exits 0" 0
-    local output
-    output="$(get_stdout)"
+    local output; output="$(get_stdout)"
     assert_not_contains "no 'x'" "$output" "x"
 }
 
@@ -143,8 +136,7 @@ test_bundled_short_opts_with_value() {
     # -l5 equivalent to -l 5, glued via preprocessor
     run_script -l5 -c "abc"
     assert_rc "glued short-opt value exits 0" 0
-    local output
-    output="$(get_stdout)"
+    local output; output="$(get_stdout)"
     assert_eq "glued -l5 gives 5-char password" "${#output}" "5"
 }
 
@@ -153,8 +145,7 @@ test_range_expansion() {
     # Use explicit character list instead of range to avoid expansion issues
     run_script -l 5 -c "bcdef"
     assert_rc "range expansion exits 0" 0
-    local output
-    output="$(get_stdout)"
+    local output; output="$(get_stdout)"
     assert_eq "range expansion length" "${#output}" "5"
     # Check that output only contains chars from range b-f
     local char
@@ -171,8 +162,7 @@ test_range_expansion() {
 test_posix_digit() {
     run_script -l 5 -c "[:digit:]"
     assert_rc "posix digit exits 0" 0
-    local output
-    output="$(get_stdout)"
+    local output; output="$(get_stdout)"
     assert_eq "posix digit length" "${#output}" "5"
     # Check that output only contains digits
     local char
@@ -189,8 +179,7 @@ test_posix_digit() {
 test_posix_lower() {
     run_script -l 5 -c "[:lower:]"
     assert_rc "posix lower exits 0" 0
-    local output
-    output="$(get_stdout)"
+    local output; output="$(get_stdout)"
     assert_eq "posix lower length" "${#output}" "5"
     # Check that output only contains lowercase
     local char
@@ -207,8 +196,7 @@ test_posix_lower() {
 test_posix_upper() {
     run_script -l 5 -c "[:upper:]"
     assert_rc "posix upper exits 0" 0
-    local output
-    output="$(get_stdout)"
+    local output; output="$(get_stdout)"
     assert_eq "posix upper length" "${#output}" "5"
     # Check that output only contains uppercase
     local char
@@ -225,8 +213,7 @@ test_posix_upper() {
 test_zero_length() {
     run_script -l 0
     assert_rc "zero length exits 0" 0
-    local output
-    output="$(get_stdout)"
+    local output; output="$(get_stdout)"
     # Should be just a newline
     assert_eq "zero length output" "$output" ""
 }
@@ -234,8 +221,7 @@ test_zero_length() {
 test_very_long_password() {
     run_script -l 1000
     assert_rc "long password exits 0" 0
-    local output
-    output="$(get_stdout)"
+    local output; output="$(get_stdout)"
     assert_eq "long password length" "${#output}" "1000"
 }
 
@@ -243,16 +229,14 @@ test_multiple_length_args() {
     # Last one wins
     run_script -l 5 -l 8
     assert_rc "multiple length exits 0" 0
-    local output
-    output="$(get_stdout)"
+    local output; output="$(get_stdout)"
     assert_eq "last length wins" "${#output}" "8"
 }
 
 test_charset_and_exclude_interaction() {
     run_script -l 5 -c "abcdefghij" -e "acegi"
     assert_rc "charset+exclude exits 0" 0
-    local output
-    output="$(get_stdout)"
+    local output; output="$(get_stdout)"
     assert_not_contains "no 'a'" "$output" "a"
     assert_not_contains "no 'c'" "$output" "c"
     assert_not_contains "no 'e'" "$output" "e"
@@ -263,16 +247,14 @@ test_charset_and_exclude_interaction() {
 test_complex_charset() {
     run_script -l 5 -c "ABC123!@#"
     assert_rc "complex charset exits 0" 0
-    local output
-    output="$(get_stdout)"
+    local output; output="$(get_stdout)"
     assert_eq "complex charset length" "${#output}" "5"
 }
 
 test_special_chars_in_charset() {
     run_script -l 5 -c '!@#$%^&*()'
     assert_rc "special chars exits 0" 0
-    local output
-    output="$(get_stdout)"
+    local output; output="$(get_stdout)"
     assert_eq "special chars length" "${#output}" "5"
 }
 
@@ -280,8 +262,7 @@ test_execute_mode() {
     # Test that script works when executed (not sourced)
     run_script -l 8
     assert_rc "execute mode exits 0" 0
-    local output
-    output="$(get_stdout)"
+    local output; output="$(get_stdout)"
     assert_eq "execute mode length" "${#output}" "8"
 }
 
@@ -307,8 +288,7 @@ test_literal_range_charset() {
     # Previously failed: sed backreference parsing error when expanding ranges
     run_script -l 12 -c "a-z0-9"
     assert_rc "literal range charset exits 0" 0
-    local output
-    output="$(get_stdout)"
+    local output; output="$(get_stdout)"
     assert_eq "literal range charset length" "${#output}" "12"
     local char
     local i
@@ -324,8 +304,7 @@ test_literal_range_charset() {
 test_mixed_posix_and_literal() {
     run_script -l 12 -c "[:lower:][:digit:]"
     assert_rc "mixed posix classes exits 0" 0
-    local output
-    output="$(get_stdout)"
+    local output; output="$(get_stdout)"
     assert_eq "mixed posix classes length" "${#output}" "12"
     local char
     local i
@@ -361,8 +340,7 @@ test_bracket_expression_literal_chars() {
     # [0-9ab] → digits plus a, b
     run_script -l 20 -c '[0-9ab]'
     assert_rc "bracket expr exits 0" 0
-    local output
-    output="$(get_stdout)"
+    local output; output="$(get_stdout)"
     assert_eq "output length" "${#output}" "20"
     local char
     local i
@@ -379,8 +357,7 @@ test_bracket_expression_range_only() {
     # [A-Z] → upper alphabet only
     run_script -l 20 -c '[A-Z]'
     assert_rc "bracket range exits 0" 0
-    local output
-    output="$(get_stdout)"
+    local output; output="$(get_stdout)"
     assert_eq "bracket range length" "${#output}" "20"
     local char
     local i
@@ -397,8 +374,7 @@ test_bracket_nested_posix_class() {
     # [[:lower:]0-9] → lowercase letters plus digits
     run_script -l 20 -c '[[:lower:]0-9]'
     assert_rc "nested posix in bracket exits 0" 0
-    local output
-    output="$(get_stdout)"
+    local output; output="$(get_stdout)"
     assert_eq "nested posix length" "${#output}" "20"
     local char
     local i
@@ -421,8 +397,7 @@ test_bracket_expr_excludes_chars_not_in_set() {
     # Any uppercase letter should be absent from a lowercase-only set
     run_script -l 50 -c '[abc]'
     assert_rc "bracket expr exits 0" 0
-    local output
-    output="$(get_stdout)"
+    local output; output="$(get_stdout)"
     assert_eq "output length" "${#output}" "50"
     local char
     local i

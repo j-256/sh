@@ -65,39 +65,33 @@ test_help_short() {
 test_default_tab_separator() {
     run_script
     assert_rc "default exits 0" 0
-    local output
-    output="$(get_stdout)"
+    local output; output="$(get_stdout)"
     # Should contain a tab character between verifier and challenge
     assert_contains "contains tab" "$output" "$(printf '\t')"
     # Should have exactly one tab (verifier<tab>challenge)
-    local tab_count
-    tab_count=$(printf '%s' "$output" | tr -cd '\t' | wc -c | tr -d ' ')
+    local tab_count; tab_count=$(printf '%s' "$output" | tr -cd '\t' | wc -c | tr -d ' ')
     assert_eq "one tab separator" "$tab_count" "1"
 }
 
 test_newline_separator_long() {
     run_script --newline
     assert_rc "newline exits 0" 0
-    local output
-    output="$(get_stdout)"
+    local output; output="$(get_stdout)"
     # Should NOT contain a tab character
     assert_not_contains "no tab with --newline" "$output" "$(printf '\t')"
     # Should contain an embedded newline (verifier<newline>challenge)
     assert_contains "has embedded newline" "$output" "$(printf '\n')"
     # Should be splittable into two parts with sed
-    local first_line
-    first_line=$(printf '%s' "$output" | sed -n '1p')
+    local first_line; first_line=$(printf '%s' "$output" | sed -n '1p')
     [ -n "$first_line" ] || _fail "first line is empty"
-    local second_line
-    second_line=$(printf '%s' "$output" | sed -n '2p')
+    local second_line; second_line=$(printf '%s' "$output" | sed -n '2p')
     [ -n "$second_line" ] || _fail "second line is empty"
 }
 
 test_newline_separator_short() {
     run_script -n
     assert_rc "newline -n exits 0" 0
-    local output
-    output="$(get_stdout)"
+    local output; output="$(get_stdout)"
     assert_not_contains "no tab with -n" "$output" "$(printf '\t')"
     # Should contain an embedded newline
     assert_contains "has embedded newline with -n" "$output" "$(printf '\n')"
@@ -106,18 +100,15 @@ test_newline_separator_short() {
 test_verifier_length() {
     run_script
     assert_rc "verifier length test exits 0" 0
-    local verifier
-    verifier="$(get_stdout | cut -f1)"
-    local len
-    len=$(printf '%s' "$verifier" | wc -c | tr -d ' ')
+    local verifier; verifier="$(get_stdout | cut -f1)"
+    local len; len=$(printf '%s' "$verifier" | wc -c | tr -d ' ')
     assert_eq "verifier is 128 characters" "$len" "128"
 }
 
 test_challenge_present() {
     run_script
     assert_rc "challenge test exits 0" 0
-    local challenge
-    challenge="$(get_stdout | cut -f2)"
+    local challenge; challenge="$(get_stdout | cut -f2)"
     # Challenge should not be empty
     [ -n "$challenge" ] || _fail "challenge is empty"
     # Challenge should be base64-url encoded (no =, +, /)
@@ -129,8 +120,7 @@ test_challenge_present() {
 test_verifier_base64url_format() {
     run_script
     assert_rc "verifier format test exits 0" 0
-    local verifier
-    verifier="$(get_stdout | cut -f1)"
+    local verifier; verifier="$(get_stdout | cut -f1)"
     # Verifier should be base64-url encoded (no =, +, /)
     assert_not_contains "no padding in verifier" "$verifier" "="
     assert_not_contains "no + in verifier" "$verifier" "+"
@@ -140,8 +130,7 @@ test_verifier_base64url_format() {
 test_verifier_contains_underscore() {
     run_script
     assert_rc "underscore test exits 0" 0
-    local verifier
-    verifier="$(get_stdout | cut -f1)"
+    local verifier; verifier="$(get_stdout | cut -f1)"
     # Our deterministic shim output should produce underscores (/ -> _)
     assert_contains "verifier has underscore" "$verifier" "_"
 }
@@ -149,8 +138,7 @@ test_verifier_contains_underscore() {
 test_verifier_contains_dash() {
     run_script
     assert_rc "dash test exits 0" 0
-    local verifier
-    verifier="$(get_stdout | cut -f1)"
+    local verifier; verifier="$(get_stdout | cut -f1)"
     # Our deterministic shim output should produce dashes (+ -> -)
     assert_contains "verifier has dash" "$verifier" "-"
 }
@@ -158,26 +146,21 @@ test_verifier_contains_dash() {
 test_cut_extraction() {
     run_script
     assert_rc "cut extraction exits 0" 0
-    local codes
-    codes="$(get_stdout)"
-    local verifier
-    verifier="$(printf '%s' "$codes" | cut -f1)"
-    local challenge
-    challenge="$(printf '%s' "$codes" | cut -f2)"
+    local codes; codes="$(get_stdout)"
+    local verifier; verifier="$(printf '%s' "$codes" | cut -f1)"
+    local challenge; challenge="$(printf '%s' "$codes" | cut -f2)"
     # Both should be non-empty
     [ -n "$verifier" ] || _fail "cut verifier is empty"
     [ -n "$challenge" ] || _fail "cut challenge is empty"
     # Verifier should be 128 chars
-    local len
-    len=$(printf '%s' "$verifier" | wc -c | tr -d ' ')
+    local len; len=$(printf '%s' "$verifier" | wc -c | tr -d ' ')
     assert_eq "cut verifier is 128 characters" "$len" "128"
 }
 
 test_read_with_newline() {
     run_script -n
     assert_rc "read test exits 0" 0
-    local output
-    output="$(get_stdout)"
+    local output; output="$(get_stdout)"
     # Simulate { read -r verifier; read -r challenge; } < <(pkce -n)
     # sed -n '1p' gets the first line, '2p' gets the second
     local verifier
@@ -188,12 +171,10 @@ test_read_with_newline() {
     [ -n "$verifier" ] || _fail "read verifier is empty"
     [ -n "$challenge" ] || _fail "read challenge is empty"
     # Verifier should be 128 chars
-    local vlen
-    vlen=$(printf '%s' "$verifier" | wc -c | tr -d ' ')
+    local vlen; vlen=$(printf '%s' "$verifier" | wc -c | tr -d ' ')
     assert_eq "read verifier is 128 characters" "$vlen" "128"
     # Challenge should be non-trivial (at least 20 chars)
-    local clen
-    clen=$(printf '%s' "$challenge" | wc -c | tr -d ' ')
+    local clen; clen=$(printf '%s' "$challenge" | wc -c | tr -d ' ')
     [ "$clen" -gt 20 ] || _fail "challenge too short: $clen"
 }
 
@@ -203,8 +184,7 @@ test_invalid_option() {
     assert_stderr_contains "invalid option error mentions flag" "--invalid-option"
     assert_stderr_contains "invalid option points to -h" "-h"
     # No output should be produced
-    local output
-    output="$(get_stdout)"
+    local output; output="$(get_stdout)"
     assert_eq "invalid option writes nothing to stdout" "$output" ""
 }
 
@@ -212,8 +192,7 @@ test_openssl_rand_called() {
     run_script
     assert_rc "openssl test exits 0" 0
     # With our shim, we should get deterministic output
-    local verifier
-    verifier="$(get_stdout | cut -f1)"
+    local verifier; verifier="$(get_stdout | cut -f1)"
     # The shim produces a specific pattern after base64-url conversion
     # ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/... becomes
     # ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_...
@@ -226,11 +205,9 @@ test_no_trailing_newline_default() {
     # Output should not end with a newline (printf without trailing \n)
     # We can't test this directly with get_stdout since cat adds a newline,
     # but we can verify the format is correct
-    local output
-    output="$(get_stdout)"
+    local output; output="$(get_stdout)"
     # Should have verifier, tab, challenge, no newline
-    local last_char
-    last_char=$(printf '%s' "$output" | tail -c 1)
+    local last_char; last_char=$(printf '%s' "$output" | tail -c 1)
     # Last char should not be a tab (it should be part of the challenge)
     assert_not_contains "no trailing tab" "$last_char" "$(printf '\t')"
 }
@@ -238,8 +215,7 @@ test_no_trailing_newline_default() {
 test_challenge_deterministic() {
     run_script
     assert_rc "deterministic challenge exits 0" 0
-    local challenge
-    challenge="$(get_stdout | cut -f2)"
+    local challenge; challenge="$(get_stdout | cut -f2)"
     # With our shim, the challenge should be deterministic
     # The shim returns a specific base64 string for the digest
     # GitsPE1ebyBBksO0xdbn-AkaKzxNXm8gcZKjtMXW5_gJ (after base64-url conversion)

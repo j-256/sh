@@ -117,8 +117,7 @@ test_multiple_variants() {
 test_second_variant_not_default() {
     run_script 1 2
     assert_rc "2 variants exits 0" 0
-    local out
-    out="$(get_stdout)"
+    local out; out="$(get_stdout)"
     assert_contains "VAR-001 is default" "$out" 'variant product-id="BASE1-VAR-001" default="true"'
     assert_not_contains "VAR-002 not default" "$out" 'variant product-id="BASE1-VAR-002" default="true"'
     assert_contains "VAR-002 has no default attr" "$out" 'variant product-id="BASE1-VAR-002"/>'
@@ -135,8 +134,7 @@ test_variant_numbering_padded() {
 test_base_then_variants_order() {
     run_script 2 2
     assert_rc "order check exits 0" 0
-    local out
-    out="$(get_stdout)"
+    local out; out="$(get_stdout)"
     # Check that BASE1 and its variants appear before BASE2
     local base1_pos
     local base1_var_pos

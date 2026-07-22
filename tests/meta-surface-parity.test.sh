@@ -33,8 +33,7 @@ _is_bash_script() {
     local file="$1"
     [ -f "$file" ] || return 1
     case "$(basename "$file")" in *.md|*.sh|*.json) return 1 ;; esac
-    local first_line
-    first_line="$(head -1 "$file")"
+    local first_line; first_line="$(head -1 "$file")"
     case "$first_line" in
         '#!/bin/bash'|'#!/usr/bin/env bash') return 0 ;;
         *) return 1 ;;

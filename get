@@ -152,8 +152,7 @@ EOF
 
     _format_listing() {
         local catalog="$1"
-        local max_width
-        max_width="$(printf '%s\n' "$catalog" | awk -F'\t' '{ if (length($2) > m) m = length($2) } END { print m+0 }')"
+        local max_width; max_width="$(printf '%s\n' "$catalog" | awk -F'\t' '{ if (length($2) > m) m = length($2) } END { print m+0 }')"
         printf '%s\n' "$catalog" | awk -F'\t' -v w="$max_width" '
             BEGIN { cur = "" }
             {
@@ -171,8 +170,7 @@ EOF
         local name="$1"
         local dir="$2"
         local url="${_GET_TEST_SCRIPT_URL_PREFIX:-https://toolio.sh}/$name"
-        local tmp
-        tmp="$(mktemp)" || { echo "failed: $name (mktemp)"; return 1; }
+        local tmp; tmp="$(mktemp)" || { echo "failed: $name (mktemp)"; return 1; }
 
         if ! curl -fsS "$url" -o "$tmp"; then
             echo "failed: $name (fetch)"
@@ -270,8 +268,7 @@ EOF
 
     # Validate requested names against catalog (skipped for --all; Task 7)
     if [ "$all_mode" -eq 0 ] && [ "${#requested[@]}" -gt 0 ]; then
-        local names
-        names="$(printf '%s\n' "$catalog" | awk -F'\t' '{print $2}')"
+        local names; names="$(printf '%s\n' "$catalog" | awk -F'\t' '{print $2}')"
         local unknown=()
         local r
         local match

@@ -238,8 +238,7 @@ test_no_trailing_newline() {
 test_n_flag_position_independent() {
     printf '%s\n' 1 2 3 | run_script -n
     assert_rc "n flag exits 0" 0
-    local output1
-    output1="$(get_stdout)"
+    local output1; output1="$(get_stdout)"
 
     # Should work the same regardless of when -n is passed
     printf '%s\n' 1 2 3 | run_script -n

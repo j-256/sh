@@ -188,8 +188,7 @@ EOF
 
     # Remove the now-empty directory
     if ! rmdir "$dir"; then
-        local num_remaining
-        num_remaining="$(find "$dir" -mindepth 1 -maxdepth 1 -print0 | tr -cd '\0' | wc -c | tr -d ' ')"
+        local num_remaining; num_remaining="$(find "$dir" -mindepth 1 -maxdepth 1 -print0 | tr -cd '\0' | wc -c | tr -d ' ')"
         _error "Failed to remove $dir ($num_remaining items remaining)"
         return 1
     fi

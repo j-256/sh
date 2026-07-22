@@ -179,8 +179,7 @@ EOF
             # stray control character -- almost always a copy/paste artifact in the
             # provider's editor. Surface a hint so the user doesn't have to decode
             # \010 themselves
-            local esc
-            esc="$(printf '%s' "$pubkey" | grep -oE '\\[0-9]{3}' | sort -u)"
+            local esc; esc="$(printf '%s' "$pubkey" | grep -oE '\\[0-9]{3}' | sort -u)"
             if [ -n "$esc" ]; then
                 local seq
                 local name
@@ -217,8 +216,7 @@ EOF
         echo "$pubkey"
         if [ -z "$quiet" ]; then
             # Parse the key-type/size summary line, e.g. "Public-Key: (2048 bit)", "RSA Public-Key:", "ED25519 Public-Key:"
-            local key_summary
-            key_summary="$(printf '%s' "$pkey_text" | grep -m1 -iE 'public-key' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+            local key_summary; key_summary="$(printf '%s' "$pkey_text" | grep -m1 -iE 'public-key' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
             [ -z "$key_summary" ] && key_summary="public key"
             echo >&2
             _info "Key valid ($key_summary)"

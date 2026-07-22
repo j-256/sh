@@ -921,10 +921,8 @@ EOF
         _cmd_exists jq || return 1
         local base="${PIN_DNS_VERSION_API_URL:-https://versionhistory.googleapis.com/v1/chrome/platforms}"
         local url="$base/$plat/channels/stable/versions?pageSize=1"
-        local body
-        body="$(curl -sS --max-time 5 "$url" 2>/dev/null)" || return 1
-        local ver
-        ver="$(printf '%s' "$body" | jq -r '.versions[0].version // empty' 2>/dev/null)"
+        local body; body="$(curl -sS --max-time 5 "$url" 2>/dev/null)" || return 1
+        local ver; ver="$(printf '%s' "$body" | jq -r '.versions[0].version // empty' 2>/dev/null)"
         [ -n "$ver" ] || return 1
         printf '%s\n' "${ver%%.*}"
     }
@@ -953,14 +951,11 @@ EOF
     _cache_valid_major() {
         local f="$1"
         [ -f "$f" ] || return 1
-        local cv
-        cv="$(_cache_field "$f" cacheVersion)" || return 1
+        local cv; cv="$(_cache_field "$f" cacheVersion)" || return 1
         [ "$cv" = "$PIN_DNS_CACHE_VERSION" ] || return 1
-        local cp
-        cp="$(_cache_field "$f" platform)" || return 1
+        local cp; cp="$(_cache_field "$f" platform)" || return 1
         [ "$cp" = "$platform" ] || return 1
-        local mj
-        mj="$(_cache_field "$f" major)" || return 1
+        local mj; mj="$(_cache_field "$f" major)" || return 1
         case "$mj" in ''|*[!0-9]*) return 1 ;; esac
         printf '%s\n' "$mj"
         return 0
@@ -968,15 +963,11 @@ EOF
 
     # Fresh cache: structurally valid AND now < expiresAt
     _cache_read() {
-        local f
-        f="$(_cache_path)"
-        local mj
-        mj="$(_cache_valid_major "$f")" || return 1
-        local exp
-        exp="$(_cache_field "$f" expiresAt)" || return 1
+        local f; f="$(_cache_path)"
+        local mj; mj="$(_cache_valid_major "$f")" || return 1
+        local exp; exp="$(_cache_field "$f" expiresAt)" || return 1
         case "$exp" in ''|*[!0-9]*) return 1 ;; esac
-        local now
-        now="$(_now_epoch)"
+        local now; now="$(_now_epoch)"
         [ "$now" -lt "$exp" ] || return 1
         printf '%s\n' "$mj"
         return 0
@@ -984,15 +975,11 @@ EOF
 
     # Stale-if-error cache: structurally valid AND (now - fetchedAt) <= MAX_STALE_SECS
     _cache_read_stale() {
-        local f
-        f="$(_cache_path)"
-        local mj
-        mj="$(_cache_valid_major "$f")" || return 1
-        local fetched
-        fetched="$(_cache_field "$f" fetchedAt)" || return 1
+        local f; f="$(_cache_path)"
+        local mj; mj="$(_cache_valid_major "$f")" || return 1
+        local fetched; fetched="$(_cache_field "$f" fetchedAt)" || return 1
         case "$fetched" in ''|*[!0-9]*) return 1 ;; esac
-        local now
-        now="$(_now_epoch)"
+        local now; now="$(_now_epoch)"
         local age=$((now - fetched))
         [ "$age" -le "$MAX_STALE_SECS" ] || return 1
         printf '%s\n' "$mj"
@@ -1001,17 +988,14 @@ EOF
 
     _cache_write() {
         local major="$1"
-        local f
-        f="$(_cache_path)"
+        local f; f="$(_cache_path)"
         local dir="${f%/*}"
         mkdir -p "$dir" 2>/dev/null || return 1
         local ttl="${PIN_DNS_UA_CACHE_TTL:-86400}"
         case "$ttl" in ''|*[!0-9]*) ttl="86400" ;; esac
-        local now
-        now="$(_now_epoch)"
+        local now; now="$(_now_epoch)"
         local exp=$((now + ttl))
-        local tmp
-        tmp="$(mktemp "$dir/.chrome-major.XXXXXX" 2>/dev/null)" || return 1
+        local tmp; tmp="$(mktemp "$dir/.chrome-major.XXXXXX" 2>/dev/null)" || return 1
         {
             printf 'cacheVersion=%s\n' "$PIN_DNS_CACHE_VERSION"
             printf 'source=versionhistory-api\n'
@@ -1031,8 +1015,7 @@ EOF
         local app="${PIN_DNS_CHROME_APP:-$app_default}"
         [ -d "$app" ] || return 1
         local plist="$app/Contents/Info.plist"
-        local version
-        version="$(defaults read "$plist" CFBundleShortVersionString 2>/dev/null)"
+        local version; version="$(defaults read "$plist" CFBundleShortVersionString 2>/dev/null)"
         [ -n "$version" ] || return 1
         printf '%s\n' "${version%%.*}"
     }
@@ -1126,8 +1109,7 @@ EOF
     # with trailing colon) via -H/--header/--header=/-Hx. Args after -- are the
     # curl args to scan. Used so pin-dns never double-sends a managed header
     _user_supplied_header() {
-        local want
-        want="$(LC_ALL=C printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+        local want; want="$(LC_ALL=C printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
         shift
         [ "$1" = "--" ] && shift
         local a
@@ -1234,8 +1216,7 @@ EOF
     # Missing decoder -> warn on stderr, emit raw. Unknown/identity -> emit raw
     _decode_stdout_body() {
         local body="$1"
-        local enc
-        enc="$(LC_ALL=C printf '%s' "$2" | tr '[:upper:]' '[:lower:]')"
+        local enc; enc="$(LC_ALL=C printf '%s' "$2" | tr '[:upper:]' '[:lower:]')"
         case "$enc" in
             gzip|x-gzip)
                 if _cmd_exists gzip; then gzip -dc < "$body" || cat "$body"; else _warn "gzip decoder not found; emitting raw body"; cat "$body"; fi
@@ -1324,8 +1305,7 @@ EOF
         # the user supplied their own UA (via -A or -H, which also covers the
         # non-Chrome backoff case) so we never double-send
         if ! _curl_args_has_user_agent "${curl_args[@]}"; then
-            local ua
-            ua="$(_ua_for_platform "$platform" "$major")"
+            local ua; ua="$(_ua_for_platform "$platform" "$major")"
             cmd+=("-H" "User-Agent: $ua")
         fi
 
@@ -1981,8 +1961,7 @@ EOF
     # discoverable (binary-only install), the raw major passes through unchanged
     if [ -n "$client_bin" ]; then
         local impersonate_target="chrome${chrome_major}"
-        local client_dir
-        client_dir="$(command -v "$client_bin" 2>/dev/null)"
+        local client_dir; client_dir="$(command -v "$client_bin" 2>/dev/null)"
         client_dir="${client_dir%/*}"
         if [ -n "$client_dir" ]; then
             local mapped
@@ -2088,10 +2067,8 @@ EOF
     fi
 
     # Capture-and-decode path: add -o bodyfile -D headerfile, run, then decode
-    local _body
-    _body="$(mktemp "${TMPDIR:-/tmp}/pin-dns-body.XXXXXX")" || { _error "mktemp failed"; return 3; }
-    local _hdr
-    _hdr="$(mktemp "${TMPDIR:-/tmp}/pin-dns-hdr.XXXXXX")" || { rm -f "$_body"; _error "mktemp failed"; return 3; }
+    local _body; _body="$(mktemp "${TMPDIR:-/tmp}/pin-dns-body.XXXXXX")" || { _error "mktemp failed"; return 3; }
+    local _hdr; _hdr="$(mktemp "${TMPDIR:-/tmp}/pin-dns-hdr.XXXXXX")" || { rm -f "$_body"; _error "mktemp failed"; return 3; }
     _tmpfiles="$_tmpfiles $_body $_hdr"
 
     cmd+=("-o" "$_body" "-D" "$_hdr")
@@ -2103,8 +2080,7 @@ EOF
     fi
 
     # Extract the LAST Content-Encoding from the header dump (handles redirects)
-    local _ce
-    _ce="$(LC_ALL=C tr -d '\r' < "$_hdr" | awk -F': ' 'tolower($1)=="content-encoding"{v=$2} END{print v}')"
+    local _ce; _ce="$(LC_ALL=C tr -d '\r' < "$_hdr" | awk -F': ' 'tolower($1)=="content-encoding"{v=$2} END{print v}')"
     _decode_stdout_body "$_body" "$_ce"
     return "$curl_rc"
 )

@@ -10,8 +10,7 @@
 #   -h, --help     Show help message
 
 _test_runner() (
-    local SCRIPT_NAME
-    SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="test-runner.sh" ;; esac
 
@@ -45,8 +44,7 @@ OPTIONS
   -h, --help     Show this help message
 EOF
     }
-    local script_dir
-    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local script_dir; script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
     local verbose=""
     local names=()
@@ -117,8 +115,7 @@ EOF
     for test_file in "$script_dir"/*.test.sh; do
         [ -f "$test_file" ] || continue
 
-        local filename
-        filename="$(basename "$test_file")"
+        local filename; filename="$(basename "$test_file")"
 
         # With one or more names, only run tests whose filename matches
         # <name>.test.sh. Exact match avoids the substring-glob footgun where

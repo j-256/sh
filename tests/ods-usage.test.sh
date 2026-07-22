@@ -147,13 +147,11 @@ test_invalid_json_argument() {
 }
 
 test_long_json_argument_truncated() {
-    local long_input
-    long_input="$(printf 'x%.0s' {1..200})"
+    local long_input; long_input="$(printf 'x%.0s' {1..200})"
     run_script "$long_input"
     assert_rc "exits 2" 2
     assert_stderr_contains "error shown" "[ERR][ods-usage] Input is not valid JSON"
-    local preview
-    preview="$(get_stderr | grep -v '\[ERR\]' | head -n 1)"
+    local preview; preview="$(get_stderr | grep -v '\[ERR\]' | head -n 1)"
     local preview_len=${#preview}
     assert_eq "preview truncated to terminal width" "$preview_len" "80"
 }
@@ -164,8 +162,7 @@ test_clipboard_valid_json() {
     run_script
     assert_rc "exits 0" 0
     assert_stdout_contains "shows sandbox counts" "created: 9"
-    local calls
-    calls="$(get_pbpaste_calls)"
+    local calls; calls="$(get_pbpaste_calls)"
     assert_eq "pbpaste called" "$calls" "10"
 }
 
@@ -181,8 +178,7 @@ test_clipboard_default_when_no_args() {
     run_script
     assert_rc "exits 2" 2
     assert_stderr_contains "clipboard error" "[ERR][ods-usage] No arguments provided and clipboard does not contain valid JSON"
-    local calls
-    calls="$(get_pbpaste_calls)"
+    local calls; calls="$(get_pbpaste_calls)"
     assert_eq "pbpaste called" "$calls" "1"
 }
 
@@ -190,8 +186,7 @@ test_terminal_formatting_enabled() {
     make_valid_json
     run_script "$(cat "$TEST_DIR/valid.json")"
     assert_rc "exits 0" 0
-    local out
-    out="$(get_stdout)"
+    local out; out="$(get_stdout)"
     assert_not_contains "no underline codes when piped" "$out" "$(printf '\033')"
 }
 
@@ -199,8 +194,7 @@ test_formatting_omitted_when_no_tty() {
     make_valid_json
     run_script "$(cat "$TEST_DIR/valid.json")"
     assert_rc "exits 0" 0
-    local out
-    out="$(get_stdout)"
+    local out; out="$(get_stdout)"
     assert_not_contains "no underline codes" "$out" "$(printf '\033')"
 }
 

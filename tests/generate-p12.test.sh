@@ -330,8 +330,7 @@ test_openssl_commands_invoked() {
     run_script_with_input "$TEST_DIR"
     assert_rc "commands invoked" 0
 
-    local log
-    log="$(cat "$TEST_DIR/openssl.log")"
+    local log; log="$(cat "$TEST_DIR/openssl.log")"
     assert_contains "req called" "$log" "openssl req"
     assert_contains "x509 called" "$log" "openssl x509"
     assert_contains "pkcs12 called" "$log" "openssl pkcs12"
@@ -344,8 +343,7 @@ test_openssl_req_args() {
     run_script_with_input "$TEST_DIR"
     assert_rc "req args" 0
 
-    local log
-    log="$(cat "$TEST_DIR/openssl.log" | grep '^openssl req')"
+    local log; log="$(cat "$TEST_DIR/openssl.log" | grep '^openssl req')"
     assert_contains "uses sha256" "$log" "-sha256"
     assert_contains "uses rsa:2048" "$log" "rsa:2048"
     assert_contains "uses -nodes" "$log" "-nodes"
@@ -360,8 +358,7 @@ test_openssl_x509_args() {
     run_script_with_input "$TEST_DIR"
     assert_rc "x509 args" 0
 
-    local log
-    log="$(cat "$TEST_DIR/openssl.log" | grep '^openssl x509')"
+    local log; log="$(cat "$TEST_DIR/openssl.log" | grep '^openssl x509')"
     assert_contains "has -req" "$log" "-req"
     assert_contains "has -in" "$log" "-in"
     assert_contains "has -out" "$log" "-out"
@@ -380,8 +377,7 @@ test_openssl_pkcs12_args() {
     run_script_with_input "$TEST_DIR"
     assert_rc "pkcs12 args" 0
 
-    local log
-    log="$(cat "$TEST_DIR/openssl.log" | grep '^openssl pkcs12')"
+    local log; log="$(cat "$TEST_DIR/openssl.log" | grep '^openssl pkcs12')"
     assert_contains "has -export" "$log" "-export"
     assert_contains "has -in" "$log" "-in"
     assert_contains "has -inkey" "$log" "-inkey"
@@ -412,8 +408,7 @@ test_days_calculation() {
     run_script_with_input "$TEST_DIR"
     assert_rc "days calculation" 0
 
-    local log
-    log="$(cat "$TEST_DIR/openssl.log" | grep '^openssl x509')"
+    local log; log="$(cat "$TEST_DIR/openssl.log" | grep '^openssl x509')"
     assert_contains "10 years is 3650 days" "$log" "3650"
 }
 
@@ -425,8 +420,7 @@ test_suffix_02_only() {
     run_script_with_input "$TEST_DIR"
     assert_rc "suffix 02 succeeds" 0
 
-    local log
-    log="$(cat "$TEST_DIR/openssl.log")"
+    local log; log="$(cat "$TEST_DIR/openssl.log")"
     assert_contains "uses _02 cert" "$log" "${hostname}_02.crt"
     assert_contains "uses _02 key" "$log" "${hostname}_02.key"
     assert_contains "uses _02 pass" "$log" "${hostname}_02.txt"
@@ -441,8 +435,7 @@ test_suffix_picks_highest() {
     run_script_with_input "$TEST_DIR"
     assert_rc "highest suffix succeeds" 0
 
-    local log
-    log="$(cat "$TEST_DIR/openssl.log")"
+    local log; log="$(cat "$TEST_DIR/openssl.log")"
     assert_contains "uses _02 cert" "$log" "${hostname}_02.crt"
     assert_contains "uses _02 key" "$log" "${hostname}_02.key"
     assert_contains "uses _02 pass" "$log" "${hostname}_02.txt"
@@ -457,8 +450,7 @@ test_suffix_announcement() {
 
     run_script_with_input "$TEST_DIR"
     assert_rc "announcement run succeeds" 0
-    local stdout
-    stdout="$(cat "$TEST_DIR/stdout")"
+    local stdout; stdout="$(cat "$TEST_DIR/stdout")"
     assert_contains "announces selected suffix" "$stdout" "Using cert bundle suffix _02"
 }
 
@@ -473,8 +465,7 @@ test_suffix_skips_incomplete() {
     run_script_with_input "$TEST_DIR"
     assert_rc "falls back to 01" 0
 
-    local log
-    log="$(cat "$TEST_DIR/openssl.log")"
+    local log; log="$(cat "$TEST_DIR/openssl.log")"
     assert_contains "uses _01 cert" "$log" "${hostname}_01.crt"
     assert_contains "uses _01 key" "$log" "${hostname}_01.key"
     assert_contains "uses _01 pass" "$log" "${hostname}_01.txt"

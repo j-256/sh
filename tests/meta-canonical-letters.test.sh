@@ -32,8 +32,7 @@ _is_bash_script() {
     local file="$1"
     [ -f "$file" ] || return 1
     case "$(basename "$file")" in *.md|*.sh|*.json) return 1 ;; esac
-    local first_line
-    first_line="$(head -1 "$file")"
+    local first_line; first_line="$(head -1 "$file")"
     case "$first_line" in
         '#!/bin/bash'|'#!/usr/bin/env bash') return 0 ;;
         *) return 1 ;;
@@ -49,8 +48,7 @@ _is_excluded() { case " $EXCLUDE " in *" $1 "*) return 0 ;; *) return 1 ;; esac;
 # Echo a violation string if the flag set has a canonical long without its
 # canonical short. Empty output = conformant
 _canonical_violations() {
-    local flags
-    flags=" $(_option_flags "$1" | tr '\n' ' ') "
+    local flags; flags=" $(_option_flags "$1" | tr '\n' ' ') "
     case "$flags" in *" --force "*)
         case "$flags" in *" -f "*) : ;; *) echo "--force without -f" ;; esac ;;
     esac
@@ -63,11 +61,9 @@ test_all_scripts_canonical_binding() {
     local script
     for script in "$REPO_DIR"/*; do
         _is_bash_script "$script" || continue
-        local s
-        s="$(basename "$script")"
+        local s; s="$(basename "$script")"
         _is_excluded "$s" && continue
-        local hits
-        hits="$(_canonical_violations "$script")"
+        local hits; hits="$(_canonical_violations "$script")"
         assert_eq "$s: canonical long implies canonical short" "$hits" ""
     done
 }

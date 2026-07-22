@@ -124,8 +124,7 @@ test_basic_query() {
 test_dig_invocation() {
     run_script "selector1" "example.com"
     assert_rc "dig invocation exits 0" 0
-    local dig_log
-    dig_log="$(cat "$TEST_DIR/dig.log")"
+    local dig_log; dig_log="$(cat "$TEST_DIR/dig.log")"
     assert_contains "dig called with +short" "$dig_log" "+short"
     assert_contains "dig called with TXT" "$dig_log" "TXT"
     assert_contains "dig called with hostname" "$dig_log" "selector1._domainkey.example.com"
@@ -162,8 +161,7 @@ test_multiline_response() {
 test_stderr_blank_line() {
     run_script "dkim-prd" "gmail.com"
     assert_rc "stderr blank line exits 0" 0
-    local stderr_lines
-    stderr_lines="$(get_stderr | wc -l | tr -d ' ')"
+    local stderr_lines; stderr_lines="$(get_stderr | wc -l | tr -d ' ')"
     # Should have: dig command line + DNS response + blank line = at least 3 lines
     if [ "$stderr_lines" -ge 3 ]; then
         _ok "stderr has blank line separator"
@@ -181,8 +179,7 @@ test_dns_hostname_construction() {
 test_p_value_extraction() {
     run_script "test" "example.com"
     assert_rc "p value extraction exits 0" 0
-    local stdout
-    stdout="$(get_stdout)"
+    local stdout; stdout="$(get_stdout)"
     # Should not contain v=DKIM1, quotes, or p=
     assert_not_contains "strips v=DKIM1" "$stdout" "v=DKIM1"
     assert_not_contains "strips quotes" "$stdout" '"'
@@ -197,8 +194,7 @@ test_validate_happy_path() {
     # Diagnostic comes AFTER the key on both success and failure (consistent
     # ordering); [INF] line preceded by a blank so the key on stdout doesn't
     # visually run into it
-    local before_inf
-    before_inf="$(get_stderr | grep -B1 '\[INF\]' | head -1)"
+    local before_inf; before_inf="$(get_stderr | grep -B1 '\[INF\]' | head -1)"
     assert_eq "blank line precedes [INF]" "$before_inf" ""
 }
 
@@ -215,8 +211,7 @@ test_validate_bad_base64() {
     assert_stdout_contains "key still printed on failure" "MIIBIjANBgkqhkiG9w0BAQE@AAOCAQ8AMIIBCgKCAQEA"
     # [ERR] line is preceded by a blank line on stderr so the key on stdout
     # doesn't visually run into the diagnostic
-    local before_err
-    before_err="$(get_stderr | grep -B1 '\[ERR\]' | head -1)"
+    local before_err; before_err="$(get_stderr | grep -B1 '\[ERR\]' | head -1)"
     assert_eq "blank line precedes [ERR]" "$before_err" ""
 }
 
@@ -259,21 +254,18 @@ test_cname_fronted_extraction() {
     run_script "cname" "example.com"
     assert_rc "cname-fronted exits 0" 0
     assert_stderr_contains "stderr shows cname target" "cname.target.example.net."
-    local stdout
-    stdout="$(get_stdout)"
+    local stdout; stdout="$(get_stdout)"
     assert_contains "stdout has key" "$stdout" "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAcname1234567890abcdefghijklmnopqrstuvwxyz"
     assert_not_contains "stdout omits cname target" "$stdout" "cname.target.example.net"
     # Stdout must be a single line (CNAME target line was filtered out)
-    local stdout_lines
-    stdout_lines="$(get_stdout | wc -l | tr -d ' ')"
+    local stdout_lines; stdout_lines="$(get_stdout | wc -l | tr -d ' ')"
     assert_eq "stdout is one line" "$stdout_lines" "1"
 }
 
 test_server_long_flag() {
     run_script --server "8.8.8.8" "test" "example.com"
     assert_rc "--server long flag exits 0" 0
-    local dig_log
-    dig_log="$(cat "$TEST_DIR/dig.log")"
+    local dig_log; dig_log="$(cat "$TEST_DIR/dig.log")"
     assert_contains "dig invoked with @server" "$dig_log" "@8.8.8.8"
     assert_stderr_contains "stderr shows @server" "@8.8.8.8 +short TXT"
 }
@@ -281,24 +273,21 @@ test_server_long_flag() {
 test_server_short_flag() {
     run_script -s "1.1.1.1" "test" "example.com"
     assert_rc "-s short flag exits 0" 0
-    local dig_log
-    dig_log="$(cat "$TEST_DIR/dig.log")"
+    local dig_log; dig_log="$(cat "$TEST_DIR/dig.log")"
     assert_contains "dig invoked with @server (short)" "$dig_log" "@1.1.1.1"
 }
 
 test_server_at_shorthand() {
     run_script "test" "example.com" "@9.9.9.9"
     assert_rc "@host shorthand exits 0" 0
-    local dig_log
-    dig_log="$(cat "$TEST_DIR/dig.log")"
+    local dig_log; dig_log="$(cat "$TEST_DIR/dig.log")"
     assert_contains "dig invoked with @server (@-form)" "$dig_log" "@9.9.9.9"
 }
 
 test_server_equals_form() {
     run_script "--server=8.8.4.4" "test" "example.com"
     assert_rc "--server=val exits 0" 0
-    local dig_log
-    dig_log="$(cat "$TEST_DIR/dig.log")"
+    local dig_log; dig_log="$(cat "$TEST_DIR/dig.log")"
     assert_contains "dig invoked with @server (= form)" "$dig_log" "@8.8.4.4"
 }
 
@@ -330,8 +319,7 @@ test_server_duplicate() {
 test_server_default_no_at() {
     run_script "test" "example.com"
     assert_rc "no --server exits 0" 0
-    local dig_log
-    dig_log="$(cat "$TEST_DIR/dig.log")"
+    local dig_log; dig_log="$(cat "$TEST_DIR/dig.log")"
     assert_not_contains "no @server in dig args by default" "$dig_log" "@"
     assert_stderr_not_contains "no @ in stderr command line" "@"
 }
@@ -341,16 +329,14 @@ test_quiet_basic() {
     assert_rc "quiet basic exits 0" 0
     assert_stdout_contains "key still on stdout" "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1234567890abcdefghijklmnopqrstuvwxyz"
     # Stderr should be empty in quiet mode on success
-    local stderr
-    stderr="$(get_stderr)"
+    local stderr; stderr="$(get_stderr)"
     assert_eq "stderr empty in quiet mode" "$stderr" ""
 }
 
 test_quiet_long_flag() {
     run_script --quiet "test" "example.com"
     assert_rc "--quiet long flag exits 0" 0
-    local stderr
-    stderr="$(get_stderr)"
+    local stderr; stderr="$(get_stderr)"
     assert_eq "stderr empty with --quiet" "$stderr" ""
 }
 

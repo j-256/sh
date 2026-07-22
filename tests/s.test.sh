@@ -164,8 +164,7 @@ test_help_short_flag() {
     assert_rc "-h exits 0" 0
     assert_stdout_contains "-h has NAME" "NAME"
     # -h must NOT fall through to sfcc-ci; the wrapper owns the help
-    local args
-    args="$(get_sfcc_args)"
+    local args; args="$(get_sfcc_args)"
     assert_eq "sfcc-ci not invoked for -h" "$args" ""
 }
 
@@ -187,8 +186,7 @@ run_without_dep() {
     local t
     for t in bash basename sed printf cat; do
         [ "$t" = "$missing" ] && continue
-        local src
-        src="$(command -v "$t")"
+        local src; src="$(command -v "$t")"
         [ -n "$src" ] && ln -s "$src" "$nobin/$t"
     done
     # The shimmed deps (already written to $SHIM_DIR by write_shims)

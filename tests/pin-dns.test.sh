@@ -44,8 +44,7 @@ _install_impersonate_roster() {
 assert_curl_arg_first() {
     local label="$1"
     local want="$2"
-    local got
-    got="$(head -n1 "$TEST_DIR/curl.args" 2>/dev/null)"
+    local got; got="$(head -n1 "$TEST_DIR/curl.args" 2>/dev/null)"
     assert_eq "$label" "$got" "$want"
 }
 

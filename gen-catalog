@@ -109,8 +109,7 @@ EOF
 
             local i=1
             while [ "$i" -le "$variants_per_base" ]; do
-                local num
-                num="$(printf '%03d' "$i")"
+                local num; num="$(printf '%03d' "$i")"
                 local vid="$base_id-VAR-$num"
 
                 if [ "$i" -eq 1 ]; then
@@ -133,8 +132,7 @@ EOF
 
             local i=1
             while [ "$i" -le "$variants_per_base" ]; do
-                local num
-                num="$(printf '%03d' "$i")"
+                local num; num="$(printf '%03d' "$i")"
                 local vid="$base_id-VAR-$num"
 
                 echo "    <product product-id=\"$vid\">"

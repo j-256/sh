@@ -38,8 +38,7 @@ _is_bash_script() {
     local file="$1"
     [ -f "$file" ] || return 1
     case "$(basename "$file")" in *.md|*.sh|*.json) return 1 ;; esac
-    local first_line
-    first_line="$(head -1 "$file")"
+    local first_line; first_line="$(head -1 "$file")"
     case "$first_line" in
         '#!/bin/bash'|'#!/usr/bin/env bash') return 0 ;;
         *) return 1 ;;
@@ -54,8 +53,7 @@ test_every_script_has_a_test() {
     local script
     for script in "$REPO_DIR"/*; do
         _is_bash_script "$script" || continue
-        local name
-        name="$(basename "$script")"
+        local name; name="$(basename "$script")"
         assert_file_exists "$name: has a test" "$SCRIPT_DIR/$name.test.sh"
     done
 }
@@ -66,8 +64,7 @@ test_every_test_has_a_script() {
     local test_file
     for test_file in "$SCRIPT_DIR"/*.test.sh; do
         [ -f "$test_file" ] || continue
-        local name
-        name="$(basename "$test_file" .test.sh)"
+        local name; name="$(basename "$test_file" .test.sh)"
         case "$name" in meta-*) continue ;; esac
         if _is_bash_script "$REPO_DIR/$name"; then
             _ok "$name.test.sh: has a script"
@@ -90,8 +87,7 @@ test_every_script_is_in_index() {
     local script
     for script in "$REPO_DIR"/*; do
         _is_bash_script "$script" || continue
-        local name
-        name="$(basename "$script")"
+        local name; name="$(basename "$script")"
         if grep -qF "]($name)" "$index"; then
             _ok "$name: in INDEX.md"
         else
@@ -129,8 +125,7 @@ test_test_files_are_executable() {
     local test_file
     for test_file in "$SCRIPT_DIR"/*.test.sh; do
         [ -f "$test_file" ] || continue
-        local name
-        name="$(basename "$test_file")"
+        local name; name="$(basename "$test_file")"
         if [ -x "$test_file" ]; then
             _ok "$name: executable"
         else
