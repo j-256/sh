@@ -1,89 +1,145 @@
 #!/bin/bash
-# notify - show a macOS notification via osascript
+# notify - display a macOS notification, speak it, or do both
 #
 # Usage:
 #   notify [options] [message ...]
 #   command | notify [options]
-#   notify -h
 #
 # Options:
-#   -t, --title TITLE        Notification title (default: "Notification")
-#   -s, --subtitle SUBTITLE  Notification subtitle
-#   -S, --sound SOUND        Sound name (default: "Glass")
-#   -n, --no-sound           Suppress notification sound
-#   -l, --list-sounds        List available sound names and exit
-#   -h, --help               Show help and exit
+#   -p, --say                  Display the notification and speak the message
+#   -P, --say-only             Speak without displaying a notification
+#       --notify-only          Disable speech, including NOTIFY_SAY
+#   -t, --title title          Notification title (default: "Notification")
+#   -s, --subtitle subtitle    Notification subtitle
+#   -S, --sound sound          Notification sound (default: "Glass")
+#   -n, --no-sound             Suppress the notification sound
+#   -l, --list-sounds          List notification sounds and exit
+#   -v, --voice voice          macOS speech voice
+#   -r, --rate wpm             Speech rate in words per minute
+#       --say-text text        Speak text instead of the displayed message
+#   -b, --background           Start speech asynchronously
+#   -L, --list-voices          List installed voices and exit
+#   -h, --help                 Show help message
 #
 # Environment:
-#   NOTIFY_TITLE  Default title (overridden by --title)
-#   NOTIFY_SOUND  Default sound (overridden by --sound / --no-sound)
-#
-# macOS only. osascript is the backing mechanism for notifications
+#   NOTIFY_TITLE       Default title
+#   NOTIFY_SOUND       Default notification sound
+#   NOTIFY_SAY         Set to 1, true, yes, or on to enable --say
+#   NOTIFY_VOICE       Default speech voice
+#   NOTIFY_RATE        Default speech rate
+#   NO_COLOR           Disable colored diagnostics
+#   CLICOLOR_FORCE     Force colored diagnostics when stderr is redirected
 
 _notify() (
-    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    local SCRIPT_NAME
+    SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="notify" ;; esac
 
-    # ANSI palette for diagnostics, computed once (no per-call _color subshell):
-    # empty unless stderr is a TTY (or CLICOLOR_FORCE is set) and NO_COLOR is
-    # unset, so pipes/redirects and the test harness stay plain by default while
-    # CLICOLOR_FORCE=1 lets a capture keep color. NO_COLOR wins when both are set.
-    # https://no-color.org/
-    local C_ERR=""    # ERR severity: red
+    # The subshell keeps these settings from changing a shell that sources us
+    set +f
+    shopt -u failglob
+
+    # ANSI diagnostics are enabled only for a terminal (or CLICOLOR_FORCE) and
+    # disabled by NO_COLOR. This keeps redirected output and tests plain
+    local C_ERR=""
     local C_RST=""
     if { [ -t 2 ] || [ -n "${CLICOLOR_FORCE:-}" ]; } && [ -z "${NO_COLOR:-}" ]; then
         C_ERR=$'\033[31m'
         C_RST=$'\033[0m'
     fi
+
     _error() { printf '%s[ERR][%s] %s%s\n' "$C_ERR" "$SCRIPT_NAME" "$*" "$C_RST" >&2; }
 
     _show_help() {
-        local s; [ -t 1 ] && s=$'\033[4m'
-        local r; [ -t 1 ] && r=$'\033[24m'
+        local s=""
+        local r=""
+        [ -t 1 ] && s=$'\033[4m'
+        [ -t 1 ] && r=$'\033[24m'
+
         cat <<EOF
 NAME
-  $SCRIPT_NAME - show a macOS notification via osascript
+  $SCRIPT_NAME - display a macOS notification, speak it, or do both
+
 SYNOPSIS
   $SCRIPT_NAME [${s}options${r}] [${s}message${r} ...]
   ${s}command${r} | $SCRIPT_NAME [${s}options${r}]
-  $SCRIPT_NAME -h
-DESCRIPTION
-  Displays a macOS notification in the top-right corner and in
-  Notification Center. The ${s}message${r} may be passed as positional
-  arguments or piped to stdin.
 
-  Notifications are attributed to Script Editor (the osascript host
-  app). Notification duration is controlled by macOS, not this script
-  (System Settings > Notifications > Script Editor).
-OPTIONS
-  -t, --title ${s}title${r}        Notification title (default: "Notification")
-  -s, --subtitle ${s}subtitle${r}  Notification subtitle
-  -S, --sound ${s}sound${r}        Sound name (default: "Glass")
-  -n, --no-sound           Suppress notification sound
-  -l, --list-sounds        List available sound names and exit
-  -h, --help               Show this help message
+DESCRIPTION
+  Displays a macOS notification by default. --say adds synthesized speech;
+  --say-only speaks without displaying a notification. The message may be
+  passed as positional arguments or piped to stdin.
+
+  Notification Center attributes notifications to Script Editor, the
+  osascript host application. Notification duration is controlled by macOS
+  under System Settings > Notifications > Script Editor.
+
+OUTPUT MODES
+  -p, --say                  Display the notification and speak the message
+  -P, --say-only             Speak the message without displaying it
+      --notify-only          Disable speech, including NOTIFY_SAY
+
+  The last explicit output-mode option wins. Without one, using a speech
+  option implies --say. Otherwise, notification-only output is the default.
+
+NOTIFICATION OPTIONS
+  -t, --title ${s}title${r}          Title (default: "Notification")
+  -s, --subtitle ${s}subtitle${r}    Subtitle
+  -S, --sound ${s}sound${r}          Sound name (default: "Glass")
+  -n, --no-sound             Suppress the notification sound
+  -l, --list-sounds          List available notification sounds and exit
+
+SPEECH OPTIONS
+  -v, --voice ${s}voice${r}          Voice name (default: macOS system voice)
+  -r, --rate ${s}wpm${r}             Speaking rate in words per minute
+      --say-text ${s}text${r}        Speak ${s}text${r} instead of the displayed message
+  -b, --background           Start say asynchronously
+  -L, --list-voices          List installed voices and their locales, then exit
+
+INFORMATION
+  -h, --help                 Show this help message
+
 ENVIRONMENT
-  NOTIFY_TITLE    Default title (overridden by --title)
-  NOTIFY_SOUND    Default sound (overridden by --sound / --no-sound)
+  NOTIFY_TITLE       Default title
+  NOTIFY_SOUND       Default notification sound
+  NOTIFY_SAY         Set to 1, true, yes, or on to enable --say
+  NOTIFY_VOICE       Default voice when speech is enabled
+  NOTIFY_RATE        Default speaking rate when speech is enabled
+  NO_COLOR           Disable colored diagnostics
+  CLICOLOR_FORCE     Force colored diagnostics when stderr is redirected
+
+EXAMPLES
+  $SCRIPT_NAME "Backup complete"
+  make && $SCRIPT_NAME -t "Build" --say --no-sound "Build finished"
+  $SCRIPT_NAME --say-only -v Samantha -r 190 "Tea is ready"
+  $SCRIPT_NAME --say --say-text "Deploy healthy" "Production deployment is healthy"
+  $SCRIPT_NAME --list-voices
+
 EXIT STATUS
   0  Success
+  1  No notification sounds were found
   2  Invalid arguments or missing required message
-  3  osascript not found (not running on macOS)
+  3  A required macOS tool (osascript or say) is unavailable
+
+  Otherwise, the status of a failed osascript or foreground say process is
+  returned. Background mode can report only whether say was started.
+
 DEPENDENCIES
-  osascript (macOS)
-CAVEATS
-  macOS only. osascript is the backing mechanism for notifications.
+  osascript  Notification output (macOS only)
+  say        Speech output and voice discovery (macOS only)
 EOF
     }
 
     _list_sounds() {
         local sounds=""
+        local user_sounds=""
         local dir
         local file
         local name
 
-        for dir in /System/Library/Sounds ~/Library/Sounds; do
+        if [ -n "${HOME:-}" ]; then user_sounds="$HOME/Library/Sounds"; fi
+        for dir in /System/Library/Sounds /Library/Sounds "$user_sounds"; do
+            [ -n "$dir" ] || continue
             [ -d "$dir" ] || continue
             for file in "$dir"/*; do
                 [ -f "$file" ] || continue
@@ -94,11 +150,11 @@ EOF
         done
 
         if [ -z "$sounds" ]; then
-            _error "No sounds found in /System/Library/Sounds/ or ~/Library/Sounds/"
+            _error "No sounds found in the system, local, or user Sounds directories"
             return 1
         fi
 
-        printf '%s\n' "$sounds" | sort
+        printf '%s\n' "$sounds" | sort -u
     }
 
     _expand_short_opts() {
@@ -114,8 +170,8 @@ EOF
         for arg in "$@"; do
             if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
             case "$arg" in
-                --)          passthru=1; _EXPANDED+=("$arg") ;;
-                --*|-|"")    _EXPANDED+=("$arg") ;;
+                --)       passthru=1; _EXPANDED+=("$arg") ;;
+                --*|-|"") _EXPANDED+=("$arg") ;;
                 -[a-zA-Z]?*)
                     rest="${arg#-}"
                     while [ -n "$rest" ]; do
@@ -126,23 +182,51 @@ EOF
                             rest="" ;;
                         esac
                     done ;;
-                *)           _EXPANDED+=("$arg") ;;
+                *)        _EXPANDED+=("$arg") ;;
             esac
         done
     }
-    if ! command -v osascript >/dev/null 2>&1; then
-        _error "osascript not found (macOS only)"
-        return 3
-    fi
+
+    _env_true() {
+        case "${1:-}" in
+            1|[Tt][Rr][Uu][Ee]|[Yy][Ee][Ss]|[Oo][Nn]) return 0 ;;
+            *) return 1 ;;
+        esac
+    }
+
+    _set_action() {
+        local requested="$1"
+        if [ -n "$action" ]; then
+            _error "Only one list option may be used at a time"
+            return 2
+        fi
+        action="$requested"
+    }
+
+    _is_positive_integer() {
+        case "$1" in
+            ""|*[!0-9]*) return 1 ;;
+            *[1-9]*) return 0 ;;
+            *) return 1 ;;
+        esac
+    }
 
     local title="${NOTIFY_TITLE:-Notification}"
     local subtitle=""
     local sound="${NOTIFY_SOUND:-Glass}"
     local no_sound=""
-    local list_sounds=""
+    local explicit_mode=""
+    local speech_requested=""
+    local action=""
+    local voice="${NOTIFY_VOICE:-}"
+    local rate="${NOTIFY_RATE:-}"
+    local say_text=""
+    local say_text_set=""
+    local background=""
     local -a args=()
+    local -a _EXPANDED=()
 
-    _expand_short_opts "tsS" "$@"
+    _expand_short_opts "tsSvr" "$@"
     set -- "${_EXPANDED[@]}"; unset _EXPANDED
 
     while [ $# -gt 0 ]; do
@@ -151,8 +235,25 @@ EOF
                 _show_help
                 return 0
                 ;;
+            -p|--say)
+                explicit_mode="both"
+                shift
+                ;;
+            -P|--say-only)
+                explicit_mode="say"
+                shift
+                ;;
+            # Negation flag: --notify-only intentionally has no short form
+            --notify-only)
+                explicit_mode="notify"
+                shift
+                ;;
             -l|--list-sounds)
-                list_sounds=1
+                _set_action "sounds" || return 2
+                shift
+                ;;
+            -L|--list-voices)
+                _set_action "voices" || return 2
                 shift
                 ;;
             -n|--no-sound)
@@ -189,6 +290,50 @@ EOF
                 [ -n "$sound" ] || { _error "-S|--sound requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift
                 ;;
+            -v|--voice)
+                [ -n "${2-}" ] || { _error "-v|--voice requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                voice="$2"
+                speech_requested=1
+                shift 2
+                ;;
+            --voice=*)
+                voice="${1#*=}"
+                [ -n "$voice" ] || { _error "-v|--voice requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                speech_requested=1
+                shift
+                ;;
+            -r|--rate)
+                [ -n "${2-}" ] || { _error "-r|--rate requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                rate="$2"
+                speech_requested=1
+                shift 2
+                ;;
+            --rate=*)
+                rate="${1#*=}"
+                [ -n "$rate" ] || { _error "-r|--rate requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                speech_requested=1
+                shift
+                ;;
+            # Collision: --say-text stays long-only because -s and -t are notification options
+            --say-text)
+                [ -n "${2-}" ] || { _error "--say-text requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                say_text="$2"
+                say_text_set=1
+                speech_requested=1
+                shift 2
+                ;;
+            --say-text=*)
+                say_text="${1#*=}"
+                [ -n "$say_text" ] || { _error "--say-text requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                say_text_set=1
+                speech_requested=1
+                shift
+                ;;
+            -b|--background)
+                background=1
+                speech_requested=1
+                shift
+                ;;
             --)
                 shift
                 while [ $# -gt 0 ]; do
@@ -207,31 +352,97 @@ EOF
         esac
     done
 
-    if [ -n "$list_sounds" ]; then
-        _list_sounds
-        return $?
+    if [ -n "$action" ]; then
+        if [ "${#args[@]}" -gt 0 ]; then
+            _error "List options do not accept a message"
+            return 2
+        fi
+
+        case "$action" in
+            sounds)
+                _list_sounds
+                return $?
+                ;;
+            voices)
+                if ! command -v say >/dev/null 2>&1; then
+                    _error "say is required"
+                    return 3
+                fi
+                say -v '?'
+                return $?
+                ;;
+        esac
     fi
 
-    # Build message from positional args or stdin
     local message=""
-    if [ ${#args[@]} -gt 0 ]; then
-        message="${args[*]}"
-    elif [ ! -t 0 ]; then
+    local index
+    if [ "${#args[@]}" -gt 0 ]; then
+        message="${args[0]}"
+        index=1
+        while [ "$index" -lt "${#args[@]}" ]; do
+            message="$message ${args[$index]}"
+            index=$((index + 1))
+        done
+    elif [ -p /dev/stdin ] || [ ! -t 0 ]; then
         message="$(cat)"
     fi
 
     if [ -z "$message" ]; then
-        _error "MESSAGE is required (pass as argument or pipe to stdin)"
+        _error "MESSAGE is required (pass as arguments or pipe stdin)"
         _show_help >&2
         return 2
     fi
 
-    local effective_sound="$sound"
-    if [ -n "$no_sound" ]; then
-        effective_sound=""
+    local mode="notify"
+    if [ -n "$explicit_mode" ]; then
+        mode="$explicit_mode"
+    elif _env_true "${NOTIFY_SAY:-}" || [ -n "$speech_requested" ]; then
+        mode="both"
     fi
 
-    osascript - "$message" "$title" "$subtitle" "$effective_sound" <<'APPLESCRIPT'
+    if [ "$mode" = "notify" ] && [ -n "$explicit_mode" ] && [ -n "$speech_requested" ]; then
+        _error "Speech options cannot be combined with --notify-only"
+        return 2
+    fi
+
+    local notify_enabled=""
+    local say_enabled=""
+    case "$mode" in
+        notify) notify_enabled=1 ;;
+        say) say_enabled=1 ;;
+        both) notify_enabled=1; say_enabled=1 ;;
+    esac
+
+    if [ -n "$say_enabled" ] && [ -n "$rate" ] && ! _is_positive_integer "$rate"; then
+        _error "-r|--rate must be a positive integer in words per minute"
+        return 2
+    fi
+
+    if [ -n "$notify_enabled" ] && ! command -v osascript >/dev/null 2>&1; then
+        _error "osascript is required"
+        return 3
+    fi
+    if [ -n "$say_enabled" ] && ! command -v say >/dev/null 2>&1; then
+        _error "say is required"
+        return 3
+    fi
+
+    local effective_sound="$sound"
+    if [ -n "$no_sound" ]; then effective_sound=""; fi
+
+    local speech_text="$message"
+    local -a say_args=()
+    if [ -n "$say_enabled" ]; then
+        if [ -n "$say_text_set" ]; then speech_text="$say_text"; fi
+        [ -n "$voice" ] && say_args+=(-v "$voice")
+        [ -n "$rate" ] && say_args+=(-r "$rate")
+    fi
+
+    local notify_rc=0
+    local say_rc=0
+
+    if [ -n "$notify_enabled" ]; then
+        osascript - "$message" "$title" "$subtitle" "$effective_sound" <<'APPLESCRIPT'
 on run argv
     set msg to item 1 of argv
     set ttl to item 2 of argv
@@ -248,6 +459,21 @@ on run argv
     end if
 end run
 APPLESCRIPT
+        notify_rc=$?
+    fi
+
+    if [ -n "$say_enabled" ]; then
+        if [ -n "$background" ]; then
+            say "${say_args[@]}" <<< "$speech_text" &
+            say_rc=$?
+        else
+            say "${say_args[@]}" <<< "$speech_text"
+            say_rc=$?
+        fi
+    fi
+
+    if [ "$notify_rc" -ne 0 ]; then return "$notify_rc"; fi
+    return "$say_rc"
 )
 
 _notify "$@"

@@ -77,7 +77,7 @@ Each row's primary link opens the doc; the `script` link opens the raw script.
 
 | Tool | Description |
 |------|-------------|
-| [`notify`](docs/notify.md?html) · [script](notify) | Show a macOS notification via osascript (useful when long-running commands finish) |
+| [`notify`](docs/notify.md?html) · [script](notify) | Display a macOS notification, speak it with `say`, or both (useful when long-running commands finish) |
 | [`screenshot-rename`](docs/screenshot-rename.md?html) · [script](screenshot-rename) | Rename macOS screenshots from the verbose default format to a clean timestamp-only name |
 | [`daemons`](docs/daemons.md?html) · [script](daemons) | Observe homegrown launchd daemons: per-daemon JSONL activity logs, status/health-check gate, log tail/query |
 | [`install-bash`](docs/install-bash.md?html) · [script](install-bash) | Install the latest Bash from Homebrew and set it as your login shell |
