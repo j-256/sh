@@ -121,8 +121,6 @@ whether the asynchronous speech later completed successfully.
 | `NOTIFY_SAY` | Enable speech when set to `1`, `true`, `yes`, or `on` (case-insensitive for those spellings) |
 | `NOTIFY_VOICE` | Default voice when speech is enabled |
 | `NOTIFY_RATE` | Default speech rate when speech is enabled |
-| `NO_COLOR` | Disable colored diagnostics when non-empty |
-| `CLICOLOR_FORCE` | Force colored diagnostics when non-empty and `NO_COLOR` is unset |
 
 Command-line options take precedence over environment defaults.
 

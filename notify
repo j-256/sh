@@ -27,8 +27,6 @@
 #   NOTIFY_SAY         Set to 1, true, yes, or on to enable --say
 #   NOTIFY_VOICE       Default speech voice
 #   NOTIFY_RATE        Default speech rate
-#   NO_COLOR           Disable colored diagnostics
-#   CLICOLOR_FORCE     Force colored diagnostics when stderr is redirected
 
 _notify() (
     local SCRIPT_NAME
@@ -40,16 +38,7 @@ _notify() (
     set +f
     shopt -u failglob
 
-    # ANSI diagnostics are enabled only for a terminal (or CLICOLOR_FORCE) and
-    # disabled by NO_COLOR. This keeps redirected output and tests plain
-    local C_ERR=""
-    local C_RST=""
-    if { [ -t 2 ] || [ -n "${CLICOLOR_FORCE:-}" ]; } && [ -z "${NO_COLOR:-}" ]; then
-        C_ERR=$'\033[31m'
-        C_RST=$'\033[0m'
-    fi
-
-    _error() { printf '%s[ERR][%s] %s%s\n' "$C_ERR" "$SCRIPT_NAME" "$*" "$C_RST" >&2; }
+    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
 
     _show_help() {
         local s=""
@@ -105,8 +94,6 @@ ENVIRONMENT
   NOTIFY_SAY         Set to 1, true, yes, or on to enable --say
   NOTIFY_VOICE       Default voice when speech is enabled
   NOTIFY_RATE        Default speaking rate when speech is enabled
-  NO_COLOR           Disable colored diagnostics
-  CLICOLOR_FORCE     Force colored diagnostics when stderr is redirected
 
 EXAMPLES
   $SCRIPT_NAME "Backup complete"
