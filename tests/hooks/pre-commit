@@ -18,7 +18,7 @@ tests_dir="$(cd "$hook_dir/.." && pwd)"
 
 # Static convention meta-tests to gate on. Add fast (no-script-execution)
 # checks here as they are written; keep slow/executing tests out of the hook
-STATIC_METATESTS="meta-comment-style meta-canonical-letters meta-coverage"
+STATIC_METATESTS="meta-comment-style meta-canonical-letters meta-coverage meta-diagnostic-format meta-flag-spelling"
 
 rc=0
 for t in $STATIC_METATESTS; do
