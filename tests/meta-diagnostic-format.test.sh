@@ -58,7 +58,11 @@ _is_excluded() { case "$EXCLUDE" in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 # body lacks the canonical [SEV][ token (or the structured-variant PFX_<SEV> ref).
 # Empty output = conformant. Handles multi-line helper bodies (e.g. a colored
 # _error whose prefix line sits several lines below the `_error() {` opener) by
-# accumulating lines until brace depth returns to zero
+# walking the brace-balanced body, but tests the canonical token against only
+# the emitting lines (those matching echo/printf) so a plain comment or string
+# that mentions [SEV][ cannot mask a legacy emit, and a brace inside a string
+# cannot truncate the body (a comment that itself contains echo/printf is still
+# collected -- the match is a whole-line substring -- but the fleet has none)
 _prefix_violations() {
     awk '
         function sev_for(n) {
@@ -70,16 +74,29 @@ _prefix_violations() {
         /^[[:space:]]*_(error|warn|info|debug)\(\)/ {
             name = $0; sub(/\(\).*/, "", name); gsub(/[[:space:]]/, "", name)
             sev = sev_for(name)
-            body = $0
+            # Accumulate ONLY the emitting lines (those matching echo/printf) of
+            # the helper body, walking the brace-balanced body to reach them.
+            # Testing the canonical token against the emitting lines -- not the
+            # whole body -- means a plain comment or an unrelated string
+            # containing [SEV][ cannot satisfy the check (would be a false
+            # negative), and a brace inside a string cannot prematurely balance
+            # and truncate the body (would be a false positive). The match is a
+            # whole-line substring, so a comment that itself contains echo/printf
+            # is still collected -- no fleet helper does this. The colored variant
+            # emits via printf with a PFX_<SEV> arg, landing on an emitting line
+            emit = ""
+            line = $0
             o = gsub(/{/, "{", $0); c = gsub(/}/, "}", $0); depth = o - c
+            if (line ~ /(echo|printf)/) emit = emit line "\n"
             while (depth > 0) {
                 if ((getline nxt) <= 0) break
-                body = body "\n" nxt
+                line = nxt
                 o = gsub(/{/, "{", nxt); c = gsub(/}/, "}", nxt); depth += o - c
+                if (line ~ /(echo|printf)/) emit = emit line "\n"
             }
             canon = "[" sev "]["
             pfx   = "PFX_" sev
-            if (index(body, canon) == 0 && index(body, pfx) == 0)
+            if (index(emit, canon) == 0 && index(emit, pfx) == 0)
                 printf "%s: missing canonical [%s][ prefix\n", name, sev
         }
     ' "$1"
@@ -120,6 +137,21 @@ test_detector_catches_synthetic_legacy() {
     } > "$good"
     local good_hits; good_hits="$(_prefix_violations "$good")"
     assert_eq "detector passes canonical prefix" "$good_hits" ""
+
+    # Regression: a legacy emit whose body ALSO contains the canonical token in
+    # a comment must still be flagged -- the detector tests emitting lines only,
+    # so the comment cannot mask the bad echo (this was a false negative when the
+    # check scanned the whole body)
+    local masked="$TEST_DIR/masked.sh"
+    {
+        echo '#!/bin/bash'
+        echo '_error() {'
+        echo '    # canonical is [ERR][name] but this emits the legacy shape'
+        echo '    echo "[$SCRIPT_NAME] ERROR: $*" >&2'
+        echo '}'
+    } > "$masked"
+    local masked_hits; masked_hits="$(_prefix_violations "$masked")"
+    assert_eq "detector flags legacy emit despite [ERR][ in a comment" "$masked_hits" "_error: missing canonical [ERR][ prefix"
 }
 
 run_tests "$@"
