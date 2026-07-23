@@ -320,7 +320,9 @@ All diagnostic output follows a single canonical shape:
 [DBG][$SCRIPT_NAME] message
 ```
 
-All four helpers write to **stderr**. Program output stays on stdout.
+All four helpers write to **stderr**. Program output stays on stdout. (Routing is a review obligation, not mechanically checked -- `_info` legitimately routes to stdout in some scripts, e.g. a `--list` mode that keeps stdout pipe-clean, so a static routing assertion would over-fire.)
+
+Two legacy prefix shapes are **non-conforming** and must not be reintroduced: `[SEV] name:` (a space and a trailing colon before the message, often the literal script name) and `[name] SEV:` (name-first, severity as a word). The canonical form is severity-led and bracket-adjacent -- `[SEV][$SCRIPT_NAME]` with no space and no colon. This is enforced by [`tests/meta-diagnostic-format.test.sh`](tests/meta-diagnostic-format.test.sh), which asserts every diagnostic helper's body contains the canonical `[SEV][` token (or a `PFX_<SEV>` reference for the structured colored variant below).
 
 The severity token leads so `grep '^\[ERR\]'` is greppable across the repo without per-script awareness. Severity is the most actionable field when scanning output, matching the ordering in `journalctl` and most log viewers. Three-letter tokens also line up when levels mix, producing a tidy left column.
 
@@ -495,6 +497,8 @@ Short and long forms follow two asymmetric rules:
 - **Every short must have a long; a long may go short-less only by exception.** The long form is what appears in scripts, docs, and error messages. Going long-only requires one of: **reserved namespace** (`pin-dns` gives its whole short space to curl passthrough); **negation flag** (`--no-save`, `--no-extensions` conventionally carry no short); **collision** (the letter is taken by a more-deserving option, or is a canonical letter for a behavior this script has); or **genuinely never hand-typed** (machine-facing or diagnostic flags like `--print-pool`). A long-only option carries a one-line comment naming which exception applies, mirroring the value-opts-exclusion comment rule below. When the option's absent short is a *canonical* letter (`--dry-run` without `-n`, `--force` without `-f`) the meta-test below would otherwise flag it, so that comment takes the form `# meta:canonical-exempt: <reason>` on the option's `case` arm, which the test reads to waive exactly that long (e.g. pin-dns's `--dry-run) # meta:canonical-exempt: reserved namespace -- -n is curl's --netrc`).
 
 The behavior-scoped half of the canonical-letter rule is enforced by `tests/meta-canonical-letters.test.sh`, which asserts that a script whose option set contains `--force` also has `-f`, and `--dry-run` also has `-n`, waiving any arm marked `# meta:canonical-exempt` (see TESTING.md). The short-by-default direction itself is a judgment call, not mechanically checked.
+
+Spelling is canonical too: the dry-run long flag is `--dry-run` (hyphenated), never `--dryrun`. `meta-canonical-letters` keys off the literal `--dry-run`, so a script spelling it `--dryrun` slips past it entirely (no `--dry-run` token, no assertion). [`tests/meta-flag-spelling.test.sh`](tests/meta-flag-spelling.test.sh) closes that gap: it flags the non-canonical `--dryrun` spelling directly, via the shared `_option_flags` extractor.
 
 ### Preprocessor
 
