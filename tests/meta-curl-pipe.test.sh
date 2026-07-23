@@ -18,9 +18,11 @@
 #     guard: `[ "${BASH_SOURCE[0]}" != "$0" ]` wrongly returns sourced,
 #     firing `return` at top level ("return: can only `return' from a
 #     function"). Covered by `[ -n "${BASH_SOURCE[0]}" ]`
-#   - SCRIPT_NAME falling back to the interpreter ("bash") or a digit
-#     ("63" from /dev/fd/63). Covered by the case pattern
-#     `""|bash|sh|zsh|dash|[0-9]*`
+#   - SCRIPT_NAME falling back to the interpreter ("bash"), a digit ("63"
+#     from /dev/fd/63), or a bash-internal source sentinel ("main" for stdin
+#     on bash 5.2+, "environment" under bash -c). Covered by the case pattern
+#     `""|bash|sh|zsh|dash|[0-9]*` plus the path-based /dev/* pre-check, and
+#     regression-checked here by pinning the -h NAME line to the script name
 #
 # shellcheck source-path=SCRIPTDIR disable=SC2329
 
@@ -94,28 +96,36 @@ procsub_source_script() {
     printf '%s\n' "$?" > "$TEST_DIR/rc"
 }
 
-# Shared assertions: help exits 0, mentions the canonical name, and
-# doesn't leak an interpreter name or digit in place of SCRIPT_NAME
+# Extract the word following the NAME heading in a help block: the line under
+# NAME is "  <script> - description", so strip the indent and take the first
+# field. Empty if there is no NAME section (tsd/snippet use a Usage-first
+# format and have no NAME heading)
+_help_name_word() {
+    awk 'p { sub(/^[[:space:]]+/, ""); print $1; exit } /^NAME$/ { p = 1 }'
+}
+
+# Shared assertions: help exits 0, names the script, and doesn't leak an
+# interpreter name, a /dev/fd digit, or a BASH_SOURCE sentinel (main,
+# environment) in place of SCRIPT_NAME
 assert_help_clean() {
     local s="$1"
     local label="$2"
     local combined
+    local name_word
     assert_rc "$s: $label exits 0" 0
     assert_stderr_not_contains "$s: $label: no 'return: can only' error" "return: can only"
     combined="$(get_stdout)$(get_stderr)"
     assert_contains "$s: $label: help mentions '$s'" "$combined" "$s"
-    assert_not_contains "$s: $label: help does not say 'bash'" "$combined" "  bash "
-    # /dev/fd/N would leak as a digit-only token where SCRIPT_NAME should be
-    # Grep for "NAME\n  <digit>" and "SYNOPSIS\n  <digit>" shapes
-    assert_not_contains "$s: $label: help name line is not a digit" "$combined" $'NAME\n  1'
-    assert_not_contains "$s: $label: help name line is not a digit" "$combined" $'NAME\n  2'
-    assert_not_contains "$s: $label: help name line is not a digit" "$combined" $'NAME\n  3'
-    assert_not_contains "$s: $label: help name line is not a digit" "$combined" $'NAME\n  4'
-    assert_not_contains "$s: $label: help name line is not a digit" "$combined" $'NAME\n  5'
-    assert_not_contains "$s: $label: help name line is not a digit" "$combined" $'NAME\n  6'
-    assert_not_contains "$s: $label: help name line is not a digit" "$combined" $'NAME\n  7'
-    assert_not_contains "$s: $label: help name line is not a digit" "$combined" $'NAME\n  8'
-    assert_not_contains "$s: $label: help name line is not a digit" "$combined" $'NAME\n  9'
+    # Positively pin the NAME line to the script's own name. This subsumes the
+    # old not-a-digit guards and also catches interpreter names ("bash"), the
+    # /dev/fd/N digit, and the BASH_SOURCE sentinels ("main" on bash 5.2 stdin,
+    # "environment" from bash -c) that a broken SCRIPT_NAME fallback would emit.
+    # Scripts whose help has no NAME heading (tsd, snippet use a Usage-first
+    # printf format) yield an empty word and rely on the "mentions" check above
+    name_word="$(printf '%s' "$combined" | _help_name_word)"
+    if [ -n "$name_word" ]; then
+        assert_eq "$s: $label: NAME line names the script" "$name_word" "$s"
+    fi
 }
 
 test_all_scripts_pipe_cleanly() {
