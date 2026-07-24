@@ -1,5 +1,5 @@
 #!/bin/bash
-# daemons - observe the homegrown launchd daemons: write/read per-daemon activity logs
+# daemons - observe and control the homegrown launchd daemons: activity logs + lifecycle
 #
 # Usage:
 #   daemons append <name> <event> [detail|--detail-stdin]   Append one activity record
@@ -7,6 +7,9 @@
 #   daemons check                            Health+activity gate (returns nonzero on problem)
 #   daemons log [name|-a|--all] [-f|--follow]   Render the log (human-readable)
 #   daemons query [name|-a|--all] [-e|--event E] [-s|--since T] [-j|--jq EXPR]   Filter/extract JSONL records
+#   daemons load <name> [--plist PATH] [-n|--dry-run]   Bootstrap (reload) a daemon into launchd; logs a load record
+#   daemons unload <name> [-n|--dry-run]     Bootout a daemon from launchd; logs an unload record
+#   daemons registry [--edit|--open]         Print the registry path, or open it (--edit: $VISUAL/$EDITOR, --open: macOS open)
 #   daemons -h | --help
 #
 # Environment:
@@ -60,17 +63,21 @@ _daemons() (
         local r; [ -t 1 ] && r=$'\033[24m'
         cat <<EOF
 NAME
-  $SCRIPT_NAME - observe the homegrown launchd daemons
+  $SCRIPT_NAME - observe and control the homegrown launchd daemons
 SYNOPSIS
   $SCRIPT_NAME append <${s}name${r}> <${s}event${r}> [${s}detail${r}|--detail-stdin]
   $SCRIPT_NAME status
   $SCRIPT_NAME check
   $SCRIPT_NAME log [${s}name${r}|-a|--all] [-f|--follow]
   $SCRIPT_NAME query [${s}name${r}|-a|--all] [-e|--event ${s}E${r}] [-s|--since ${s}T${r}] [-j|--jq ${s}EXPR${r}]
+  $SCRIPT_NAME load <${s}name${r}> [--plist ${s}PATH${r}] [-n|--dry-run]
+  $SCRIPT_NAME unload <${s}name${r}> [-n|--dry-run]
+  $SCRIPT_NAME registry [--edit|--open]
 DESCRIPTION
   Writes and reads per-daemon activity logs (JSONL) under \$DAEMONS_LOG_DIR.
-  Each record is {ts, daemon, event, detail}; event is trigger|noop|change|error.
-  'append' is the write path daemons call; 'status'/'check'/'log'/'query' read.
+  Each record is {ts, daemon, event, detail}; event is trigger|noop|change|error|load|unload.
+  'append' is the write path daemons call; 'status'/'check'/'log'/'query' read;
+  'load'/'unload' control launchd and log their own record; 'registry' reveals the registry.
 SUBCOMMANDS
   append   Append one activity record (creates the log dir on first write). Pass --detail-stdin in place of [detail] to read the detail from stdin
   status   Per-daemon summary: loaded? + last activity (event + timestamp) + all-time event counts; "never fired" when no log
@@ -78,26 +85,34 @@ SUBCOMMANDS
   log      Render the log human-readably (-a/--all merges; -f/--follow follows)
   query    Filter/extract JSONL by -e/--event, -s/--since, -a/--all, -j/--jq
            -s/--since accepts NNN[smh] (e.g. 1h, 30m), a bare date YYYY-MM-DD (midnight UTC), or a full ISO-8601 UTC timestamp
+  load     Bootstrap a daemon into launchd (bootout-then-bootstrap, so it also reloads). Resolves the plist by --plist > registry column > convention, then verifies it exists. A system/ target elevates via sudo when not root. Logs a 'load' record
+  unload   Bootout a daemon from launchd (idempotent; "already unloaded" is not an error). Logs an 'unload' record
+  registry Print the resolved \$DAEMONS_REGISTRY path; --edit opens it in \$VISUAL/\$EDITOR (default vi), --open uses macOS open. --edit and --open are mutually exclusive
 ENVIRONMENT
   DAEMONS_LOG_DIR   Directory of <name>.log files (default: \$XDG_STATE_HOME/daemons or ~/.local/state/daemons)
   DAEMONS_REGISTRY  Registry TSV (default: \$XDG_CONFIG_HOME/daemons/daemons.tsv or ~/.config/daemons/daemons.tsv)
 FILES
-  \$DAEMONS_REGISTRY  Whitespace-separated table that 'status' and 'check' read
-                     (append/log/query don't need it). A header row, then one
-                     row per daemon with four columns:
+  \$DAEMONS_REGISTRY  Whitespace-separated table that 'status', 'check', 'load',
+                     and 'unload' read, and 'registry' prints (append/log/query
+                     don't need it). A header row, then one
+                     row per daemon with four required columns and an optional fifth:
                        name    log name; matches the <name> passed to append
                        domain  launchd domain: gui/\$UID/ (per-user agent; \$UID
                                is replaced with your numeric uid) or system/
                        label   launchd label; state read via launchctl print <domain><label>
                        script  path to the daemon's script; check flags it if missing
+                       plist   (optional) path to the daemon's plist for 'load'; when
+                               absent, load derives it: gui/\$UID/ -> ~/Library/LaunchAgents/<label>.plist,
+                               system/ -> /Library/LaunchDaemons/<label>.plist
                      Example:
-                       name       domain     label                  script
-                       reconcile  gui/\$UID/  com.example.reconcile  /usr/local/bin/reconcile
+                       name       domain     label                  script                    plist
+                       reconcile  gui/\$UID/  com.example.reconcile  /usr/local/bin/reconcile  ~/Library/LaunchAgents/com.example.reconcile.plist
 DEPENDENCIES
   jq, launchctl
+  sudo (required only for load/unload of a system/ daemon when not root)
 EXIT STATUS
   0  Success
-  1  Runtime failure
+  1  Runtime failure (missing plist, launchctl bootstrap/bootout failed, registry file absent, editor or open exited nonzero)
   2  Usage error (unknown/missing subcommand or option)
   3  jq not installed
 EOF
@@ -111,8 +126,8 @@ EOF
             return 2
         fi
         case "$event" in
-            trigger|noop|change|error) ;;
-            *) _error "Invalid event '$event' (valid: trigger|noop|change|error). Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+            trigger|noop|change|error|load|unload) ;;
+            *) _error "Invalid event '$event' (valid: trigger|noop|change|error|load|unload). Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
         esac
         local detail
         if [ "${3:-}" = "--detail-stdin" ]; then
@@ -120,13 +135,9 @@ EOF
         else
             detail="${3:-}"
         fi
-        local ts; ts="$(TZ=Etc/UTC date '+%Y-%m-%dT%H:%M:%SZ')"
         mkdir -p "$LOG_DIR" || { _error "cannot create $LOG_DIR"; return 1; }
-        # --rawfile reads raw detail (any bytes) into a JSON string; --arg for the rest
-        jq -cn --arg ts "$ts" --arg daemon "$name" --arg event "$event" \
-            --rawfile detail <(printf '%s' "$detail") \
-            '{ts:$ts, daemon:$daemon, event:$event, detail:($detail)}' \
-            >> "$LOG_DIR/$name.log" || { _error "failed to write log record"; return 1; }
+        _compose_record "$name" "$event" "$detail" >> "$LOG_DIR/$name.log" \
+            || { _error "failed to write log record"; return 1; }
     }
 
     # Echo the log file path(s) for a name, or all logs for --all. No error if absent
@@ -199,27 +210,30 @@ EOF
         '
     }
 
-    # Echo registry rows as name<TAB>domain<TAB>label<TAB>script. Skips the header
-    # row and blank lines. Errors (return 1) if the registry file is absent
+    # Echo registry rows as name<TAB>domain<TAB>label<TAB>script<TAB>plist (plist
+    # optional, empty for a 4-column row). Skips the header row and blank lines.
+    # Errors (return 1) if the registry file is absent
     _read_registry() {
         if [ ! -f "$REGISTRY" ]; then
             _error "registry not found: $REGISTRY"
             return 1
         fi
-        # Skip header (first line) and blanks; collapse runs of whitespace/tabs to a single tab
+        # Skip header (first line) and blanks; split each row on whitespace runs
         local uid; uid="$(id -u)"
         tail -n +2 "$REGISTRY" | while IFS= read -r row; do
             [ -n "$row" ] || continue
-            # Split on whitespace runs into 4 fields (script path assumed space-free)
+            # Split on whitespace runs into 5 fields; plist (5th) is optional and
+            # empty for a 4-column row. script and plist paths assumed space-free
             local name
             local domain
             local label
             local script
-            read -r name domain label script <<< "$row"
+            local plist
+            read -r name domain label script plist <<< "$row"
             [ -n "$name" ] || continue
             # Substitute $UID token in the domain
             domain="${domain//\$UID/$uid}"
-            printf '%s\t%s\t%s\t%s\n' "$name" "$domain" "$label" "$script"
+            printf '%s\t%s\t%s\t%s\t%s\n' "$name" "$domain" "$label" "$script" "$plist"
         done
     }
 
@@ -228,9 +242,102 @@ EOF
         launchctl print "$1$2" 2>/dev/null
     }
 
+    # Compose one JSONL activity record on stdout (does NOT write it). Timestamps
+    # at call time. detail is read raw so embedded newlines/quotes/tabs survive.
+    # Returns jq's status so a caller can detect a compose failure
+    # $1=name $2=event $3=detail
+    _compose_record() {
+        local ts; ts="$(TZ=Etc/UTC date '+%Y-%m-%dT%H:%M:%SZ')"
+        jq -cn --arg ts "$ts" --arg daemon "$1" --arg event "$2" \
+            --rawfile detail <(printf '%s' "$3") \
+            '{ts:$ts, daemon:$daemon, event:$event, detail:($detail)}'
+    }
+
+    # Echo the matching registry row's fields (name<TAB>domain<TAB>label<TAB>script<TAB>plist)
+    # for a daemon name. Propagates _read_registry's status: registry file absent
+    # is a runtime error (1, matching status/check); a present file with no matching
+    # row is a usage error (2). Shared by load and unload
+    _registry_row_for() {
+        local want="$1"
+        local rows
+        local rc
+        rows="$(_read_registry)"; rc=$?
+        [ "$rc" -eq 0 ] || return "$rc"
+        local match
+        match="$(printf '%s\n' "$rows" | while IFS=$'\t' read -r name domain label script plist; do
+            [ "$name" = "$want" ] && printf '%s\t%s\t%s\t%s\t%s\n' "$name" "$domain" "$label" "$script" "$plist"
+        done)"
+        if [ -z "$match" ]; then
+            _error "no daemon named '$want' in the registry. Run \`$SCRIPT_NAME -h\` for usage"
+            return 2
+        fi
+        printf '%s\n' "$match"
+    }
+
+    # Echo the two launchctl target forms for a daemon, one per line:
+    #   line 1: domain-target  (for bootstrap)  e.g. gui/501  or  system
+    #   line 2: service-target (for bootout)    e.g. gui/501/usr.foo
+    # $1 = domain (trailing slash, $UID already substituted), $2 = label
+    _launchd_targets() {
+        printf '%s\n' "${1%/}"
+        printf '%s\n' "$1$2"
+    }
+
+    # Resolve a daemon's plist path by precedence: --plist flag > TSV column >
+    # derive-by-convention (domain picks the dir, label picks the filename).
+    # Tilde-expands a leading ~/ (registry values are literal text). Prints the
+    # path; does not check existence (caller verifies and owns the error)
+    # $1=domain $2=label $3=tsv_plist(may be empty) $4=flag_plist(may be empty)
+    _resolve_plist() {
+        local domain="$1"
+        local label="$2"
+        local tsv_plist="$3"
+        local flag_plist="$4"
+        local p=""
+        if [ -n "$flag_plist" ]; then
+            p="$flag_plist"
+        elif [ -n "$tsv_plist" ]; then
+            p="$tsv_plist"
+        else
+            case "$domain" in
+                system*) p="/Library/LaunchDaemons/$label.plist" ;;
+                *)       p="$HOME/Library/LaunchAgents/$label.plist" ;;
+            esac
+        fi
+        case "$p" in
+            "~/"*) p="$HOME/${p#\~/}" ;;
+        esac
+        printf '%s\n' "$p"
+    }
+
+    # Best-effort lifecycle-record append. Composes the JSON as the invoking user
+    # (so $LOG_DIR is resolved before any elevation), then appends -- via `sudo
+    # tee` when needs_root=1 (the elevated system/ case, where the log is
+    # root-owned), else a plain append. Never returns nonzero: a logging failure
+    # must not change load/unload's exit status
+    # $1=name $2=event $3=detail $4=needs_root(1|"")
+    _append_lifecycle() {
+        local name="$1"
+        local event="$2"
+        local detail="$3"
+        local needs_root="$4"
+        local record
+        record="$(_compose_record "$name" "$event" "$detail" 2>/dev/null)" || return 0
+        mkdir -p "$LOG_DIR" 2>/dev/null || :
+        if [ "$needs_root" = 1 ]; then
+            printf '%s\n' "$record" | sudo tee -a "$LOG_DIR/$name.log" >/dev/null 2>&1 || :
+        else
+            # Wrap so stderr suppression covers the redirect open itself: a bare
+            # `>> file 2>/dev/null` still lets the shell report an open failure
+            # (e.g. unwritable LOG_DIR) before 2>/dev/null applies
+            { printf '%s\n' "$record" >> "$LOG_DIR/$name.log"; } 2>/dev/null || :
+        fi
+        return 0
+    }
+
     _do_status() {
         local rows; rows="$(_read_registry)" || return 1
-        printf '%s\n' "$rows" | while IFS=$'\t' read -r name domain label script; do
+        printf '%s\n' "$rows" | while IFS=$'\t' read -r name domain label _; do
             [ -n "$name" ] || continue
             local loaded="loaded"
             _launchd_state "$domain" "$label" >/dev/null || loaded="NOT LOADED"
@@ -265,7 +372,7 @@ EOF
         # (piped), so a plain variable increment wouldn't survive. Portable to bash 3.2
         local flag; flag="$(mktemp)"
         printf '0' > "$flag"
-        printf '%s\n' "$rows" | while IFS=$'\t' read -r name domain label script; do
+        printf '%s\n' "$rows" | while IFS=$'\t' read -r name domain label script _; do
             [ -n "$name" ] || continue
             local state
             if ! state="$(_launchd_state "$domain" "$label")"; then
@@ -292,6 +399,160 @@ EOF
         done
         problems="$(cat "$flag")"; rm -f "$flag"
         [ "$problems" = 0 ]
+    }
+
+    _do_load() {
+        local target=""
+        local flag_plist=""
+        local dry=""
+        _expand_short_opts "" "$@"
+        set -- "${_EXPANDED[@]}"; unset _EXPANDED
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                -n|--dry-run) dry=1; shift ;;
+                --plist) [ -n "${2-}" ] || { _error "--plist requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }; flag_plist="$2"; shift 2 ;;
+                --plist=*) flag_plist="${1#*=}"; [ -n "$flag_plist" ] || { _error "--plist requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }; shift ;;
+                -*) _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+                *)
+                    if [ -n "$target" ]; then
+                        _error "Multiple daemon names not allowed (already set to '$target'). Run \`$SCRIPT_NAME -h\` for usage"
+                        return 2
+                    fi
+                    target="$1"; shift ;;
+            esac
+        done
+        [ -n "$target" ] || { _error "Must provide a daemon name. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+
+        local row
+        local rc
+        row="$(_registry_row_for "$target")"; rc=$?
+        [ "$rc" -eq 0 ] || return "$rc"
+        local name
+        local domain
+        local label
+        local script
+        local tsv_plist
+        IFS=$'\t' read -r name domain label script tsv_plist <<< "$row"
+
+        local plist; plist="$(_resolve_plist "$domain" "$label" "$tsv_plist" "$flag_plist")"
+        if [ ! -f "$plist" ]; then
+            _error "no plist at $plist -- pass --plist <path> if it lives elsewhere"
+            return 1
+        fi
+
+        local dtgt
+        local stgt
+        { read -r dtgt; read -r stgt; } <<< "$(_launchd_targets "$domain" "$label")"
+
+        # system/ target needs root: elevate just the launchctl (and the record append)
+        local needs_root=""
+        local sudo_pfx=""
+        case "$domain" in
+            system*) [ "$(id -u)" -ne 0 ] && { needs_root=1; sudo_pfx="sudo "; } ;;
+        esac
+
+        if [ -n "$dry" ]; then
+            printf 'plist:     %s\n' "$plist"
+            printf 'would run: %slaunchctl bootout %s\n' "$sudo_pfx" "$stgt"
+            printf 'would run: %slaunchctl bootstrap %s %s\n' "$sudo_pfx" "$dtgt" "$plist"
+            return 0
+        fi
+
+        # Reload: bootout first (ignore "not loaded"), then bootstrap
+        # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- $sudo_pfx is "sudo " or empty; the split into a separate argv word is intentional
+        ${sudo_pfx}launchctl bootout "$stgt" 2>/dev/null || :
+        # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- $sudo_pfx is "sudo " or empty; the split into a separate argv word is intentional
+        if ! ${sudo_pfx}launchctl bootstrap "$dtgt" "$plist"; then
+            _error "launchctl bootstrap failed for $stgt"
+            return 1
+        fi
+        _append_lifecycle "$name" load "bootstrapped $stgt" "$needs_root"
+    }
+
+    _do_unload() {
+        local target=""
+        local dry=""
+        _expand_short_opts "" "$@"
+        set -- "${_EXPANDED[@]}"; unset _EXPANDED
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                -n|--dry-run) dry=1; shift ;;
+                -*) _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+                *)
+                    if [ -n "$target" ]; then
+                        _error "Multiple daemon names not allowed (already set to '$target'). Run \`$SCRIPT_NAME -h\` for usage"
+                        return 2
+                    fi
+                    target="$1"; shift ;;
+            esac
+        done
+        [ -n "$target" ] || { _error "Must provide a daemon name. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+
+        local row
+        local rc
+        row="$(_registry_row_for "$target")"; rc=$?
+        [ "$rc" -eq 0 ] || return "$rc"
+        local name
+        local domain
+        local label
+        local script
+        local tsv_plist
+        IFS=$'\t' read -r name domain label script tsv_plist <<< "$row"
+
+        # bootout needs only the service-target (2nd line); discard the domain-target
+        local stgt
+        { read -r _; read -r stgt; } <<< "$(_launchd_targets "$domain" "$label")"
+
+        local needs_root=""
+        local sudo_pfx=""
+        case "$domain" in
+            system*) [ "$(id -u)" -ne 0 ] && { needs_root=1; sudo_pfx="sudo "; } ;;
+        esac
+
+        # Idempotent: if not loaded, report and stop (no state change, no record)
+        if ! _launchd_state "$domain" "$label" >/dev/null; then
+            printf '%s already unloaded\n' "$stgt"
+            return 0
+        fi
+
+        if [ -n "$dry" ]; then
+            printf 'would run: %slaunchctl bootout %s\n' "$sudo_pfx" "$stgt"
+            return 0
+        fi
+
+        # shellcheck disable=SC2086 # "Double quote to prevent globbing and word splitting." -- $sudo_pfx is "sudo " or empty; the split into a separate argv word is intentional
+        if ! ${sudo_pfx}launchctl bootout "$stgt"; then
+            _error "launchctl bootout failed for $stgt"
+            return 1
+        fi
+        _append_lifecycle "$name" unload "booted out $stgt" "$needs_root"
+    }
+
+    _do_registry() {
+        local action=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --edit) # long-only: no natural short (-e is --event in query)
+                    [ -z "$action" ] || { _error "Multiple actions not allowed (already set to --$action). Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                    action=edit; shift ;;
+                --open) # long-only: no natural short (-o avoided for a rare action)
+                    [ -z "$action" ] || { _error "Multiple actions not allowed (already set to --$action). Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                    action=open; shift ;;
+                *) _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+            esac
+        done
+        case "$action" in
+            edit)
+                # Editor resolves $VISUAL, then $EDITOR, then vi. The editor string may
+                # carry args (e.g. VISUAL="code --wait"), so it is invoked THROUGH a
+                # shell that word-splits the command while $REGISTRY passes via "$@"
+                # (space-safe) -- the same model git uses for GIT_EDITOR
+                local editor; editor="${VISUAL:-${EDITOR:-vi}}"
+                sh -c "$editor \"\$@\"" "$editor" "$REGISTRY" || { _error "editor '$editor' exited nonzero"; return 1; }
+                ;;
+            open) open "$REGISTRY" || { _error "open '$REGISTRY' failed"; return 1; } ;;
+            *)    printf '%s\n' "$REGISTRY" ;;
+        esac
     }
 
     _do_log() {
@@ -330,6 +591,9 @@ EOF
         -h|--help) _show_help; return 0 ;;
         "") _error "Must provide a subcommand. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
         append)  _do_append "$@"; return $? ;;
+        load)    _do_load "$@"; return $? ;;
+        unload)  _do_unload "$@"; return $? ;;
+        registry) _do_registry "$@"; return $? ;;
         status)  _do_status "$@"; return $? ;;
         check)   _do_check "$@"; return $? ;;
         log)     _do_log "$@"; return $? ;;
