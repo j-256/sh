@@ -51,7 +51,6 @@ _is_bash_script() {
 # `<src> | bash -- -h` in all three shapes below. The historical exclusions are
 # now filtered structurally rather than hand-listed:
 #   - render-md      node shebang, not bash -- _is_bash_script rejects it
-#   - snippets.sh    .sh extension -- _is_bash_script rejects it
 #   - test-runner.sh lives in tests/, never reached by the repo-root walk
 # Add a name here only if a real bash script genuinely cannot be -h-piped
 EXCLUDE=" "

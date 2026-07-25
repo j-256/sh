@@ -22,11 +22,6 @@
 # dual-use (a --list mode that keeps stdout clean; program-output helpers), so a
 # static routing assertion over-fires. Routing is a review obligation, per CONVENTIONS.
 #
-# snippets.sh is intentionally NOT checked: the shared `_is_bash_script` filter drops
-# its `.sh` name. It is a reference "graveyard" slated for a future holistic rework,
-# not an executed script -- policing it now would be churn. This exemption is
-# deliberate, not an oversight.
-#
 # shellcheck source-path=SCRIPTDIR disable=SC2329
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
