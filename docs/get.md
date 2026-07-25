@@ -1,6 +1,6 @@
 # get
 
-[View script](../get)
+[View script](../scripts/get)
 
 Pipeable installer for scripts from this repo. Instead of cloning or `curl`-ing scripts one at a time, pipe `get` into bash with the names you want and they land on your `$PATH`.
 

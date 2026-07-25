@@ -1,6 +1,6 @@
 # screenshot-rename
 
-[View script](../screenshot-rename)
+[View script](../scripts/screenshot-rename)
 
 Automatically rename macOS screenshots from the verbose default format to a clean timestamp-only name. Instead of `Screenshot 2026-04-21 at 14.23.15.png`, you get `2026-04-21 14.23.15.png`.
 

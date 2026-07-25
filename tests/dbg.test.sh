@@ -11,7 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=test-helpers.sh
 source "$SCRIPT_DIR/test-helpers.sh"
 
-UNDER_TEST="$SCRIPT_DIR/../dbg"
+UNDER_TEST="$SCRIPT_DIR/../scripts/dbg"
 
 # Run dbg via a sourced wrapper that first sets up caller-shell state,
 # then sources dbg. $1 is a bash snippet defining caller-shell state;

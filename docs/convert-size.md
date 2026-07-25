@@ -1,6 +1,6 @@
 # convert-size
 
-[View script](../convert-size)
+[View script](../scripts/convert-size)
 
 Convert file sizes between SI (1000-based) and binary (1024-based) unit systems.
 

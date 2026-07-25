@@ -1,6 +1,6 @@
 # find-cc-tool-output
 
-[View script](../find-cc-tool-output)
+[View script](../scripts/find-cc-tool-output)
 
 Recover the full, untruncated output of any tool call from a Claude Code session by searching the on-disk transcripts. Useful when the CLI's `+N lines (ctrl+o to expand)` indicator can't actually expand -- the underlying transcript JSONL stores the complete payload, and this script pulls it back out.
 

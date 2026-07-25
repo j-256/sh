@@ -1,6 +1,6 @@
 # inflate
 
-[View script](../inflate)
+[View script](../scripts/inflate)
 
 Adjust historical USD amounts for inflation -- paste in a dollar amount and year, get back what that money is worth today.
 

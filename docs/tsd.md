@@ -1,6 +1,6 @@
 # tsd
 
-[View script](../tsd)
+[View script](../scripts/tsd)
 
 Convert a number to something you can actually read -- paste in a Unix timestamp and get a datetime, or paste in a duration and get hours/minutes/seconds.
 

@@ -1,6 +1,6 @@
 # unbak
 
-[View script](../unbak)
+[View script](../scripts/unbak)
 
 Restore backed-up files by renaming `file.ext.bak` to `file.ext`. This is the inverse of `bak` — when you've backed something up and want to undo that change, `unbak` puts the backed-up version back in place.
 

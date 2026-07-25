@@ -1,6 +1,6 @@
 # cf-ddns
 
-[View script](../cf-ddns)
+[View script](../scripts/cf-ddns)
 
 Update a Cloudflare DNS A record to match this machine's current outbound IP address -- a lightweight dynamic DNS solution for home servers, dev machines, or any host behind a changing IP.
 

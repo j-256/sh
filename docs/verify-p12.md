@@ -1,6 +1,6 @@
 # verify-p12
 
-[View script](../verify-p12)
+[View script](../scripts/verify-p12)
 
 Quick smoke-test for Salesforce B2C Commerce WebDAV `/Cartridges` access. Sends a GET request to list cartridges and prints the HTTP status line plus directory links — if you see `200 OK` and a list of URLs, your auth works and your WebDAV endpoint is reachable.
 

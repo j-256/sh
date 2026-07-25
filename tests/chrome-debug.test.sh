@@ -11,7 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=test-helpers.sh
 source "$SCRIPT_DIR/test-helpers.sh"
 
-UNDER_TEST="$SCRIPT_DIR/../chrome-debug"
+UNDER_TEST="$SCRIPT_DIR/../scripts/chrome-debug"
 
 # --- shims ---
 # nc shim: ports listed in $TEST_DIR/busy_ports (one per line) report busy (rc 0),

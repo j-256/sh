@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=test-helpers.sh
 source "$SCRIPT_DIR/test-helpers.sh"
 
-UNDER_TEST="$SCRIPT_DIR/../daemons"
+UNDER_TEST="$SCRIPT_DIR/../scripts/daemons"
 
 # All tests point config at the temp dir so nothing real is touched.
 # VISUAL is cleared so the dev's own $VISUAL (e.g. "code --wait") can't leak into

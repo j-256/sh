@@ -1,6 +1,6 @@
 # generate-p12
 
-[View script](../generate-p12)
+[View script](../scripts/generate-p12)
 
 Generate a PKCS#12 (.p12) client certificate for Salesforce B2C Commerce staging sandbox code uploads that require mutual TLS authentication.
 

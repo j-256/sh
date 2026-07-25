@@ -1,6 +1,6 @@
 # scdef
 
-[View script](../scdef)
+[View script](../scripts/scdef)
 
 Look up a ShellCheck warning or error definition without leaving the terminal. Pass any code shape (`SC2155`, `sc2155`, `2155`, `#SC2155`, `[SC2155]`) and `scdef` fetches the relevant wiki page and prints a brief summary -- title, problematic example, correct example, URL. Use `--full` when you want the rationale and exceptions; use `--raw` to pipe the markdown source into a renderer of your choice.
 

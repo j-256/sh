@@ -1,6 +1,6 @@
 # spf
 
-[View script](../spf)
+[View script](../scripts/spf)
 
 Recursively resolve and inspect SPF DNS records. `spf` walks the full `include:` tree for a domain and answers the common inspection questions: what record is published (`show`), is this IP authorized (`find`), what are all the authorized addresses (`flatten`), is the record healthy (`check`), what does the full delegation tree look like (`tree`), is a specific mechanism token present anywhere in the tree (`has`), and what does the raw resolver output look like for piping into other tools (`ir`).
 

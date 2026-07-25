@@ -1,6 +1,6 @@
 # notify
 
-[View script](../notify)
+[View script](../scripts/notify)
 
 Turn command completions into macOS Notification Center alerts, synthesized
 speech, or both. `notify` accepts a message as arguments or standard input, so

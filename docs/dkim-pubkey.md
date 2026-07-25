@@ -1,6 +1,6 @@
 # dkim-pubkey
 
-[View script](../dkim-pubkey)
+[View script](../scripts/dkim-pubkey)
 
 Extract the base64-encoded public key from a DKIM DNS record.
 

@@ -1,6 +1,6 @@
 # progress
 
-[View script](../progress)
+[View script](../scripts/progress)
 
 Render a single-line progress bar with percentage completion.
 

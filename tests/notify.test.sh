@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=test-helpers.sh
 source "$SCRIPT_DIR/test-helpers.sh"
 
-UNDER_TEST="$SCRIPT_DIR/../notify"
+UNDER_TEST="$SCRIPT_DIR/../scripts/notify"
 DOC_UNDER_TEST="$SCRIPT_DIR/../docs/notify.md"
 
 # --- helpers ---

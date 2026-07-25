@@ -63,22 +63,25 @@ test_every_test_has_a_script() {
 
 test_every_script_is_in_index() {
     # Walk every bash script; each must be catalogued in INDEX.md. Detection
-    # keys on the raw-script link `[script](<name>)` -- the literal `](<name>)`.
-    # The trailing `)` anchors the match so `](s)` can't match `](stats)`, and
-    # the leading `](` keeps it from matching the doc link `](docs/<name>.md...)`
+    # keys on the raw-script link, whose target is repo-relative (`](scripts/tsd)`)
+    # so the link resolves when INDEX.md is browsed on GitHub -- the proxy flattens
+    # it to the public `/tsd` when rendering. The trailing `)` anchors the match so
+    # `](scripts/s)` can't match `](scripts/stats)`, and the leading `](` with the
+    # fleet prefix keeps it from matching the doc link `](docs/<name>.md...)`
     local index="$REPO_DIR/INDEX.md"
     if [ ! -f "$index" ]; then
         _fail "INDEX.md: not found at $index"
         return
     fi
+    local prefix; prefix="$(_fleet_link_prefix "$REPO_DIR")"
     local script
     for script in "$FLEET_DIR"/*; do
         _is_bash_script "$script" || continue
         local name; name="$(basename "$script")"
-        if grep -qF "]($name)" "$index"; then
+        if grep -qF "]($prefix$name)" "$index"; then
             _ok "$name: in INDEX.md"
         else
-            _fail "$name: missing from INDEX.md -- add a catalog row linking [script]($name)"
+            _fail "$name: missing from INDEX.md -- add a catalog row linking [script]($prefix$name)"
         fi
     done
 }
@@ -94,10 +97,11 @@ test_every_index_entry_has_a_script() {
         _fail "INDEX.md: not found at $index"
         return
     fi
+    # The link target is repo-relative, so it resolves straight from the repo root
     local name
     while IFS= read -r name; do
         [ -n "$name" ] || continue
-        if [ -f "$FLEET_DIR/$name" ]; then
+        if [ -f "$REPO_DIR/$name" ]; then
             _ok "INDEX.md entry '$name': script exists"
         else
             _fail "INDEX.md entry '$name': no script $name -- remove the stale catalog row or restore the script"

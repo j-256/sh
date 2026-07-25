@@ -11,12 +11,12 @@ A mixed collection of small shell utilities I've written over the years to make 
 
 A few that might be worth a look before you scroll the catalog. These are mostly the ones where the script does something non-obvious or solves a recurring annoyance.
 
-- [`prompt`](docs/prompt.md?html) ([script](prompt)) – sourced interactive prompt with default value and placeholder
-- [`tsd`](docs/tsd.md?html) ([script](tsd)) – paste any number, get back a timestamp or a duration
-- [`inflate`](docs/inflate.md?html) ([script](inflate)) – historical USD amounts adjusted for inflation
-- [`pin-dns`](docs/pin-dns.md?html) ([script](pin-dns)) – curl wrapper that overrides DNS without touching `/etc/hosts`, and impersonates a real Chrome: full headers by default, plus TLS/JA3 fingerprint when `curl-impersonate` is installed
-- [`curl-timing`](docs/curl-timing.md?html) ([script](curl-timing)) – time HTTP requests and compare URLs head-to-head
-- [`explode`](docs/explode.md?html) ([script](explode)) – move a directory's contents up one level after a nested-folder unzip
+- [`prompt`](docs/prompt.md) ([script](scripts/prompt)) – sourced interactive prompt with default value and placeholder
+- [`tsd`](docs/tsd.md) ([script](scripts/tsd)) – paste any number, get back a timestamp or a duration
+- [`inflate`](docs/inflate.md) ([script](scripts/inflate)) – historical USD amounts adjusted for inflation
+- [`pin-dns`](docs/pin-dns.md) ([script](scripts/pin-dns)) – curl wrapper that overrides DNS without touching `/etc/hosts`, and impersonates a real Chrome: full headers by default, plus TLS/JA3 fingerprint when `curl-impersonate` is installed
+- [`curl-timing`](docs/curl-timing.md) ([script](scripts/curl-timing)) – time HTTP requests and compare URLs head-to-head
+- [`explode`](docs/explode.md) ([script](scripts/explode)) – move a directory's contents up one level after a nested-folder unzip
 
 ## Usage
 
@@ -25,14 +25,14 @@ Every script is a one-liner away – no install step. Pipe it straight into bash
     curl -fsS https://toolio.sh/tsd | bash -s -- 1800
     curl -fsS https://toolio.sh/inflate | bash -s -- 150 1970
 
-The exceptions are [`prompt`](docs/prompt.md?html) and [`dbg`](docs/dbg.md?html), which must be sourced so they can read from (and, for `prompt`, write to) your shell. For a one-shot run without installing:
+The exceptions are [`prompt`](docs/prompt.md) and [`dbg`](docs/dbg.md), which must be sourced so they can read from (and, for `prompt`, write to) your shell. For a one-shot run without installing:
 
     . <(curl -fsS https://toolio.sh/prompt) name "Name: "
     . <(curl -fsS https://toolio.sh/dbg) name
 
 ## Installation
 
-To put scripts on your `$PATH` for repeated use, pipe [`get`](docs/get.md?html) to bash with the names you want:
+To put scripts on your `$PATH` for repeated use, pipe [`get`](docs/get.md) to bash with the names you want:
 
     curl -fsS https://toolio.sh/get | bash -s -- tsd pin-dns inflate
 

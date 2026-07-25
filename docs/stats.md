@@ -1,6 +1,6 @@
 # stats
 
-[View script](../stats)
+[View script](../scripts/stats)
 
 Calculate count, total, average, range, and outliers from a list of integers. Feed it numbers from a pipe and get a statistical summary -- useful for quick analysis of response times, file sizes, or any numeric column from a log.
 

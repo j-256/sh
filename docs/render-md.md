@@ -1,6 +1,6 @@
 # render-md
 
-[View script](../render-md)
+[View script](../scripts/render-md)
 
 Render markdown to HTML and open it in your browser. The output uses GitHub-like styling with automatic dark/light mode.
 

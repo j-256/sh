@@ -1,6 +1,6 @@
 # dw-jwt
 
-[View script](../dw-jwt)
+[View script](../scripts/dw-jwt)
 
 Generate an RS256-signed JWT for authenticating to Salesforce B2C Commerce (Demandware) APIs via OAuth2 client credentials.
 

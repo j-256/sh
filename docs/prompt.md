@@ -1,6 +1,6 @@
 # prompt
 
-[View script](../prompt)
+[View script](../scripts/prompt)
 
 Interactive prompt with default value and placeholder -- for shell scripts that need to ask the user a question and get back a clean answer in a variable.
 

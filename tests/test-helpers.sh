@@ -197,6 +197,18 @@ _fleet_dir() {
     fi
 }
 
+# The fleet dir as a repo-root-relative link prefix ("scripts/", or "" when the
+# scripts sit at the root), for checking the catalog's repo-relative script links.
+# Trailing slash included so callers can concatenate a bare name onto it
+_fleet_link_prefix() {
+    local repo_dir="$1"
+    local fleet; fleet="$(_fleet_dir "$repo_dir")"
+    case "$fleet" in
+        "$repo_dir") printf '' ;;
+        *) printf '%s/' "$(basename "$fleet")" ;;
+    esac
+}
+
 # Test bash scripts only: shebang must be /bin/bash or /usr/bin/env bash. Skips
 # render-md (node), any .md/.sh/.json files alongside the scripts, and any
 # subdirectories. Shared by every meta-test that walks the fleet, so the filter

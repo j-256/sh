@@ -1,6 +1,6 @@
 # gen-catalog
 
-[View script](../gen-catalog)
+[View script](../scripts/gen-catalog)
 
 Generate SFCC catalog XML files for testing and development. Creates well-formed Demandware impex XML with base products, variants, and variant relationships -- useful for seeding sandbox environments, QA testing, or development data loads without hand-crafting XML.
 

@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=test-helpers.sh
 source "$SCRIPT_DIR/test-helpers.sh"
 
-UNDER_TEST="$SCRIPT_DIR/../spf"
+UNDER_TEST="$SCRIPT_DIR/../scripts/spf"
 
 # Run the script with NO python3 reachable, while still providing the coreutils
 # the resolver needs. macOS ships /usr/bin/python3, so simply removing the shim

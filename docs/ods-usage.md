@@ -1,6 +1,6 @@
 # ods-usage
 
-[View script](../ods-usage)
+[View script](../scripts/ods-usage)
 
 Calculate On-Demand Sandbox (ODS) credits used from a Salesforce B2C Commerce ODS API response.
 

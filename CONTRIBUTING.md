@@ -22,7 +22,9 @@ Every script is paired with a doc and a test, and follows a shared set of standa
 - **Docs** – [`DOCS.md`](DOCS.md): how to write a `<script>.md` doc.
 - **Tests** – [`TESTING.md`](TESTING.md): how to write a `<script>.test.sh`, plus the cross-cutting [meta-tests](TESTING.md#meta-tests) and the [pre-commit hook](TESTING.md#pre-commit-hook).
 
-A new script needs all four to land together: the script, its `docs/<name>.md`, its `tests/<name>.test.sh`, and an entry in [`INDEX.md`](INDEX.md). The `meta-coverage` test enforces that this set stays complete.
+A new script needs all four to land together: the script at `scripts/<name>`, its `docs/<name>.md`, its `tests/<name>.test.sh`, and an entry in [`INDEX.md`](INDEX.md). The `meta-coverage` test enforces that this set stays complete.
+
+Links in tracked markdown point at real repo paths (`scripts/tsd`, `docs/tsd.md`) so they resolve when browsed on GitHub. The site rewrites them to the canonical public URLs when rendering – `https://toolio.sh/tsd` for a script, `https://toolio.sh/tsd.md.html` for a doc – so don't hand-write those public forms into a relative link.
 
 ## Before committing
 

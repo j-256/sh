@@ -1,6 +1,6 @@
 # git-add-nonsub
 
-[View script](../git-add-nonsub)
+[View script](../scripts/git-add-nonsub)
 
 Stage a git repository inside another git repository without treating it as a submodule.
 

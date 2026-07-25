@@ -1,6 +1,6 @@
 # slow-server
 
-[View script](../slow-server)
+[View script](../scripts/slow-server)
 
 Test how your code handles slow responses -- without waiting for an actual slow server to come back online, or fighting with production timeouts. `slow-server` starts a local HTTP server that responds after whatever delay you ask for, letting you verify timeout logic, retry behavior, loading states, and health check thresholds.
 

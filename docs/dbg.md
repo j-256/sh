@@ -1,6 +1,6 @@
 # dbg
 
-[View script](../dbg)
+[View script](../scripts/dbg)
 
 Print variables as key-value pairs for debugging -- for shell scripts (or interactive shells) where you want to see what's in a variable without writing the whole `echo "var=$var"` dance.
 

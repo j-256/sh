@@ -1,6 +1,6 @@
 # pkce
 
-[View script](../pkce)
+[View script](../scripts/pkce)
 
 Generate a PKCE (Proof Key for Code Exchange) code verifier and its corresponding SHA256 challenge for OAuth2 authorization flows.
 

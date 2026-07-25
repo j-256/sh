@@ -1,6 +1,6 @@
 # genpw
 
-[View script](../genpw)
+[View script](../scripts/genpw)
 
 Generate random passwords or strings with configurable length, charset, and character exclusions.
 

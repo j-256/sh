@@ -1,6 +1,6 @@
 # daemons
 
-[View script](../daemons)
+[View script](../scripts/daemons)
 
 Observe your homegrown launchd daemons. A LaunchAgent or LaunchDaemon runs in the background and tells you almost nothing: `launchctl` knows whether it is loaded and what its last exit code was, but not what it actually did over time - did the trigger fire? did it do work, or no-op? has it been quietly erroring for a week?
 

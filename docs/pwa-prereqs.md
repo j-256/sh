@@ -1,6 +1,6 @@
 # pwa-prereqs
 
-[View script](../pwa-prereqs)
+[View script](../scripts/pwa-prereqs)
 
 Check or install the prerequisites for Salesforce PWA Kit development on macOS. PWA Kit is the React-based storefront framework for Salesforce Commerce Cloud (SFCC). It needs Node.js + npm, which come from nvm, whose installer in turn needs the Xcode Command Line Tools on a Mac.
 

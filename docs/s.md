@@ -1,6 +1,6 @@
 # s
 
-[View script](../s)
+[View script](../scripts/s)
 
 sfcc-ci wrapper with convenient shortcuts, enhanced output formatting, and human-readable token expiration for Salesforce B2C Commerce Cloud development.
 

@@ -1,6 +1,6 @@
 # snippet
 
-[View script](../snippet)
+[View script](../scripts/snippet)
 
 Extract lines between start and end patterns from files or stdin. Like `sed -n '/START/,/END/p'` but easier to remember and with built-in trimming to exclude marker lines.
 

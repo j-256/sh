@@ -1,6 +1,6 @@
 # baseconv
 
-[View script](../baseconv)
+[View script](../scripts/baseconv)
 
 Convert a number between numeral bases -- binary, octal, decimal, hexadecimal -- with positional `from to number` arguments.
 

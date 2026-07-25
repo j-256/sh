@@ -1,6 +1,6 @@
 # dot-project
 
-[View script](../dot-project)
+[View script](../scripts/dot-project)
 
 Generate `.project` files for Salesforce B2C Commerce cartridge directories so tooling like UX Studio and Prophet Debugger can detect and open them as projects.
 

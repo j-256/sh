@@ -1,6 +1,6 @@
 # chrome-ua
 
-[View script](../chrome-ua)
+[View script](../scripts/chrome-ua)
 
 Print a realistic Chrome User-Agent string for scripted HTTP requests. Two modes:
 

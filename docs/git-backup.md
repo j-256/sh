@@ -1,6 +1,6 @@
 # git-backup
 
-[View script](../git-backup)
+[View script](../scripts/git-backup)
 
 Save work in progress to a remote tag without polluting your current branch. This creates a timestamped backup tag on the remote, pushes everything (tracked and untracked), then cleans up locally and restores your working state.
 

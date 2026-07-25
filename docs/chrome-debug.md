@@ -1,6 +1,6 @@
 # chrome-debug
 
-[View script](../chrome-debug)
+[View script](../scripts/chrome-debug)
 
 Launch any Chromium-family browser (Chrome, Edge, Brave, Chrome for Testing) in remote-debugging mode so an MCP server – like [`chrome-devtools-mcp`](https://github.com/ChromeDevTools/chrome-devtools-mcp) – or any other CDP client can attach to it. The browser runs in its own terminal tab with a lifecycle independent of the MCP server, so it survives server restarts and is there before and after your automation work.
 

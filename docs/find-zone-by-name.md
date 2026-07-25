@@ -1,6 +1,6 @@
 # find-zone-by-name
 
-[View script](../find-zone-by-name)
+[View script](../scripts/find-zone-by-name)
 
 Search for a Salesforce Commerce Cloud CDN zone by name substring. Pages through the SCAPI zones/info endpoint until it finds a zone whose name contains your search term, then returns the full zone JSON object.
 

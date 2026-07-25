@@ -1,6 +1,6 @@
 # cf-ips-subnets
 
-[View script](../cf-ips-subnets)
+[View script](../scripts/cf-ips-subnets)
 
 Expand Cloudflare IPv4 ranges into /16 and /24 subnets. Fetches Cloudflare's published CIDR ranges and breaks them down into the largest compatible subnet size (either /16 or /24) that fits within the original range -- perfect for when your firewall or load balancer only accepts these standard prefix sizes.
 

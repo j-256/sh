@@ -1,6 +1,6 @@
 # pin-dns
 
-[View script](../pin-dns)
+[View script](../scripts/pin-dns)
 
 curl wrapper that overrides DNS resolution for a hostname -- bypass CDNs, hit origin servers, or pin requests to a specific IP, without touching /etc/hosts or system DNS.
 

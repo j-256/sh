@@ -1,6 +1,6 @@
 # install-bash
 
-[View script](../install-bash)
+[View script](../scripts/install-bash)
 
 Install the latest Bash from Homebrew and set it as your login shell.
 
