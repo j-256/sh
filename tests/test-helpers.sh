@@ -177,6 +177,41 @@ assert_captured() {
     assert_eq "$label" "$got" "$want"
 }
 
+# --- fleet walk (shared by every meta-test that iterates the script fleet) ---
+
+# Absolute path to the directory holding the fleet's scripts, for the meta-tests to
+# walk. Probed rather than hardcoded because two trees share this file by symlink:
+# this repo keeps its scripts in scripts/, while the private tree that borrows these
+# helpers keeps them at its root. Probing means neither tree's layout is imposed on
+# the other, and a tree can move its scripts without touching the meta-tests
+#
+# $_FLEET_DIR_OVERRIDE lets a test point the walk at a fixture tree instead
+_fleet_dir() {
+    local repo_dir="$1"
+    if [ -n "$_FLEET_DIR_OVERRIDE" ]; then
+        printf %s "$_FLEET_DIR_OVERRIDE"
+    elif [ -d "$repo_dir/scripts" ]; then
+        printf %s "$repo_dir/scripts"
+    else
+        printf %s "$repo_dir"
+    fi
+}
+
+# Test bash scripts only: shebang must be /bin/bash or /usr/bin/env bash. Skips
+# render-md (node), any .md/.sh/.json files alongside the scripts, and any
+# subdirectories. Shared by every meta-test that walks the fleet, so the filter
+# can't drift between them
+_is_bash_script() {
+    local file="$1"
+    [ -f "$file" ] || return 1
+    case "$(basename "$file")" in *.md|*.sh|*.json) return 1 ;; esac
+    local first_line; first_line="$(head -1 "$file")"
+    case "$first_line" in
+        '#!/bin/bash'|'#!/usr/bin/env bash') return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 # --- option-arm parsing (shared by the surface-parity and canonical-letter meta-tests) ---
 
 # Scripts excluded WHOLESALE from the option-surface meta-tests, space-separated --

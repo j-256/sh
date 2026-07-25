@@ -30,20 +30,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/test-helpers.sh"
 
 REPO_DIR="$SCRIPT_DIR/.."
-
-# Test bash scripts only: shebang must be /bin/bash or /usr/bin/env bash.
-# Skips render-md (node), the .md/.sh/.json files at the repo root, and any
-# subdirectories. Identical to the filter in meta-cleanup-on-source.test.sh
-_is_bash_script() {
-    local file="$1"
-    [ -f "$file" ] || return 1
-    case "$(basename "$file")" in *.md|*.sh|*.json) return 1 ;; esac
-    local first_line; first_line="$(head -1 "$file")"
-    case "$first_line" in
-        '#!/bin/bash'|'#!/usr/bin/env bash') return 0 ;;
-        *) return 1 ;;
-    esac
-}
+FLEET_DIR="$(_fleet_dir "$REPO_DIR")"
 
 # --- test cases ---
 
@@ -51,7 +38,7 @@ test_every_script_has_a_test() {
     # Walk every bash script in the repo; each must have tests/<name>.test.sh.
     # One assertion per script keeps a missing test's failure message specific
     local script
-    for script in "$REPO_DIR"/*; do
+    for script in "$FLEET_DIR"/*; do
         _is_bash_script "$script" || continue
         local name; name="$(basename "$script")"
         assert_file_exists "$name: has a test" "$SCRIPT_DIR/$name.test.sh"
@@ -66,10 +53,10 @@ test_every_test_has_a_script() {
         [ -f "$test_file" ] || continue
         local name; name="$(basename "$test_file" .test.sh)"
         case "$name" in meta-*) continue ;; esac
-        if _is_bash_script "$REPO_DIR/$name"; then
+        if _is_bash_script "$FLEET_DIR/$name"; then
             _ok "$name.test.sh: has a script"
         else
-            _fail "$name.test.sh: no matching bash script (../$name) -- rename to meta-$name.test.sh if cross-cutting"
+            _fail "$name.test.sh: no matching bash script ($name) -- rename to meta-$name.test.sh if cross-cutting"
         fi
     done
 }
@@ -85,7 +72,7 @@ test_every_script_is_in_index() {
         return
     fi
     local script
-    for script in "$REPO_DIR"/*; do
+    for script in "$FLEET_DIR"/*; do
         _is_bash_script "$script" || continue
         local name; name="$(basename "$script")"
         if grep -qF "]($name)" "$index"; then
@@ -110,10 +97,10 @@ test_every_index_entry_has_a_script() {
     local name
     while IFS= read -r name; do
         [ -n "$name" ] || continue
-        if [ -f "$REPO_DIR/$name" ]; then
+        if [ -f "$FLEET_DIR/$name" ]; then
             _ok "INDEX.md entry '$name': script exists"
         else
-            _fail "INDEX.md entry '$name': no script ../$name -- remove the stale catalog row or restore the script"
+            _fail "INDEX.md entry '$name': no script $name -- remove the stale catalog row or restore the script"
         fi
     done < <(grep -oE '\[script\]\([^)]+\)' "$index" | sed 's/^\[script\](//; s/)$//')
 }

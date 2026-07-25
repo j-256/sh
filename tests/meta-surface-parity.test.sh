@@ -26,19 +26,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/test-helpers.sh"
 
 REPO_DIR="$SCRIPT_DIR/.."
-
-# Test bash scripts only: shebang must be /bin/bash or /usr/bin/env bash.
-# Identical to the filter in the other meta-tests
-_is_bash_script() {
-    local file="$1"
-    [ -f "$file" ] || return 1
-    case "$(basename "$file")" in *.md|*.sh|*.json) return 1 ;; esac
-    local first_line; first_line="$(head -1 "$file")"
-    case "$first_line" in
-        '#!/bin/bash'|'#!/usr/bin/env bash') return 0 ;;
-        *) return 1 ;;
-    esac
-}
+FLEET_DIR="$(_fleet_dir "$REPO_DIR")"
 
 # Excluded scripts: just the shared base ($_META_OPT_EXCLUDE, currently empty).
 # Extractor false positives are handled inline with `# meta:not-options` markers, not by
@@ -71,7 +59,7 @@ _SURFACE_HINT='[if the extra tokens are another tool'\''s flags matched by a rec
 
 test_every_option_is_documented_in_help() {
     local script
-    for script in "$REPO_DIR"/*; do
+    for script in "$FLEET_DIR"/*; do
         _is_bash_script "$script" || continue
         local s; s="$(basename "$script")"
         _is_excluded "$s" && continue
@@ -85,7 +73,7 @@ test_every_option_is_documented_in_help() {
 
 test_every_short_has_a_long() {
     local script
-    for script in "$REPO_DIR"/*; do
+    for script in "$FLEET_DIR"/*; do
         _is_bash_script "$script" || continue
         local s; s="$(basename "$script")"
         _is_excluded "$s" && continue

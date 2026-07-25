@@ -23,20 +23,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/test-helpers.sh"
 
 REPO_DIR="$SCRIPT_DIR/.."
-
-# Test bash scripts only: shebang must be /bin/bash or /usr/bin/env bash
-# Skips render-md (node), the .md/.sh/.json/.bak files at the repo root,
-# and any subdirectories
-_is_bash_script() {
-    local file="$1"
-    [ -f "$file" ] || return 1
-    case "$(basename "$file")" in *.md|*.sh|*.json) return 1 ;; esac
-    local first_line; first_line="$(head -1 "$file")"
-    case "$first_line" in
-        '#!/bin/bash'|'#!/usr/bin/env bash') return 0 ;;
-        *) return 1 ;;
-    esac
-}
+FLEET_DIR="$(_fleet_dir "$REPO_DIR")"
 
 # Pre-flight: confirm the script handles --help via a case-branch. The closing
 # `)` distinguishes a real handler from a help-text echo line. Both `-h|--help)`
@@ -70,7 +57,7 @@ test_no_leaks_on_source() {
     # with --help, and assert nothing leaks. One assertion per script keeps
     # failure messages specific
     local script
-    for script in "$REPO_DIR"/*; do
+    for script in "$FLEET_DIR"/*; do
         _is_bash_script "$script" || continue
 
         local name; name="$(basename "$script")"

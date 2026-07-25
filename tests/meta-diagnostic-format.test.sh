@@ -29,20 +29,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/test-helpers.sh"
 
 REPO_DIR="$SCRIPT_DIR/.."
-
-# Test bash scripts only: shebang must be /bin/bash or /usr/bin/env bash.
-# Skips the .md/.sh/.json files at the repo root, and any subdirectories.
-# Identical to the filter in the other meta-tests
-_is_bash_script() {
-    local file="$1"
-    [ -f "$file" ] || return 1
-    case "$(basename "$file")" in *.md|*.sh|*.json) return 1 ;; esac
-    local first_line; first_line="$(head -1 "$file")"
-    case "$first_line" in
-        '#!/bin/bash'|'#!/usr/bin/env bash') return 0 ;;
-        *) return 1 ;;
-    esac
-}
+FLEET_DIR="$(_fleet_dir "$REPO_DIR")"
 
 # Bash scripts to skip these checks, as a space-padded membership string
 # (e.g. " foo bar "). Empty today: every checked helper conforms
@@ -101,7 +88,7 @@ _prefix_violations() {
 # canonical prefix. Scripts with no helper are simply skipped (empty violations)
 test_all_helpers_use_canonical_prefix() {
     local script
-    for script in "$REPO_DIR"/*; do
+    for script in "$FLEET_DIR"/*; do
         _is_bash_script "$script" || continue
         local s; s="$(basename "$script")"
         _is_excluded "$s" && continue

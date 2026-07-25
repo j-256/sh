@@ -28,18 +28,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/test-helpers.sh"
 
 REPO_DIR="$SCRIPT_DIR/.."
-
-# Identical bash-script filter to the other meta-tests
-_is_bash_script() {
-    local file="$1"
-    [ -f "$file" ] || return 1
-    case "$(basename "$file")" in *.md|*.sh|*.json) return 1 ;; esac
-    local first_line; first_line="$(head -1 "$file")"
-    case "$first_line" in
-        '#!/bin/bash'|'#!/usr/bin/env bash') return 0 ;;
-        *) return 1 ;;
-    esac
-}
+FLEET_DIR="$(_fleet_dir "$REPO_DIR")"
 
 # Excluded scripts: just the shared base ($_META_OPT_EXCLUDE, currently empty).
 # Authored long-only exceptions are handled per-option with `# meta:canonical-exempt`
@@ -92,7 +81,7 @@ _canonical_violations() {
 
 test_all_scripts_canonical_binding() {
     local script
-    for script in "$REPO_DIR"/*; do
+    for script in "$FLEET_DIR"/*; do
         _is_bash_script "$script" || continue
         local s; s="$(basename "$script")"
         _is_excluded "$s" && continue

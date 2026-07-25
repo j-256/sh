@@ -31,20 +31,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/test-helpers.sh"
 
 REPO_DIR="$SCRIPT_DIR/.."
-
-# Test bash scripts only: shebang must be /bin/bash or /usr/bin/env bash.
-# Skips render-md (node), the .md/.sh/.json files at the repo root, and any
-# subdirectories. Identical to the filter in meta-coverage.test.sh
-_is_bash_script() {
-    local file="$1"
-    [ -f "$file" ] || return 1
-    case "$(basename "$file")" in *.md|*.sh|*.json) return 1 ;; esac
-    local first_line; first_line="$(head -1 "$file")"
-    case "$first_line" in
-        '#!/bin/bash'|'#!/usr/bin/env bash') return 0 ;;
-        *) return 1 ;;
-    esac
-}
+FLEET_DIR="$(_fleet_dir "$REPO_DIR")"
 
 # Bash scripts to skip these checks, as a space-padded membership string
 # (e.g. " foo bar "). Empty today: every bash script in the repo survives
@@ -60,7 +47,7 @@ _is_excluded() { case "$EXCLUDE" in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 # into $TEST_DIR. Simulates `curl -s URL | bash -s -- -h`
 pipe_script() {
     local script="$1"
-    cat "$SCRIPT_DIR/../$script" | /bin/bash -s -- -h \
+    cat "$FLEET_DIR/$script" | /bin/bash -s -- -h \
         >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
 }
@@ -69,7 +56,7 @@ pipe_script() {
 # `bash <(curl -s URL) -h` -- BASH_SOURCE[0] is /dev/fd/N, not the filename
 procsub_exec_script() {
     local script="$1"
-    /bin/bash -c 'bash <(cat "$1") -h' bash "$SCRIPT_DIR/../$script" \
+    /bin/bash -c 'bash <(cat "$1") -h' bash "$FLEET_DIR/$script" \
         >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
 }
@@ -90,7 +77,7 @@ procsub_exec_script() {
 # the procsub-exec case already covers them
 procsub_source_script() {
     local script="$1"
-    cat "$SCRIPT_DIR/../$script" | /bin/bash -c '. /dev/stdin --help' \
+    cat "$FLEET_DIR/$script" | /bin/bash -c '. /dev/stdin --help' \
         >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
 }
@@ -129,7 +116,7 @@ assert_help_clean() {
 
 test_all_scripts_pipe_cleanly() {
     local script
-    for script in "$REPO_DIR"/*; do
+    for script in "$FLEET_DIR"/*; do
         _is_bash_script "$script" || continue
         local s; s="$(basename "$script")"
         _is_excluded "$s" && continue
@@ -140,7 +127,7 @@ test_all_scripts_pipe_cleanly() {
 
 test_all_scripts_procsub_exec_cleanly() {
     local script
-    for script in "$REPO_DIR"/*; do
+    for script in "$FLEET_DIR"/*; do
         _is_bash_script "$script" || continue
         local s; s="$(basename "$script")"
         _is_excluded "$s" && continue
