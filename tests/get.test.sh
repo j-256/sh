@@ -29,6 +29,12 @@ test_help_names_all_short() {
     assert_stdout_contains "help names -a short" "-a, --all"
 }
 
+test_help_names_skill_short() {
+    run_script -h
+    assert_stdout_contains "help names -s short" "-s, --skill"
+    assert_stdout_contains "help documents SKILL_DIR" "SKILL_DIR"
+}
+
 test_unknown_flag_errors() {
     run_script --banana
     assert_rc "unknown flag exits 2" 2
@@ -84,6 +90,19 @@ write_shims() {
 - Some trailing prose that should be ignored.
 INDEX
 
+    # The --skill payload the curl shim serves for the SKILL.md URL. Frontmatter
+    # is load-bearing: get validates it rather than trusting a 200
+    cat > "$TEST_DIR/skill.md" <<'SKILLMD'
+---
+name: toolio
+description: Test payload
+---
+
+# toolio
+
+Body.
+SKILLMD
+
     cat > "$SHIM_DIR/curl" <<'SHIM'
 #!/bin/bash
 # Log args for assertions
@@ -138,6 +157,17 @@ case "$url" in
         ;;
     */FAIL-INDEX)
         exit 22
+        ;;
+    */FAIL-SKILL)
+        exit 22
+        ;;
+    */BOGUS-SKILL)
+        printf '%s\n' "not a skill at all" | emit
+        exit 0
+        ;;
+    */SKILL.md)
+        cat "$TEST_DIR/skill.md" | emit
+        exit 0
         ;;
     */alpha|*/bravo|*/charlie|*/delta|*/echo-tool|*/get)
         name="${url##*/}"
@@ -530,6 +560,170 @@ test_path_warning_trailing_slash_does_not_fire() {
         /bin/bash "$UNDER_TEST" alpha >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
     assert_stderr_not_contains "no PATH warning with trailing slash in PATH entry" "not on your \$PATH"
+}
+
+# --- --skill mode ---
+
+# Runs --skill with a SKILL_DIR override and a shimmed skill URL. HOME is
+# redirected too so a real ~/.claude on the machine running the suite can never
+# be a target, even if a code path stopped honoring SKILL_DIR
+run_skill() {
+    local skill_dir="$1"
+    shift
+    env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR:/usr/bin:/bin" \
+        HOME="$TEST_DIR/home" SKILL_DIR="$skill_dir" \
+        _GET_TEST_SKILL_URL="https://example.invalid/skills/toolio/SKILL.md" \
+        /bin/bash "$UNDER_TEST" "$@" >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
+    printf '%s\n' "$?" > "$TEST_DIR/rc"
+}
+
+test_skill_installs_to_skill_dir() {
+    local root="$TEST_DIR/skills"
+    run_skill "$root" --skill
+    assert_rc "--skill exits 0" 0
+    assert_file_exists "SKILL.md installed" "$root/toolio/SKILL.md"
+    assert_stdout_contains "stdout reports installed" "installed: toolio"
+    assert_stdout_contains "summary counts one location" "1 skill location"
+}
+
+test_skill_short_flag() {
+    local root="$TEST_DIR/skills"
+    run_skill "$root" -s
+    assert_rc "-s exits 0" 0
+    assert_file_exists "SKILL.md installed via -s" "$root/toolio/SKILL.md"
+}
+
+test_skill_payload_is_not_executable() {
+    # The payload is markdown, so unlike a script it must not get +x
+    local root="$TEST_DIR/skills"
+    run_skill "$root" --skill
+    if [ -x "$root/toolio/SKILL.md" ]; then
+        _fail "SKILL.md is executable -- markdown must not get +x"
+    else
+        _ok "SKILL.md is not executable"
+    fi
+}
+
+test_skill_up_to_date_on_rerun() {
+    local root="$TEST_DIR/skills"
+    run_skill "$root" --skill
+    run_skill "$root" --skill
+    assert_rc "rerun exits 0" 0
+    assert_stdout_contains "rerun reports up to date" "up to date: toolio"
+    assert_stdout_contains "summary counts up to date" "1 up to date"
+}
+
+test_skill_updates_when_differing() {
+    local root="$TEST_DIR/skills"
+    mkdir -p "$root/toolio"
+    printf 'stale payload\n' > "$root/toolio/SKILL.md"
+    run_skill "$root" --skill
+    assert_rc "update exits 0" 0
+    assert_stdout_contains "stdout reports updated" "updated: toolio"
+    local body; body="$(cat "$root/toolio/SKILL.md")"
+    assert_contains "payload replaced" "$body" "name: toolio"
+    assert_not_contains "stale content gone" "$body" "stale payload"
+}
+
+test_skill_creates_missing_root() {
+    local root="$TEST_DIR/nested/deeper/skills"
+    run_skill "$root" --skill
+    assert_rc "missing root exits 0" 0
+    assert_file_exists "nested root created" "$root/toolio/SKILL.md"
+}
+
+test_skill_fetch_failure_exits_one() {
+    env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR:/usr/bin:/bin" \
+        HOME="$TEST_DIR/home" SKILL_DIR="$TEST_DIR/skills" \
+        _GET_TEST_SKILL_URL="https://example.invalid/FAIL-SKILL" \
+        /bin/bash "$UNDER_TEST" --skill >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
+    printf '%s\n' "$?" > "$TEST_DIR/rc"
+    assert_rc "skill fetch failure exits 1" 1
+    assert_stdout_contains "stdout reports failure" "failed: toolio"
+}
+
+test_skill_rejects_invalid_payload() {
+    # A 200 carrying something that isn't a skill (error page, wrong file) must
+    # not be written: get validates the frontmatter, not just the status
+    env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR:/usr/bin:/bin" \
+        HOME="$TEST_DIR/home" SKILL_DIR="$TEST_DIR/skills" \
+        _GET_TEST_SKILL_URL="https://example.invalid/BOGUS-SKILL" \
+        /bin/bash "$UNDER_TEST" --skill >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
+    printf '%s\n' "$?" > "$TEST_DIR/rc"
+    assert_rc "invalid payload exits 1" 1
+    assert_stdout_contains "stdout reports invalid content" "invalid content"
+    if [ -e "$TEST_DIR/skills/toolio/SKILL.md" ]; then
+        _fail "invalid payload was written to disk"
+    else
+        _ok "invalid payload not written"
+    fi
+}
+
+test_skill_with_names_errors() {
+    run_skill "$TEST_DIR/skills" --skill alpha
+    assert_rc "--skill with names exits 2" 2
+    assert_stderr_contains "stderr mentions --skill" "--skill"
+}
+
+test_skill_with_all_errors() {
+    run_skill "$TEST_DIR/skills" -s -a
+    assert_rc "--skill with --all exits 2" 2
+    assert_stderr_contains "stderr mentions --skill" "--skill"
+}
+
+test_skill_no_root_found_exits_two() {
+    # No SKILL_DIR and a HOME with neither harness dir present
+    mkdir -p "$TEST_DIR/empty-home"
+    env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR:/usr/bin:/bin" \
+        HOME="$TEST_DIR/empty-home" \
+        _GET_TEST_SKILL_URL="https://example.invalid/skills/toolio/SKILL.md" \
+        /bin/bash "$UNDER_TEST" --skill >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
+    printf '%s\n' "$?" > "$TEST_DIR/rc"
+    assert_rc "no skill root exits 2" 2
+    assert_stderr_contains "stderr names SKILL_DIR" "SKILL_DIR"
+}
+
+test_skill_detects_each_harness_root() {
+    # Both harness config dirs present (skills/ subdir absent) -- each gets the
+    # payload, and the summary pluralizes
+    local home="$TEST_DIR/dual-home"
+    mkdir -p "$home/.claude" "$home/.codex"
+    env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR:/usr/bin:/bin" \
+        HOME="$home" \
+        _GET_TEST_SKILL_URL="https://example.invalid/skills/toolio/SKILL.md" \
+        /bin/bash "$UNDER_TEST" --skill >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
+    printf '%s\n' "$?" > "$TEST_DIR/rc"
+    assert_rc "dual-harness install exits 0" 0
+    assert_file_exists "claude root installed" "$home/.claude/skills/toolio/SKILL.md"
+    assert_file_exists "codex root installed" "$home/.codex/skills/toolio/SKILL.md"
+    assert_stdout_contains "summary counts two locations" "2 skill locations"
+}
+
+test_skill_skips_absent_harness_root() {
+    # Only one harness present -- the other must not be conjured into existence
+    local home="$TEST_DIR/single-home"
+    mkdir -p "$home/.claude"
+    env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR:/usr/bin:/bin" \
+        HOME="$home" \
+        _GET_TEST_SKILL_URL="https://example.invalid/skills/toolio/SKILL.md" \
+        /bin/bash "$UNDER_TEST" --skill >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
+    printf '%s\n' "$?" > "$TEST_DIR/rc"
+    assert_rc "single-harness install exits 0" 0
+    assert_file_exists "present harness installed" "$home/.claude/skills/toolio/SKILL.md"
+    if [ -e "$home/.codex" ]; then
+        _fail "absent harness dir was created"
+    else
+        _ok "absent harness dir left alone"
+    fi
+    assert_stdout_contains "summary counts one location" "1 skill location"
+}
+
+test_skill_does_not_fetch_catalog() {
+    # --skill is standalone: it needs no catalog, so INDEX.md must not be fetched
+    run_skill "$TEST_DIR/skills" --skill
+    assert_rc "--skill exits 0" 0
+    local args; args="$(cat "$TEST_DIR/curl.args" 2>/dev/null)"
+    assert_not_contains "no INDEX.md fetch in --skill mode" "$args" "INDEX.md"
 }
 
 # --- run ---

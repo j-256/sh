@@ -40,6 +40,24 @@ Re-running is the upgrade path. Unchanged files stay put; changed files are repl
     # then later:
     get pin-dns
 
+## Installing the agent skill
+
+`--skill` installs the `toolio` agent skill instead of any script. The skill is a routing table for coding agents: it points at the handful of tools here where a hand-rolled version tends to be subtly wrong (SPF resolution, DKIM key extraction, PKCE challenges, and so on) and defers to each script's own `-h` for flags.
+
+    $ get --skill
+    installed: toolio -> /Users/you/.claude/skills/toolio
+    installed: toolio -> /Users/you/.codex/skills/toolio
+    2 skill locations: 2 installed, 0 updated, 0 up to date, 0 failed
+
+With no `SKILL_DIR` set, every harness whose config directory already exists gets a copy – `~/.claude/skills/toolio/` for Claude Code and `~/.codex/skills/toolio/` for Codex. Both read the same `<name>/SKILL.md` layout, so one payload serves both, and a harness you don't use is skipped rather than created. If neither is present, `get` exits 2 and names `SKILL_DIR`.
+
+To install somewhere specific, point `SKILL_DIR` at the skills *root* – the payload lands in a `toolio/` subdirectory of it:
+
+    SKILL_DIR=~/.config/skills get --skill
+    # -> ~/.config/skills/toolio/SKILL.md
+
+Re-running upgrades in place, same as for scripts. `--skill` is standalone: it cannot be combined with script names or `--all`.
+
 ---
 
 ## Reference
@@ -51,13 +69,15 @@ Re-running is the upgrade path. Unchanged files stay put; changed files are repl
 | (no args) | Print the catalog grouped by category, exit 0 |
 | `<name>...` | Install each named script |
 | `-a`, `--all` | Install every script in the catalog |
+| `-s`, `--skill` | Install the `toolio` agent skill instead of any script |
 | `-h`, `--help` | Show help |
 
 ### Environment variables
 
 | Name | Default | Description |
 |------|---------|-------------|
-| `INSTALL_DIR` | `~/.local/bin` | Directory to install into |
+| `INSTALL_DIR` | `~/.local/bin` | Directory to install scripts into |
+| `SKILL_DIR` | detected | Agent-skill root for `--skill`; the skill installs to `$SKILL_DIR/toolio`. When unset, each existing harness root is used (`~/.claude/skills`, `~/.codex/skills`) |
 
 ### Exit codes
 
@@ -65,7 +85,7 @@ Re-running is the upgrade path. Unchanged files stay put; changed files are repl
 |------|---------|
 | 0 | All requested scripts installed/up-to-date (or list printed) |
 | 1 | One or more scripts failed (network, write failure) |
-| 2 | Argument error: unknown script, bad flag, `--all` combined with names |
+| 2 | Argument error: unknown script, bad flag, `--all` combined with names, `--skill` combined with either, or no skill root found |
 | 3 | Missing dependency: `curl` |
 
 ### Dependencies
@@ -74,4 +94,4 @@ Re-running is the upgrade path. Unchanged files stay put; changed files are repl
 
 ### Warnings
 
-Re-running replaces any file whose content differs from the catalog version. If you've locally edited an installed script, back it up (e.g. via `bak`) before re-running `get`.
+Re-running replaces any file whose content differs from the catalog version. If you've locally edited an installed script, back it up (e.g. via `bak`) before re-running `get`. The same applies to `--skill`: a locally edited `SKILL.md` is overwritten.
