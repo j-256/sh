@@ -49,6 +49,14 @@ If you'd rather not pipe to bash:
     curl -fsS https://toolio.sh/tsd -o ~/.local/bin/tsd
     chmod +x ~/.local/bin/tsd
 
+## For coding agents
+
+A few of these tools cover tasks where an improvised version is usually subtly wrong rather than merely longer – SPF include recursion and lookup limits, DKIM keys split across TXT chunks, base64url for PKCE, live CPI data for inflation. [`skills/toolio/SKILL.md`](skills/toolio/SKILL.md) is an agent skill that routes those tasks to the right script and otherwise defers to each script's `-h`:
+
+    curl -fsS https://toolio.sh/get | bash -s -- --skill
+
+That installs into every harness present – `~/.claude/skills/toolio/` for Claude Code, `~/.codex/skills/toolio/` for Codex – since both read the same layout. Override the destination with `SKILL_DIR`. It is deliberately narrow: the rest of the catalog is conveniences for a human at a prompt, which an agent can improvise safely.
+
 ## Notes
 macOS ships with an ancient (2007) version of Bash, but every script in this repo targets Bash 3.2, so they run on stock macOS without [Homebrew](https://brew.sh) or a shebang swap. The reason it's that old: Bash moved from GPLv2 to a license that demands more openness from distributors – _"GPLv3 is to Silicon Valley as garlic is to vampires"_. Without opening up their own software, Apple cannot distribute Bash 4.0+ with their OS, which is also why recent versions of macOS have `zsh` as the default interpreter/shell.  
 

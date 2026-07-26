@@ -101,7 +101,7 @@ Each row's primary link opens the doc; the `script` link opens the raw script.
 
 | Tool | Description |
 |------|-------------|
-| [`get`](docs/get.md) · [script](scripts/get) | Install scripts from this catalog into a directory on your $PATH |
+| [`get`](docs/get.md) · [script](scripts/get) | Install scripts from this catalog into a directory on your $PATH, or the agent skill into your coding agent |
 
 ---
 
