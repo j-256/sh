@@ -57,6 +57,9 @@ A few of these tools cover tasks where an improvised version is usually subtly w
 
 That installs into every harness present – `~/.claude/skills/toolio/` for Claude Code, `~/.codex/skills/toolio/` for Codex – since both read the same layout. Override the destination with `SKILL_DIR`. It is deliberately narrow: the rest of the catalog is conveniences for a human at a prompt, which an agent can improvise safely.
 
+## License
+[AGPL-3.0-only](LICENSE). Copying a script out of here and into your own dotfiles is exactly what it is for; redistributing a modified catalog, or running one as a network service, carries the obligation to share those changes.
+
 ## Notes
 macOS ships with an ancient (2007) version of Bash, but every script in this repo targets Bash 3.2, so they run on stock macOS without [Homebrew](https://brew.sh) or a shebang swap. The reason it's that old: Bash moved from GPLv2 to a license that demands more openness from distributors – _"GPLv3 is to Silicon Valley as garlic is to vampires"_. Without opening up their own software, Apple cannot distribute Bash 4.0+ with their OS, which is also why recent versions of macOS have `zsh` as the default interpreter/shell.  
 
