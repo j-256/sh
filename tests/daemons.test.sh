@@ -203,7 +203,7 @@ test_query_short_all() {
 }
 
 test_append_load_event_ok() {
-    run_script append reconcile load "bootstrapped gui/501/usr.cc-settings-reconcile"
+    run_script append reconcile load "bootstrapped gui/501/usr.test.one"
     assert_rc "append load exits 0" 0
     local line; line="$(cat "$TEST_DIR/log/reconcile.log")"
     assert_eq "event is load" "load" "$(printf '%s' "$line" | jq -r .event)"
