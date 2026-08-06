@@ -3,12 +3,12 @@
 #
 # Usage:
 #   daemons append <name> <event> [detail|--detail-stdin]   Append one activity record
-#   daemons status                           Summarize all daemons (loaded? last activity + counts)
+#   daemons status [--since T]               Summarize all daemons over a rolling window
 #   daemons check                            Health+activity gate (returns nonzero on problem)
-#   daemons log [name|-a|--all] [-f|--follow]   Render the log (human-readable)
-#   daemons query [name|-a|--all] [-e|--event E] [-s|--since T] [-j|--jq EXPR]   Filter/extract JSONL records
-#   daemons load <name> [--plist PATH] [-n|--dry-run]   Bootstrap (reload) a daemon into launchd; logs a load record
-#   daemons unload <name> [-n|--dry-run]     Bootout a daemon from launchd; logs an unload record
+#   daemons log [name|--all] [--follow]      Render the log (human-readable)
+#   daemons query [name|--all] [--event E] [--since T] [--jq EXPR]   Filter/extract JSONL records
+#   daemons load <name> [--plist PATH] [--dry-run]   Bootstrap (reload) a daemon into launchd; logs a load record
+#   daemons unload <name> [--dry-run]        Bootout a daemon from launchd; logs an unload record
 #   daemons registry [--edit|--open]         Print the registry path, or open it (--edit: $VISUAL/$EDITOR, --open: macOS open)
 #   daemons -h | --help
 #
@@ -25,6 +25,11 @@ _daemons() (
 
     local LOG_DIR="${DAEMONS_LOG_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/daemons}"
     local REGISTRY="${DAEMONS_REGISTRY:-${XDG_CONFIG_HOME:-$HOME/.config}/daemons/daemons.tsv}"
+    local DEFAULT_STATUS_WINDOW="24h"
+    local REGISTRY_NONE="-"
+    local SECONDS_PER_MINUTE=60
+    local SECONDS_PER_HOUR=3600
+    local SECONDS_PER_DAY=86400
 
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
 
@@ -66,12 +71,12 @@ NAME
   $SCRIPT_NAME - observe and control the homegrown launchd daemons
 SYNOPSIS
   $SCRIPT_NAME append <${s}name${r}> <${s}event${r}> [${s}detail${r}|--detail-stdin]
-  $SCRIPT_NAME status
+  $SCRIPT_NAME status [--since ${s}T${r}]
   $SCRIPT_NAME check
-  $SCRIPT_NAME log [${s}name${r}|-a|--all] [-f|--follow]
-  $SCRIPT_NAME query [${s}name${r}|-a|--all] [-e|--event ${s}E${r}] [-s|--since ${s}T${r}] [-j|--jq ${s}EXPR${r}]
-  $SCRIPT_NAME load <${s}name${r}> [--plist ${s}PATH${r}] [-n|--dry-run]
-  $SCRIPT_NAME unload <${s}name${r}> [-n|--dry-run]
+  $SCRIPT_NAME log [${s}name${r}|--all] [--follow]
+  $SCRIPT_NAME query [${s}name${r}|--all] [--event ${s}E${r}] [--since ${s}T${r}] [--jq ${s}EXPR${r}]
+  $SCRIPT_NAME load <${s}name${r}> [--plist ${s}PATH${r}] [--dry-run]
+  $SCRIPT_NAME unload <${s}name${r}> [--dry-run]
   $SCRIPT_NAME registry [--edit|--open]
 DESCRIPTION
   Writes and reads per-daemon activity logs (JSONL) under \$DAEMONS_LOG_DIR.
@@ -80,14 +85,30 @@ DESCRIPTION
   'load'/'unload' control launchd and log their own record; 'registry' reveals the registry.
 SUBCOMMANDS
   append   Append one activity record (creates the log dir on first write). Pass --detail-stdin in place of [detail] to read the detail from stdin
-  status   Per-daemon summary: loaded? + last activity (event + timestamp) + all-time event counts; "never fired" when no log
+  status   Per-daemon summary: loaded state, last activity, rolling event counts, and expected-silence health
   check    Health+activity gate; nonzero + loud alerts on any problem
-  log      Render the log human-readably (-a/--all merges; -f/--follow follows)
-  query    Filter/extract JSONL by -e/--event, -s/--since, -a/--all, -j/--jq
-           -s/--since accepts NNN[smh] (e.g. 1h, 30m), a bare date YYYY-MM-DD (midnight UTC), or a full ISO-8601 UTC timestamp
+  log      Render one log human-readably, or merge all logs; optionally follow new records
+  query    Filter structured JSONL records by daemon, event, or time, then optionally reshape them with jq
   load     Bootstrap a daemon into launchd (bootout-then-bootstrap, so it also reloads). Resolves the plist by --plist > registry column > convention, then verifies it exists. A system/ target elevates via sudo when not root. Logs a 'load' record
   unload   Bootout a daemon from launchd (idempotent; "already unloaded" is not an error). Logs an 'unload' record
   registry Print the resolved \$DAEMONS_REGISTRY path; --edit opens it in \$VISUAL/\$EDITOR (default vi), --open uses macOS open. --edit and --open are mutually exclusive
+STATUS OPTIONS
+  -s, --since T  Count activity since T (default: $DEFAULT_STATUS_WINDOW)
+LOG OPTIONS
+  -a, --all       Merge every daemon log instead of selecting one
+  -f, --follow    Follow new records like tail -f
+QUERY OPTIONS
+  -a, --all       Query every daemon log instead of selecting one
+  -e, --event E   Keep only event E
+  -s, --since T   Keep records at or after T; no time filter by default
+  -j, --jq EXPR   Apply EXPR to each matching JSON record
+  T accepts NNN[smhd] (e.g. 1h, 30m, 7d), YYYY-MM-DD (midnight UTC), or YYYY-MM-DDTHH:MM:SSZ
+LOAD AND UNLOAD OPTIONS
+  -n, --dry-run   Print the launchctl commands without running them
+  --plist PATH    Use PATH instead of the registry or conventional plist path (load only)
+REGISTRY OPTIONS
+  --edit           Open the registry in \$VISUAL or \$EDITOR
+  --open           Open the registry with macOS open
 ENVIRONMENT
   DAEMONS_LOG_DIR   Directory of <name>.log files (default: \$XDG_STATE_HOME/daemons or ~/.local/state/daemons)
   DAEMONS_REGISTRY  Registry TSV (default: \$XDG_CONFIG_HOME/daemons/daemons.tsv or ~/.config/daemons/daemons.tsv)
@@ -95,7 +116,7 @@ FILES
   \$DAEMONS_REGISTRY  Whitespace-separated table that 'status', 'check', 'load',
                      and 'unload' read, and 'registry' prints (append/log/query
                      don't need it). A header row, then one
-                     row per daemon with four required columns and an optional fifth:
+                     row per daemon with four required columns and two optional columns:
                        name    log name; matches the <name> passed to append
                        domain  launchd domain: gui/\$UID/ (per-user agent; \$UID
                                is replaced with your numeric uid) or system/
@@ -104,9 +125,13 @@ FILES
                        plist   (optional) path to the daemon's plist for 'load'; when
                                absent, load derives it: gui/\$UID/ -> ~/Library/LaunchAgents/<label>.plist,
                                system/ -> /Library/LaunchDaemons/<label>.plist
+                       max_silence  (optional) maximum time between trigger records as
+                                    NNN[smhd]; status marks a loaded daemon overdue and
+                                    check fails when the limit is exceeded. Use - for no
+                                    limit, or as a plist placeholder when setting this field
                      Example:
-                       name       domain     label                  script                    plist
-                       reconcile  gui/\$UID/  com.example.reconcile  /usr/local/bin/reconcile  ~/Library/LaunchAgents/com.example.reconcile.plist
+                       name      domain     label                 script                   plist  max_silence
+                       periodic  gui/\$UID/  com.example.periodic  /usr/local/bin/periodic  -      15m
 DEPENDENCIES
   jq, launchctl
   sudo (required only for load/unload of a system/ daemon when not root)
@@ -152,20 +177,55 @@ EOF
         fi
     }
 
-    # Normalize --since: a bare date (YYYY-MM-DD) becomes midnight UTC; an ISO
-    # timestamp passes through; NNN[smh] becomes "now minus that span"
+    # Convert an NNN[smhd] relative duration to seconds
+    _duration_to_seconds() {
+        local duration="$1"
+        local amount="${duration%?}"
+        local unit="${duration#"$amount"}"
+        local multiplier
+        case "$amount" in
+            ''|*[!0-9]*) return 1 ;;
+        esac
+        case "$unit" in
+            s) multiplier=1 ;;
+            m) multiplier=$SECONDS_PER_MINUTE ;;
+            h) multiplier=$SECONDS_PER_HOUR ;;
+            d) multiplier=$SECONDS_PER_DAY ;;
+            *) return 1 ;;
+        esac
+        amount=$((10#$amount))
+        printf '%s\n' "$((amount * multiplier))"
+    }
+
+    # Normalize --since into an ISO-8601 UTC timestamp
     _since_to_ts() {
         local t="$1"
+        local secs
         case "$t" in
-            [0-9]*[smh])
-                local n="${t%[smh]}"; local unit="${t##*[0-9]}"
-                local secs=0
-                case "$unit" in s) secs=$n ;; m) secs=$((n*60)) ;; h) secs=$((n*3600)) ;; esac
+            [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) printf '%sT00:00:00Z\n' "$t" ;;
+            [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z) printf '%s\n' "$t" ;;
+            *)
+                secs="$(_duration_to_seconds "$t")" || return 1
                 TZ=Etc/UTC date -v-"${secs}"S '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null \
                     || TZ=Etc/UTC date -u -d "-${secs} seconds" '+%Y-%m-%dT%H:%M:%SZ' ;;
-            ????-??-??) printf '%sT00:00:00Z\n' "$t" ;;
-            *) printf '%s\n' "$t" ;;
         esac
+    }
+
+    _since_label() {
+        if _duration_to_seconds "$1" >/dev/null 2>&1; then
+            printf '%s\n' "$1"
+        else
+            printf 'since %s\n' "$1"
+        fi
+    }
+
+    _trigger_is_overdue() {
+        local last_trigger="$1"
+        local max_silence="$2"
+        local cutoff
+        cutoff="$(_since_to_ts "$max_silence")" || return 2
+        [ -z "$last_trigger" ] && return 0
+        [ "$last_trigger" \< "$cutoff" ]
     }
 
     _do_query() {
@@ -190,7 +250,10 @@ EOF
             esac
         done
         local since_ts=""
-        [ -n "$since" ] && since_ts="$(_since_to_ts "$since")"
+        if [ -n "$since" ] && ! since_ts="$(_since_to_ts "$since")"; then
+            _error "Invalid --since '$since' (valid: NNN[smhd], YYYY-MM-DD, or YYYY-MM-DDTHH:MM:SSZ). Run \`$SCRIPT_NAME -h\` for usage"
+            return 2
+        fi
         local files; files="$(_log_files_for "$target")"
         [ -z "$files" ] && return 0
         # Filter each record: event match (if set), ts >= since (if set), then apply jqexpr
@@ -210,8 +273,8 @@ EOF
         '
     }
 
-    # Echo registry rows as name<TAB>domain<TAB>label<TAB>script<TAB>plist (plist
-    # optional, empty for a 4-column row). Skips the header row and blank lines.
+    # Echo registry rows as six tab-separated fields, using - for absent optionals
+    # Skips the header row and blank lines
     # Errors (return 1) if the registry file is absent
     _read_registry() {
         if [ ! -f "$REGISTRY" ]; then
@@ -222,18 +285,27 @@ EOF
         local uid; uid="$(id -u)"
         tail -n +2 "$REGISTRY" | while IFS= read -r row; do
             [ -n "$row" ] || continue
-            # Split on whitespace runs into 5 fields; plist (5th) is optional and
-            # empty for a 4-column row. script and plist paths assumed space-free
+            # Split on whitespace runs; script and plist paths are space-free
             local name
             local domain
             local label
             local script
             local plist
-            read -r name domain label script plist <<< "$row"
+            local max_silence
+            local max_silence_seconds
+            read -r name domain label script plist max_silence <<< "$row"
             [ -n "$name" ] || continue
+            [ -n "$plist" ] || plist="$REGISTRY_NONE"
+            [ -n "$max_silence" ] || max_silence="$REGISTRY_NONE"
+            if [ "$max_silence" != "$REGISTRY_NONE" ]; then
+                if ! max_silence_seconds="$(_duration_to_seconds "$max_silence")" || [ "$max_silence_seconds" -le 0 ]; then
+                    _error "Invalid max_silence '$max_silence' for '$name' (valid: positive NNN[smhd] or -)"
+                    return 1
+                fi
+            fi
             # Substitute $UID token in the domain
             domain="${domain//\$UID/$uid}"
-            printf '%s\t%s\t%s\t%s\t%s\n' "$name" "$domain" "$label" "$script" "$plist"
+            printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$name" "$domain" "$label" "$script" "$plist" "$max_silence"
         done
     }
 
@@ -253,7 +325,7 @@ EOF
             '{ts:$ts, daemon:$daemon, event:$event, detail:($detail)}'
     }
 
-    # Echo the matching registry row's fields (name<TAB>domain<TAB>label<TAB>script<TAB>plist)
+    # Echo the matching registry row's six normalized fields
     # for a daemon name. Propagates _read_registry's status: registry file absent
     # is a runtime error (1, matching status/check); a present file with no matching
     # row is a usage error (2). Shared by load and unload
@@ -264,8 +336,8 @@ EOF
         rows="$(_read_registry)"; rc=$?
         [ "$rc" -eq 0 ] || return "$rc"
         local match
-        match="$(printf '%s\n' "$rows" | while IFS=$'\t' read -r name domain label script plist; do
-            [ "$name" = "$want" ] && printf '%s\t%s\t%s\t%s\t%s\n' "$name" "$domain" "$label" "$script" "$plist"
+        match="$(printf '%s\n' "$rows" | while IFS=$'\t' read -r name domain label script plist max_silence; do
+            [ "$name" = "$want" ] && printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$name" "$domain" "$label" "$script" "$plist" "$max_silence"
         done)"
         if [ -z "$match" ]; then
             _error "no daemon named '$want' in the registry. Run \`$SCRIPT_NAME -h\` for usage"
@@ -294,6 +366,7 @@ EOF
         local tsv_plist="$3"
         local flag_plist="$4"
         local p=""
+        [ "$tsv_plist" = "$REGISTRY_NONE" ] && tsv_plist=""
         if [ -n "$flag_plist" ]; then
             p="$flag_plist"
         elif [ -n "$tsv_plist" ]; then
@@ -336,23 +409,70 @@ EOF
     }
 
     _do_status() {
-        local rows; rows="$(_read_registry)" || return 1
-        printf '%s\n' "$rows" | while IFS=$'\t' read -r name domain label _; do
+        local since="$DEFAULT_STATUS_WINDOW"
+        _expand_short_opts "s" "$@"
+        set -- "${_EXPANDED[@]}"; unset _EXPANDED
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                -s|--since) [ $# -ge 2 ] || { _error "--since requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }; since="$2"; shift 2 ;;
+                --since=*) since="${1#*=}"; [ -n "$since" ] || { _error "--since requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }; shift ;;
+                *) _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+            esac
+        done
+        local since_ts
+        if ! since_ts="$(_since_to_ts "$since")"; then
+            _error "Invalid --since '$since' (valid: NNN[smhd], YYYY-MM-DD, or YYYY-MM-DDTHH:MM:SSZ). Run \`$SCRIPT_NAME -h\` for usage"
+            return 2
+        fi
+        local since_label
+        since_label="$(_since_label "$since")"
+        local rows
+        rows="$(_read_registry)" || return 1
+        printf '%s\n' "$rows" | while IFS=$'\t' read -r name domain label script plist max_silence; do
             [ -n "$name" ] || continue
             local loaded="loaded"
             _launchd_state "$domain" "$label" >/dev/null || loaded="NOT LOADED"
             local logf="$LOG_DIR/$name.log"
-            local activity
-            if [ ! -e "$logf" ]; then
-                activity="never fired"
-            else
-                local last_ts; last_ts="$(jq -rs 'last | .ts // "?"' "$logf" 2>/dev/null)"
-                local last_ev; last_ev="$(jq -rs 'last | .event // "?"' "$logf" 2>/dev/null)"
-                # Counts by event (all-time; simple and enough for a glance)
-                local n_change; n_change="$(jq -rs '[.[]|select(.event=="change")]|length' "$logf" 2>/dev/null)"
-                local n_noop; n_noop="$(jq -rs '[.[]|select(.event=="noop")]|length' "$logf" 2>/dev/null)"
-                local n_err; n_err="$(jq -rs '[.[]|select(.event=="error")]|length' "$logf" 2>/dev/null)"
-                activity="last $last_ev @ $last_ts ($n_change change, $n_noop noop, $n_err error)"
+            local last_ts=""
+            local last_ev=""
+            local n_runs=0
+            local n_change=0
+            local n_err=0
+            local last_trigger=""
+            if [ -e "$logf" ]; then
+                local summary
+                if ! summary="$(jq -rs --arg since "$since_ts" '
+                    [
+                        (last | .ts // ""),
+                        (last | .event // ""),
+                        ([.[] | select((.ts // "") >= $since and .event == "trigger")] | length),
+                        ([.[] | select((.ts // "") >= $since and .event == "change")] | length),
+                        ([.[] | select((.ts // "") >= $since and .event == "error")] | length),
+                        ([.[] | select(.event == "trigger")] | last | .ts // "")
+                    ] | @tsv
+                ' "$logf" 2>/dev/null)"; then
+                    _error "Failed to read activity log: $logf"
+                    return 1
+                fi
+                IFS=$'\t' read -r last_ts last_ev n_runs n_change n_err last_trigger <<< "$summary"
+            fi
+            local run_word="runs"
+            local change_word="changes"
+            local error_word="errors"
+            [ "$n_runs" = 1 ] && run_word="run"
+            [ "$n_change" = 1 ] && change_word="change"
+            [ "$n_err" = 1 ] && error_word="error"
+            local activity="never fired"
+            [ -n "$last_ts" ] && activity="last $last_ev @ $last_ts"
+            activity="$activity | $since_label: $n_runs $run_word, $n_change $change_word, $n_err $error_word"
+            if [ "$loaded" = "loaded" ] && [ "$max_silence" != "$REGISTRY_NONE" ]; then
+                if [ -z "$last_trigger" ]; then
+                    activity="$activity | silence: NEVER OBSERVED (limit $max_silence)"
+                elif _trigger_is_overdue "$last_trigger" "$max_silence"; then
+                    activity="$activity | silence: OVERDUE (limit $max_silence)"
+                else
+                    activity="$activity | silence: OK (limit $max_silence)"
+                fi
             fi
             printf '%-24s %-11s %s\n' "$name" "$loaded" "$activity"
         done
@@ -372,7 +492,7 @@ EOF
         # (piped), so a plain variable increment wouldn't survive. Portable to bash 3.2
         local flag; flag="$(mktemp)"
         printf '0' > "$flag"
-        printf '%s\n' "$rows" | while IFS=$'\t' read -r name domain label script _; do
+        printf '%s\n' "$rows" | while IFS=$'\t' read -r name domain label script _ max_silence; do
             [ -n "$name" ] || continue
             local state
             if ! state="$(_launchd_state "$domain" "$label")"; then
@@ -396,6 +516,24 @@ EOF
                 *[!0-9]*) ;; # non-numeric (e.g. "(never exited)") -- not a failure
                 *) _alert "$label last run failed (exit $last_exit)"; printf '1' > "$flag" ;;
             esac
+            if [ "$max_silence" != "$REGISTRY_NONE" ]; then
+                local last_trigger=""
+                local logf="$LOG_DIR/$name.log"
+                if [ -e "$logf" ]; then
+                    if ! last_trigger="$(jq -rs '[.[] | select(.event == "trigger")] | last | .ts // ""' "$logf" 2>/dev/null)"; then
+                        _alert "$label activity log is unreadable ($logf)"
+                        printf '1' > "$flag"
+                        continue
+                    fi
+                fi
+                if [ -z "$last_trigger" ]; then
+                    _alert "$label has never fired (silence limit $max_silence)"
+                    printf '1' > "$flag"
+                elif _trigger_is_overdue "$last_trigger" "$max_silence"; then
+                    _alert "$label has not fired within its $max_silence silence limit (last trigger $last_trigger)"
+                    printf '1' > "$flag"
+                fi
+            fi
         done
         problems="$(cat "$flag")"; rm -f "$flag"
         [ "$problems" = 0 ]
@@ -432,7 +570,8 @@ EOF
         local label
         local script
         local tsv_plist
-        IFS=$'\t' read -r name domain label script tsv_plist <<< "$row"
+        local max_silence
+        IFS=$'\t' read -r name domain label script tsv_plist max_silence <<< "$row"
 
         local plist; plist="$(_resolve_plist "$domain" "$label" "$tsv_plist" "$flag_plist")"
         if [ ! -f "$plist" ]; then
@@ -497,7 +636,8 @@ EOF
         local label
         local script
         local tsv_plist
-        IFS=$'\t' read -r name domain label script tsv_plist <<< "$row"
+        local max_silence
+        IFS=$'\t' read -r name domain label script tsv_plist max_silence <<< "$row"
 
         # bootout needs only the service-target (2nd line); discard the domain-target
         local stgt

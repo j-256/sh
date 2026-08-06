@@ -12,9 +12,9 @@ The common flow is a quick triage: glance at all daemons, skim recent activity, 
 
 ```
 $ daemons status
-reconcile                loaded      last change @ 2026-07-16T04:30:12Z (18 change, 402 noop, 0 error)
-screenshot-rename        loaded      last error @ 2026-07-16T05:12:44Z (5 change, 88 noop, 1 error)
-backup                   NOT LOADED  never fired
+reconcile                loaded      last change @ 2026-07-16T04:30:12Z | 24h: 24 runs, 2 changes, 0 errors | silence: OK (limit 15m)
+screenshot-rename        loaded      last error @ 2026-07-16T05:12:44Z | 24h: 4 runs, 1 change, 1 error
+backup                   NOT LOADED  never fired | 24h: 0 runs, 0 changes, 0 errors
 
 $ daemons log --all
 2026-07-16T04:30:12Z reconcile CHANGE reconciled 3 drifted keys
@@ -27,6 +27,25 @@ $ daemons query --all --event error --since 1h
 
 `status`, `check`, `load`, and `unload` read a small registry you set up once (see [The registry](#the-registry) below). `append`, `log`, and `query` work straight from the log files and need no registry at all.
 
+## Status windows and silence limits
+
+`status` keeps the last activity visible while replacing lifetime trivia with a rolling operational window. The default is 24 hours:
+
+```bash
+daemons status
+```
+
+Use `-s`/`--since` to ask the same question over another relative span, date, or UTC timestamp:
+
+```bash
+daemons status --since 7d
+daemons status -s 2026-07-15
+```
+
+The window reports `trigger` records as runs and independently counts `change` and `error` outcomes. It does not infer a run from an outcome, so an older outcome-only client can temporarily produce more outcomes than runs in a historical window instead of receiving a made-up activation count.
+
+The registry's optional `max_silence` field turns a daemon's expected firing cadence into health policy. For a loaded daemon with a limit, `status` shows `silence: OK`, `silence: OVERDUE`, or `silence: NEVER OBSERVED`; `check` fails for the latter two. The clock is measured from the most recent `trigger`, so a recent `load`, `noop`, or `change` record cannot conceal a daemon that stopped firing. Unloaded daemons already have a stronger launchd failure and are not also labeled overdue.
+
 ## Logging activity from a daemon (`append`)
 
 `append` is the write path: a daemon calls it once per run to record what happened.
@@ -37,12 +56,12 @@ daemons append reconcile change "reconciled 3 drifted keys"
 
 The `<event>` argument is one of six fixed values, so activity is countable and filterable:
 
-- `trigger` - the daemon woke up (a WatchPaths event, a scheduled interval)
-- `noop` - it ran, but there was nothing to do
-- `change` - it ran and did work / made a change
-- `error` - it failed
-- `load` - the daemon was bootstrapped into launchd (via `daemons load` or an install that delegates to it)
-- `unload` - the daemon was booted out of launchd
+- `trigger` – The daemon woke up (a WatchPaths event or a scheduled interval)
+- `noop` – It ran, but there was nothing to do
+- `change` – It ran and did work or made a change
+- `error` – It failed
+- `load` – The daemon was bootstrapped into launchd (via `daemons load` or an install that delegates to it)
+- `unload` – The daemon was booted out of launchd
 
 Always call `append` guarded, so a logging failure never takes the daemon down with it:
 
@@ -87,9 +106,9 @@ daemons query reconcile --event error
 
 **Keep recent records** with `-s`/`--since`, which accepts three forms:
 
-- a relative span, `NNN[smh]` - `1h`, `30m`, `90s` (that long before now)
-- a bare date, `YYYY-MM-DD` - midnight UTC that day
-- a full ISO-8601 UTC timestamp - used as-is
+- A relative span, `NNN[smhd]`: `1h`, `30m`, `7d`, or `90s` (that long before now)
+- A bare date, `YYYY-MM-DD`: midnight UTC that day
+- A full ISO-8601 UTC timestamp: used as-is
 
 ```bash
 daemons query --all --event error --since 1h
@@ -105,7 +124,7 @@ A bare `log` or `query` with no name (and no `-a`/`--all`) defaults to all daemo
 
 ## Health-checking (`check`)
 
-`check` is a gate: it reads the registry and exits nonzero, printing a loud alert to stdout, for any daemon that is not loaded in launchd, points at a script that no longer exists, or whose last launchd run exited nonzero.
+`check` is a gate: it reads the registry and exits nonzero, printing a loud alert to stdout, for any daemon that is not loaded in launchd, points at a script that no longer exists, whose last launchd run exited nonzero, or has exceeded its configured `max_silence` without a `trigger` record.
 
 ```
 $ daemons check
@@ -152,16 +171,17 @@ Each successful `load`/`unload` appends its own `load`/`unload` record to the da
 `status`, `check`, `load`, and `unload` need to know which daemons exist and how to address them in launchd. That lives in a small registry file (see [`DAEMONS_REGISTRY`](#environment-variables) for its location). It is a header row plus one whitespace-separated row per daemon:
 
 ```
-name              domain     label                          script
-reconcile         gui/$UID/  com.example.reconcile          /usr/local/bin/reconcile
-screenshot-rename gui/$UID/  com.example.screenshot-rename  /usr/local/bin/screenshot-rename
+name      domain     label                 script                   plist  max_silence
+periodic  gui/$UID/  com.example.periodic  /usr/local/bin/periodic  -      15m
+watcher   gui/$UID/  com.example.watcher   /usr/local/bin/watcher   -      -
 ```
 
-- `name` - the log name; matches the `<name>` the daemon passes to `append`
-- `domain` - the launchd domain target: `gui/$UID/` for a per-user LaunchAgent (the `$UID` token is replaced with your numeric uid) or `system/` for a LaunchDaemon
-- `label` - the launchd label; `check` and `status` read state with `launchctl print <domain><label>`
-- `script` - path to the script the daemon runs; `check` flags it if the file is missing
-- `plist` - (optional) the daemon's plist path, used by `load`. When omitted, `load` derives it from the domain and label by convention
+- `name`: The log name; matches the `<name>` the daemon passes to `append`
+- `domain`: The launchd domain target: `gui/$UID/` for a per-user LaunchAgent (the `$UID` token is replaced with your numeric uid) or `system/` for a LaunchDaemon
+- `label`: The launchd label; `check` and `status` read state with `launchctl print <domain><label>`
+- `script`: The path to the script the daemon runs; `check` flags it if the file is missing
+- `plist`: The optional daemon plist path used by `load`; when omitted, `load` derives it from the domain and label by convention
+- `max_silence`: The optional maximum span between `trigger` records in `NNN[smhd]` form; use `-` for no limit, and use it as the `plist` placeholder when setting `max_silence` without an explicit plist
 
 `status`, `check`, `load`, and `unload` consult the registry. The write and read paths (`append`, `log`, `query`) operate purely on log files, so a daemon can log before it is ever registered.
 
@@ -205,16 +225,16 @@ Each daemon owns one log file, `<name>.log`, in [`DAEMONS_LOG_DIR`](#environment
 | Subcommand | Description |
 |---|---|
 | `append <name> <event> [detail]` | Append one record to `<name>`'s log (creating the log dir on first write). `<event>` is `trigger`, `noop`, `change`, `error`, `load`, or `unload`. Pass `--detail-stdin` in place of `[detail]` to read the detail from stdin |
-| `status` | Per-daemon summary from the registry: loaded in launchd? plus last activity (event + timestamp) and all-time event counts. Shows `never fired` when a daemon has no log yet |
-| `check` | Health gate: exits nonzero with a loud alert for any daemon not loaded, pointing at a missing script, or whose last run exited nonzero |
-| `log [name\|-a\|--all] [-f\|--follow]` | Render a log human-readably. `-a`/`--all` (or no name) merges every daemon in timestamp order; `-f`/`--follow` follows like `tail -f` |
-| `query [name\|-a\|--all] [-e\|--event E] [-s\|--since T] [-j\|--jq EXPR]` | Emit raw JSONL records matching the filters. `-e`/`--event` keeps one event type; `-s`/`--since` keeps records at or after a time; `-j`/`--jq` pipes matches through a jq expression |
-| `load <name> [--plist PATH] [-n\|--dry-run]` | Bootstrap (reload) a daemon into launchd, resolving its plist by `--plist` > registry column > convention. Logs a `load` record. Elevates via `sudo` for a `system/` target |
-| `unload <name> [-n\|--dry-run]` | Bootout a daemon from launchd (idempotent). Logs an `unload` record |
+| `status [--since T]` | Per-daemon summary from the registry: loaded state, last activity, rolling run/change/error counts, and configured silence-limit state. The count window defaults to `24h`; `-s` is the short form of `--since` |
+| `check` | Health gate: exits nonzero with a loud alert for any daemon not loaded, pointing at a missing script, whose last run exited nonzero, or exceeding its configured `max_silence` |
+| `log [name\|--all] [--follow]` | Render a log human-readably. `-a` is the short form of `--all`; `-f` is the short form of `--follow` |
+| `query [name\|--all] [--event E] [--since T] [--jq EXPR]` | Emit raw JSONL records matching the filters. The short forms are `-a`, `-e`, `-s`, and `-j` respectively |
+| `load <name> [--plist PATH] [--dry-run]` | Bootstrap (reload) a daemon into launchd, resolving its plist by `--plist` > registry column > convention. Logs a `load` record. `-n` is the short form of `--dry-run`; a `system/` target elevates via `sudo` |
+| `unload <name> [--dry-run]` | Bootout a daemon from launchd (idempotent) and log an `unload` record. `-n` is the short form of `--dry-run` |
 | `registry [--edit\|--open]` | Print the resolved registry path; `--edit` opens `$VISUAL`/`$EDITOR` (default `vi`), `--open` uses macOS `open` |
 | `-h, --help` | Show help |
 
-`-s`/`--since T` accepts a relative span (`NNN[smh]`, e.g. `1h`), a bare date (`YYYY-MM-DD`, midnight UTC), or a full ISO-8601 UTC timestamp.
+`-s`/`--since T` accepts a relative span (`NNN[smhd]`, e.g. `1h` or `7d`), a bare date (`YYYY-MM-DD`, midnight UTC), or a full ISO-8601 UTC timestamp. `status` defaults to `24h`; `query` has no time filter unless the option is provided.
 
 ### Environment variables
 

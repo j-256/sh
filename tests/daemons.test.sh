@@ -25,6 +25,9 @@ test_help_exits_0() {
     assert_rc "help exits 0" 0
     assert_stdout_contains "help has NAME" "NAME"
     assert_stdout_contains "help lists append" "append"
+    assert_stdout_contains "status synopsis uses one canonical form" "status [--since T]"
+    assert_stdout_contains "status aliases share one option row" "-s, --since T"
+    assert_stdout_not_contains "status alias is not a separate invocation" "[-s T | --since T]"
 }
 
 test_unknown_subcommand() {
@@ -95,6 +98,12 @@ seed_log() {
     printf '%s\n' "$@" >> "$TEST_DIR/log/$name.log"
 }
 
+utc_ago() {
+    local seconds="$1"
+    TZ=Etc/UTC date -v-"${seconds}"S '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null \
+        || TZ=Etc/UTC date -u -d "-${seconds} seconds" '+%Y-%m-%dT%H:%M:%SZ'
+}
+
 test_query_filters_by_event() {
     seed_log reconcile \
         '{"ts":"2026-07-15T10:00:00Z","daemon":"reconcile","event":"trigger","detail":"a"}' \
@@ -111,6 +120,26 @@ test_query_since() {
         '{"ts":"2026-07-15T10:00:00Z","daemon":"reconcile","event":"noop","detail":"new"}'
     run_script query reconcile --since 2026-07-15
     assert_eq "only new" "new" "$(get_stdout | jq -r .detail)"
+}
+
+test_query_since_accepts_days() {
+    local recent_ts
+    recent_ts="$(utc_ago "$((6 * 24 * 60 * 60))")"
+    local old_ts
+    old_ts="$(utc_ago "$((8 * 24 * 60 * 60))")"
+    seed_log reconcile \
+        "{\"ts\":\"$old_ts\",\"daemon\":\"reconcile\",\"event\":\"noop\",\"detail\":\"old\"}" \
+        "{\"ts\":\"$recent_ts\",\"daemon\":\"reconcile\",\"event\":\"noop\",\"detail\":\"new\"}"
+    run_script query reconcile --since 7d
+    assert_rc "day duration exits 0" 0
+    assert_eq "only the record from the last seven days" "new" "$(get_stdout | jq -r .detail)"
+}
+
+test_query_since_rejects_invalid_time() {
+    seed_log reconcile '{"ts":"2026-07-15T10:00:00Z","daemon":"reconcile","event":"noop","detail":"new"}'
+    run_script query reconcile --since yesterday
+    assert_rc "invalid since exits 2" 2
+    assert_stderr_contains "invalid since names accepted forms" "NNN[smhd]"
 }
 
 test_query_all_merges() {
@@ -367,6 +396,27 @@ TSV
     printf 'usr.test.one\n' > "$TEST_DIR/loaded"
 }
 
+seed_registry_with_silence() {
+    local max_silence="$1"
+    mkdir -p "$(dirname "$TEST_DIR/daemons.tsv")"
+    cat > "$TEST_DIR/daemons.tsv" <<TSV
+name	domain	label	script	plist	max_silence
+one	gui/\$UID/	usr.test.one	$TEST_DIR/one.sh	-	$max_silence
+TSV
+    printf '#!/bin/bash\n' > "$TEST_DIR/one.sh"; chmod +x "$TEST_DIR/one.sh"
+    printf 'usr.test.one\n' > "$TEST_DIR/loaded"
+}
+
+seed_registry_6col() {
+    mkdir -p "$(dirname "$TEST_DIR/daemons.tsv")"
+    cat > "$TEST_DIR/daemons.tsv" <<TSV
+name	domain	label	script	plist	max_silence
+one	gui/\$UID/	usr.test.one	$TEST_DIR/one.sh	$TEST_DIR/usr.test.one.plist	15m
+TSV
+    printf '#!/bin/bash\n' > "$TEST_DIR/one.sh"; chmod +x "$TEST_DIR/one.sh"
+    printf 'usr.test.one\n' > "$TEST_DIR/loaded"
+}
+
 test_status_5col_registry_not_corrupted() {
     seed_registry_5col
     run_script status
@@ -400,18 +450,165 @@ test_status_reports_never_fired() {
 
 test_status_reports_last_activity() {
     seed_registry
+    local ts
+    ts="$(utc_ago 60)"
     seed_log one \
-        '{"ts":"2026-07-15T10:00:00Z","daemon":"one","event":"trigger","detail":"fired"}' \
-        '{"ts":"2026-07-15T10:00:00Z","daemon":"one","event":"change","detail":"did work"}'
+        "{\"ts\":\"$ts\",\"daemon\":\"one\",\"event\":\"trigger\",\"detail\":\"fired\"}" \
+        "{\"ts\":\"$ts\",\"daemon\":\"one\",\"event\":\"change\",\"detail\":\"did work\"}"
     run_script status
     assert_stdout_contains "shows last outcome" "change"
-    assert_stdout_contains "shows a count" "1 change"
+    assert_stdout_contains "shows the default rolling counts" "24h: 1 run, 1 change, 0 errors"
+}
+
+test_status_excludes_activity_before_default_window() {
+    seed_registry
+    local recent_ts
+    recent_ts="$(utc_ago 60)"
+    local old_ts
+    old_ts="$(utc_ago "$((25 * 60 * 60))")"
+    seed_log one \
+        "{\"ts\":\"$old_ts\",\"daemon\":\"one\",\"event\":\"trigger\",\"detail\":\"old fire\"}" \
+        "{\"ts\":\"$old_ts\",\"daemon\":\"one\",\"event\":\"change\",\"detail\":\"old work\"}" \
+        "{\"ts\":\"$recent_ts\",\"daemon\":\"one\",\"event\":\"trigger\",\"detail\":\"new fire\"}" \
+        "{\"ts\":\"$recent_ts\",\"daemon\":\"one\",\"event\":\"noop\",\"detail\":\"new noop\"}"
+    run_script status
+    assert_stdout_contains "default window excludes old activity" "24h: 1 run, 0 changes, 0 errors"
+}
+
+test_status_since_uses_inclusive_boundary() {
+    seed_registry
+    seed_log one \
+        '{"ts":"2026-07-14T23:59:59Z","daemon":"one","event":"trigger","detail":"old"}' \
+        '{"ts":"2026-07-15T00:00:00Z","daemon":"one","event":"trigger","detail":"boundary"}' \
+        '{"ts":"2026-07-15T00:00:01Z","daemon":"one","event":"error","detail":"new"}'
+    run_script status --since 2026-07-15
+    assert_rc "status since exits 0" 0
+    assert_stdout_contains "boundary record is included" "since 2026-07-15: 1 run, 0 changes, 1 error"
+}
+
+test_status_since_short_glued_form() {
+    seed_registry
+    seed_log one '{"ts":"2026-07-15T00:00:00Z","daemon":"one","event":"trigger","detail":"boundary"}'
+    run_script status -s2026-07-15
+    assert_rc "glued short since exits 0" 0
+    assert_stdout_contains "glued short since sets the window" "since 2026-07-15: 1 run"
+}
+
+test_status_since_equals_form() {
+    seed_registry
+    seed_log one '{"ts":"2026-07-15T00:00:00Z","daemon":"one","event":"trigger","detail":"boundary"}'
+    run_script status --since=2026-07-15
+    assert_rc "equals since exits 0" 0
+    assert_stdout_contains "equals since sets the window" "since 2026-07-15: 1 run"
+}
+
+test_status_since_validation() {
+    seed_registry
+    run_script status --since
+    assert_rc "missing status since value exits 2" 2
+    run_script status --since someday
+    assert_rc "invalid status since value exits 2" 2
+    run_script status extra
+    assert_rc "status positional exits 2" 2
+}
+
+test_status_counts_trigger_records_as_runs() {
+    seed_registry
+    local ts
+    ts="$(utc_ago 60)"
+    seed_log one \
+        "{\"ts\":\"$ts\",\"daemon\":\"one\",\"event\":\"change\",\"detail\":\"legacy outcome-only record\"}" \
+        "{\"ts\":\"$ts\",\"daemon\":\"one\",\"event\":\"trigger\",\"detail\":\"new fire\"}" \
+        "{\"ts\":\"$ts\",\"daemon\":\"one\",\"event\":\"noop\",\"detail\":\"new outcome\"}"
+    run_script status
+    assert_stdout_contains "runs come only from trigger records" "24h: 1 run, 1 change, 0 errors"
+}
+
+test_status_reports_healthy_silence_limit() {
+    seed_registry_with_silence 15m
+    local ts
+    ts="$(utc_ago 60)"
+    seed_log one \
+        "{\"ts\":\"$ts\",\"daemon\":\"one\",\"event\":\"trigger\",\"detail\":\"fired\"}" \
+        "{\"ts\":\"$ts\",\"daemon\":\"one\",\"event\":\"noop\",\"detail\":\"done\"}"
+    run_script status
+    assert_rc "healthy silence status exits 0" 0
+    assert_stdout_contains "healthy silence is explicit" "silence: OK (limit 15m)"
+}
+
+test_status_reports_overdue_silence_limit() {
+    seed_registry_with_silence 15m
+    local ts
+    ts="$(utc_ago "$((60 * 60))")"
+    seed_log one "{\"ts\":\"$ts\",\"daemon\":\"one\",\"event\":\"trigger\",\"detail\":\"old fire\"}"
+    run_script status
+    assert_stdout_contains "overdue silence is explicit" "silence: OVERDUE (limit 15m)"
+}
+
+test_status_reports_never_observed_silence_limit() {
+    seed_registry_with_silence 15m
+    run_script status
+    assert_stdout_contains "never observed is distinct" "silence: NEVER OBSERVED (limit 15m)"
+}
+
+test_status_does_not_call_unloaded_daemon_overdue() {
+    seed_registry_with_silence 15m
+    : > "$TEST_DIR/loaded"
+    local ts
+    ts="$(utc_ago "$((60 * 60))")"
+    seed_log one "{\"ts\":\"$ts\",\"daemon\":\"one\",\"event\":\"trigger\",\"detail\":\"old fire\"}"
+    run_script status
+    assert_stdout_contains "unloaded state is shown" "NOT LOADED"
+    assert_stdout_not_contains "unloaded daemon has no silence state" "silence:"
+}
+
+test_status_rejects_invalid_silence_limit() {
+    seed_registry_with_silence 0m
+    run_script status
+    assert_rc "zero silence limit exits 1" 1
+    assert_stderr_contains "invalid silence limit names the field" "max_silence"
 }
 
 test_check_all_healthy() {
     seed_registry
     run_script check
     assert_rc "healthy exits 0" 0
+}
+
+test_check_healthy_silence_limit() {
+    seed_registry_with_silence 15m
+    local ts
+    ts="$(utc_ago 60)"
+    seed_log one "{\"ts\":\"$ts\",\"daemon\":\"one\",\"event\":\"trigger\",\"detail\":\"recent\"}"
+    run_script check
+    assert_rc "recent trigger passes silence check" 0
+}
+
+test_check_overdue_silence_limit() {
+    seed_registry_with_silence 15m
+    local ts
+    ts="$(utc_ago "$((60 * 60))")"
+    seed_log one "{\"ts\":\"$ts\",\"daemon\":\"one\",\"event\":\"trigger\",\"detail\":\"old\"}"
+    run_script check
+    assert_rc "overdue trigger fails silence check" 1
+    assert_stdout_contains "overdue alert names limit" "15m silence limit"
+    assert_stdout_contains "overdue alert names last trigger" "$ts"
+}
+
+test_check_never_observed_silence_limit() {
+    seed_registry_with_silence 15m
+    run_script check
+    assert_rc "never observed fails silence check" 1
+    assert_stdout_contains "never observed alert is clear" "has never fired"
+}
+
+test_check_unloaded_does_not_add_silence_alert() {
+    seed_registry_with_silence 15m
+    : > "$TEST_DIR/loaded"
+    run_script check
+    assert_rc "unloaded daemon fails check" 1
+    assert_stdout_contains "unloaded daemon alert is present" "not loaded"
+    assert_stdout_not_contains "unloaded daemon has no second silence alert" "silence limit"
 }
 
 test_check_not_loaded() {
@@ -506,6 +703,15 @@ test_load_uses_tsv_plist_column() {
     run_script load one
     assert_rc "load via tsv plist exits 0" 0
     assert_contains "loaded via tsv column" "$(cat "$TEST_DIR/loaded")" "usr.test.one"
+}
+
+test_load_uses_plist_from_6col_registry() {
+    seed_registry_6col
+    : > "$TEST_DIR/loaded"
+    printf '<plist/>\n' > "$TEST_DIR/usr.test.one.plist"
+    run_script load one
+    assert_rc "load via six-column registry exits 0" 0
+    assert_contains "silence column does not corrupt plist" "$(cat "$TEST_DIR/loaded")" "usr.test.one"
 }
 
 test_load_reload_is_idempotent() {
