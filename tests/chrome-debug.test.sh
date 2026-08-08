@@ -364,6 +364,12 @@ SHIM
     assert_rc "launch exits 0" 0
     assert_stdout_contains "confirmation w/ browser+port" "launched Chrome/150.0.7871.46, listening on :9222"
     assert_stdout_contains "linkage line" "attach via MCP server 'chrome-devtools-9222'"
+    # PID + port line: the caller uses these to kill the browser / attach a CDP client.
+    # The launched PID is the fake browser's ($!) so it varies run to run; a glob match
+    # asserts a real number is reported (not "unknown"/empty) alongside the port
+    assert_stdout_contains_blob "reports numeric pid + port" "pid: [0-9]*  port: 9222"
+    # The teardown reminder echoes the literal kill command with that same PID
+    assert_stdout_contains_blob "reports kill reminder" "kill: kill [0-9]*"
 }
 
 test_launch_probe_failure_errors() {

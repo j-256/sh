@@ -60,6 +60,23 @@ assert_not_contains() {
     esac
 }
 
+# Like assert_contains, but the needle is a shell glob pattern rather than a literal
+# substring: metacharacters (*, ?, [...]) are active. Use for shapes that vary run to
+# run -- a PID number, a timestamp -- where a literal substring can't assert the shape
+# (e.g. "pid: [0-9]" matches a real pid but not "pid: unknown"). Matched as a substring:
+# the pattern is wrapped in * on both sides, mirroring assert_contains
+assert_contains_blob() {
+    local label="$1"
+    local haystack="$2"
+    local pattern="$3"
+    # $pattern is intentionally unquoted so its glob metacharacters stay active; the
+    # surrounding * make it a substring (not whole-string) match
+    case "$haystack" in
+        *$pattern*) _ok "$label" ;;
+        *) _fail "$label: expected to match glob '$pattern'" ;;
+    esac
+}
+
 assert_rc() {
     local label="$1"
     local want="$2"
@@ -76,6 +93,12 @@ assert_stdout_not_contains() {
     local label="$1"
     local needle="$2"
     assert_not_contains "$label" "$(get_stdout)" "$needle"
+}
+
+assert_stdout_contains_blob() {
+    local label="$1"
+    local pattern="$2"
+    assert_contains_blob "$label" "$(get_stdout)" "$pattern"
 }
 
 assert_stderr_contains() {

@@ -79,6 +79,7 @@ DEPENDENCIES
   curl      Verify the remote-debugging port is responding (required only for launching, not --dry-run)
   nc        Check whether a candidate port is already in use
   defaults  Resolve .app bundle metadata on macOS
+  lsof      Optional: resolve the owning PID when attaching to an already-serving browser
 EXIT STATUS
   0  Success (launched, or dry-run resolved and printed)
   1  Runtime failure (resolution failed, port busy but not serving, debug endpoint never came up)
@@ -281,6 +282,15 @@ OUTER
         return 1
     }
 
+    # Print the PID listening on a port (the browser's main process, which owns all
+    # its renderer/helper children). Used only to report the PID when attaching to an
+    # already-serving browser we didn't launch. Best-effort: needs lsof (not a hard
+    # dependency), prints nothing / rc 1 if lsof is absent or the port has no listener
+    _port_listener_pid() {
+        command -v lsof >/dev/null 2>&1 || return 1
+        lsof -nP -iTCP:"$1" -sTCP:LISTEN -t 2>/dev/null | head -n 1
+    }
+
     # Sets `port` and `server_name`. Uses explicit `port` if set, else picks lowest
     # free pool port. Emits the off-pool warning. Returns 1 on all-busy / explicit-busy
     _select_port() {
@@ -451,23 +461,37 @@ EOF
         return 0
     fi
 
-    # Prints the success confirmation: version/status line, MCP linkage (or off-pool
-    # note), and the profile dir. $1 = browser version, $2 = mode ("launched" for a
-    # freshly-started browser, "serving" for an already-running one we attached to).
-    # The first line differs by mode so the two cases are distinguishable
+    # Prints the success confirmation: version/status line, PID + port, MCP linkage
+    # (or off-pool note), and the profile dir. $1 = browser version, $2 = mode
+    # ("launched" for a freshly-started browser, "serving" for an already-running one
+    # we attached to), $3 = browser PID (launched mode only; serving mode resolves it
+    # from the listening port). The first line differs by mode so the two cases are
+    # distinguishable. The PID and port are reported explicitly so the caller can kill
+    # the browser (kill <pid>) or attach an independent CDP client (127.0.0.1:<port>)
     _print_attach_info() {
         local ver="$1"
         local mode="$2"
+        local pid="$3"
         if [ "$mode" = "serving" ]; then
             echo "$SCRIPT_NAME: $ver already serving on :$port"
+            # We didn't launch it, so resolve the owning PID from the listening port
+            # (best-effort: needs lsof, which isn't a hard dependency)
+            [ -z "$pid" ] && pid="$(_port_listener_pid "$port")"
         else
             echo "$SCRIPT_NAME: launched $ver, listening on :$port"
         fi
+        # The main browser process owns every renderer/helper child, so `kill <pid>`
+        # tears the whole browser down. Direct-exec launch (not `open -a`) keeps this
+        # PID valid -- it's the process that holds the debug port
+        echo "  pid: ${pid:-unknown}  port: $port"
         if [ -n "$server_name" ]; then
             echo "  → attach via MCP server '$server_name'"
         else
             echo "  (no chrome-devtools MCP entry for :$port; attach another CDP client)"
         fi
+        # Surface the literal teardown command as a reminder (when the PID is known).
+        # Kills the whole browser: the main process owns every renderer/helper child
+        [ -n "$pid" ] && echo "  → kill: kill $pid"
         echo "  profile: $user_data_dir"
     }
 
@@ -486,7 +510,7 @@ EOF
         # relaunch would singleton-abort), so say so rather than silently ignoring it
         [ -n "$fresh" ] && _warn "port :$port is already serving; --fresh ignored (close the browser first to start clean)"
         local serving_ver; serving_ver="$(curl -s --max-time 2 "http://127.0.0.1:$port/json/version" 2>/dev/null | jq -r '.Browser // "unknown"' 2>/dev/null)"
-        _print_attach_info "${serving_ver:-unknown}" serving
+        _print_attach_info "${serving_ver:-unknown}" serving ""
         return 0
     fi
 
@@ -503,7 +527,9 @@ EOF
 
     # Launch as a background child; capture PID. Plain `&` already detaches cleanly
     # (verified: on our exit the browser reparents to launchd and, when headed, stays
-    # in the Dock). We keep the PID only to `wait` on the success path
+    # in the Dock). The PID is the browser's main process (direct exec, not `open -a`,
+    # so it's the real process, not a LaunchServices stub) -- reported to the caller
+    # for `kill`, and used to `wait` on the success path
     "$browser_exe" "${browser_argv[@]}" >/dev/null 2>&1 &
     local browser_pid=$!
 
@@ -527,7 +553,7 @@ EOF
 
     local browser_ver; browser_ver="$(printf '%s' "$version_json" | jq -r '.Browser // "unknown"' 2>/dev/null)"
 
-    _print_attach_info "${browser_ver:-unknown}" launched
+    _print_attach_info "${browser_ver:-unknown}" launched "$browser_pid"
 
     # Hold the foreground so this terminal tab owns the browser: Ctrl-C here kills it
     # and nothing else. Exit status follows the browser
