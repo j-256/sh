@@ -25,10 +25,10 @@ The command holds the foreground – the browser lives in that terminal tab. Ctr
 chrome-debug -p 9223 "/Applications/Microsoft Edge.app"
 ```
 
-**Point at a freshly-downloaded Chrome for Testing by directory** – no deep path. After `npx @puppeteer/browsers install chrome@stable` drops a build under `/wd/chrome`, just hand over the directory:
+**Point at a freshly-downloaded Chrome for Testing by directory** – no deep path. After `npx @puppeteer/browsers install chrome@stable` drops a build under, say, `~/chrome`, just hand over the directory:
 
 ```bash
-chrome-debug /wd/chrome
+chrome-debug ~/chrome
 ```
 
 It searches downward, ignores the nested helper bundles, and picks the newest version's `.app`.
@@ -36,8 +36,8 @@ It searches downward, ignores the nested helper bundles, and picks the newest ve
 **Dry run** – resolve everything and print what *would* launch, without launching:
 
 ```
-$ chrome-debug -n /wd/chrome
-browser: /wd/chrome/mac_arm-150.0.7871.115/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing
+$ chrome-debug -n ~/chrome
+browser: ~/chrome/mac_arm-150.0.7871.115/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing
 port: 9222
 server: chrome-devtools-9222
 profile: /tmp/chrome-debug-9222
