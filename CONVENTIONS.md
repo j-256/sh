@@ -6,6 +6,79 @@ Standards for scripts in this repository.
 
 When a rule here is enforced by a meta-test (`tests/meta-*.test.sh`), the rule names its test and the test's row in the `TESTING.md` table names the rule, so the prose and its enforcement are reachable from each other. See [Meta-tests](TESTING.md#meta-tests) for the convention.
 
+<!-- BEGIN PORTABLE CLI BASELINE -->
+## Portable CLI Baseline
+
+This marker-bounded section is the reusable baseline for creating or substantially revising a standalone CLI or user-invoked script outside this repository. Nearest repository guidance and established ecosystem conventions take precedence. For a non-Bash CLI, preserve the behavioral contract while using the language's established argument parser and implementation patterns. Internal build fragments, hooks, and libraries without a user-facing command surface need only the rules relevant to their interface.
+
+The remainder of this file adds this repository's Bash structure, streamed-execution and sourceability support, single-file distribution guarantees, diagnostic presentation, documentation and testing layout, and commit rules. Those requirements are not part of the portable baseline unless the target project independently adopts them.
+
+### Interface and help
+
+- Every CLI supports `-h` and `--help`, writes help to stdout, and returns success after showing it
+- Help is sufficient to invoke every command correctly: document the synopsis, arguments, options, required environment variables, required file schemas and value formats, non-universal dependencies, and exit statuses
+- Program results go to stdout; diagnostics and progress go to stderr unless a documented mode intentionally makes that information the program result
+- Use `0` for success, `1` for runtime failure, `2` for usage or precondition errors, and `3` for missing dependencies by default; document meanings for `4` and above and any ecosystem-mandated deviations
+- Validate unconditional dependencies early and conditional dependencies immediately before entering the mode that needs them; report a missing dependency distinctly from a runtime failure
+- Store CLI-owned persistent data under a CLI-named directory beneath the appropriate XDG base: `${XDG_CACHE_HOME:-$HOME/.cache}`, `${XDG_STATE_HOME:-$HOME/.local/state}`, `${XDG_CONFIG_HOME:-$HOME/.config}`, or `${XDG_DATA_HOME:-$HOME/.local/share}`; do not relocate files whose paths are owned by another tool or the operating system
+
+### Option grammar
+
+When a CLI exposes options and its ecosystem does not establish different syntax, support these forms consistently:
+
+- Give each short option a long form and give new options a short form by default; long-only exceptions include negations, collisions, reserved short-option namespaces, and machine-facing options
+- Use `-h`/`--help`, `-v`/`--verbose`, `-q`/`--quiet`, `-n`/`--dry-run`, and `-f`/`--force` for those behaviors when present
+- Accept bundled short flags (`-sv`), a value glued to its short option (`-n5`), and a bundle whose value-taking option consumes the remainder (`-vn5` means `-v -n 5`)
+- When a value-taking short option ends a bundle, consume the next token as its value; this is the familiar `-euo pipefail` shape, where `-o` consumes `pipefail`
+- Accept both `--num 5` and `--num=5` for a long option that takes a value, rejecting a missing value and an empty `--num=` consistently
+- Treat `--` as the end of options and allow options and positional arguments to be interleaved when the parser permits it
+- Prefer options that are either flags or require values; introduce an optional-value option only when its value shape is unambiguous
+- Reject unknown options and invalid or missing values as usage errors rather than silently accepting them
+
+Use an established parser when it provides this contract. For a hand-parsed Bash CLI that supports both short and long options, use this exact preprocessor immediately before the parse loop:
+
+```bash
+_expand_short_opts() {
+    # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
+    # $2..$N = "$@"
+    # Populates _EXPANDED; caller does: set -- "${_EXPANDED[@]}"; unset _EXPANDED
+    local value_opts="$1"; shift
+    _EXPANDED=()
+    local passthru=""
+    local arg
+    local rest
+    local c
+    for arg in "$@"; do
+        if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
+        case "$arg" in
+            --)       passthru=1; _EXPANDED+=("$arg") ;;
+            --*|-|"") _EXPANDED+=("$arg") ;;
+            -[a-zA-Z]?*)
+                rest="${arg#-}"
+                while [ -n "$rest" ]; do
+                    c="${rest%"${rest#?}"}"; rest="${rest#?}"
+                    _EXPANDED+=("-$c")
+                    case "$value_opts" in *"$c"*)
+                        [ -n "$rest" ] && _EXPANDED+=("$rest")
+                        rest="" ;;
+                    esac
+                done ;;
+            *)        _EXPANDED+=("$arg") ;;
+        esac
+    done
+}
+
+_expand_short_opts "nXHd" "$@"
+set -- "${_EXPANDED[@]}"; unset _EXPANDED
+```
+
+The call-site string lists every short-option letter that takes a value and is `""` for a flag-only CLI. The helper leaves negative-number tokens intact. Do not add it when `getopts` or another parser already supplies the required short-option behavior.
+
+### Verification
+
+Exercise both help flags, equivalent option forms, `--`, interleaved positionals, invalid and missing values, documented exit statuses, and stdout/stderr separation. Test a conditional dependency through both the mode that needs it and a mode that does not.
+<!-- END PORTABLE CLI BASELINE -->
+
 ## File Structure
 
 ```bash
@@ -502,42 +575,7 @@ Spelling is canonical too: the dry-run long flag is `--dry-run` (hyphenated), ne
 
 ### Preprocessor
 
-Every script with short options defines `_expand_short_opts` inside the wrapper function and calls it immediately above the parse loop. The function body is identical across scripts; the call-site argument lists the letters that take a value (`""` if none).
-
-```bash
-_expand_short_opts() {
-    # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
-    # $2..$N = "$@"
-    # Populates _EXPANDED; caller does: set -- "${_EXPANDED[@]}"; unset _EXPANDED
-    local value_opts="$1"; shift
-    _EXPANDED=()
-    local passthru=""
-    local arg
-    local rest
-    local c
-    for arg in "$@"; do
-        if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
-        case "$arg" in
-            --)       passthru=1; _EXPANDED+=("$arg") ;;
-            --*|-|"") _EXPANDED+=("$arg") ;;
-            -[a-zA-Z]?*)
-                rest="${arg#-}"
-                while [ -n "$rest" ]; do
-                    c="${rest%"${rest#?}"}"; rest="${rest#?}"
-                    _EXPANDED+=("-$c")
-                    case "$value_opts" in *"$c"*)
-                        [ -n "$rest" ] && _EXPANDED+=("$rest")
-                        rest="" ;;
-                    esac
-                done ;;
-            *)        _EXPANDED+=("$arg") ;;
-        esac
-    done
-}
-
-_expand_short_opts "nXHd" "$@"
-set -- "${_EXPANDED[@]}"; unset _EXPANDED
-```
+Every script with short options defines the exact [`_expand_short_opts`](#portable-cli-baseline) helper from the portable baseline inside the wrapper function and calls it immediately above the parse loop. The call-site argument lists the letters that take a value (`""` if none).
 
 The call-site argument lists every short-option letter in the script that takes a value -- `"nwsXHdA"` in `curl-timing`, `""` in `bak`. A missing letter causes `-n5` to silently split into `-n -5`.
 
