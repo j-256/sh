@@ -10,7 +10,7 @@ cd sh
 make setup         # activates the git hooks
 ```
 
-`make setup` runs [`tests/install-hooks.sh`](tests/install-hooks.sh), which points git's `core.hooksPath` at [`tests/hooks/`](tests/hooks) so the tracked [`pre-commit`](tests/hooks/pre-commit) hook runs on every commit. To activate the hooks without make, run `tests/install-hooks.sh` directly; to remove them, `make uninstall` (or `tests/install-hooks.sh --uninstall`).
+`make setup` runs [`test/install-hooks.sh`](test/install-hooks.sh), which points git's `core.hooksPath` at [`test/hooks/`](test/hooks) so the tracked [`pre-commit`](test/hooks/pre-commit) hook runs on every commit. To activate the hooks without make, run `test/install-hooks.sh` directly; to remove them, `make uninstall` (or `test/install-hooks.sh --uninstall`).
 
 There are no runtime dependencies – the scripts target Bash 3.2 and stock POSIX tools. The [`Makefile`](Makefile) is just a thin task runner (`make test`, `make setup`, `make uninstall`); it needs only GNU Make and bash, both of which ship with macOS.
 
@@ -22,14 +22,14 @@ Every script is paired with a doc and a test, and follows a shared set of standa
 - **Docs** – [`DOCS.md`](DOCS.md): how to write a `<script>.md` doc.
 - **Tests** – [`TESTING.md`](TESTING.md): how to write a `<script>.test.sh`, plus the cross-cutting [meta-tests](TESTING.md#meta-tests) and the [pre-commit hook](TESTING.md#pre-commit-hook).
 
-A new script needs all four to land together: the script at `scripts/<name>`, its `docs/<name>.md`, its `tests/<name>.test.sh`, and an entry in [`INDEX.md`](INDEX.md). The `meta-coverage` test enforces that this set stays complete.
+A new script needs all four to land together: the script at `scripts/<name>`, its `docs/<name>.md`, its `test/<name>.test.sh`, and an entry in [`INDEX.md`](INDEX.md). The `meta-coverage` test enforces that this set stays complete.
 
 Links in tracked markdown point at real repo paths (`scripts/tsd`, `docs/tsd.md`) so they resolve when browsed on GitHub. The site rewrites them to the canonical public URLs when rendering – `https://toolio.sh/tsd` for a script, `https://toolio.sh/tsd.md.html` for a doc – so don't hand-write those public forms into a relative link.
 
 ## Before committing
 
 ```sh
-make test          # runs the full suite (tests/test-runner.sh)
+make test          # runs the full suite (test/test-runner.sh)
 ```
 
 The pre-commit hook automatically runs the fast, static checks (currently the comment-style lint) on every commit, but it only covers a subset and can be bypassed with `git commit --no-verify`. Run `make test` yourself before pushing to catch everything – the hook is a convenience gate, not a substitute for the full suite.

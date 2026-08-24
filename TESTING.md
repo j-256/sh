@@ -4,7 +4,7 @@ Standards for test files in this repository.
 
 ## Principles
 
-- Every script gets a `<name>.test.sh` in the `tests/` directory (alongside `test-helpers.sh` and `test-runner.sh`). The exceptions are cross-cutting **meta-tests**, named `meta-*.test.sh` -- see [Meta-tests](#meta-tests)
+- Every script gets a `<name>.test.sh` in the `test/` directory (alongside `test-helpers.sh` and `test-runner.sh`). The exceptions are cross-cutting **meta-tests**, named `meta-*.test.sh` -- see [Meta-tests](#meta-tests)
 - Tests are self-contained, network-free, and runnable with bash 3.2+
 - No external dependencies beyond bash builtins and standard POSIX tools (mktemp, cat, mkdir, chmod, etc.)
 - All external commands the script-under-test calls (curl, dig, jq, etc.) are shimmed
@@ -213,9 +213,9 @@ chmod +x "$SHIM_DIR/dig"
 
 ## test-runner.sh
 
-An aggregate runner that finds and runs all test files. Lives in `tests/` alongside the test files. Unlike test files, this follows CONVENTIONS.md since it is a tool.
+An aggregate runner that finds and runs all test files. Lives in `test/` alongside the test files. Unlike test files, this follows CONVENTIONS.md since it is a tool.
 
-- Globs `*.test.sh` in its own directory (`tests/`)
+- Globs `*.test.sh` in its own directory (`test/`)
 - Runs each file, captures its exit code
 - Accepts an optional pattern to filter which tests to run (e.g. `test-runner.sh pin-dns`)
 - Prints a final summary: which files passed, which failed
@@ -223,7 +223,7 @@ An aggregate runner that finds and runs all test files. Lives in `tests/` alongs
 
 ## Permissions
 
-The executable bit follows the repo-wide rule that `+x` means "execute this" and `-x` means "source this, or it is not runnable as-is" (e.g. the source-only `dbg` and `prompt` scripts are `-x` and refuse execution). In `tests/`:
+The executable bit follows the repo-wide rule that `+x` means "execute this" and `-x` means "source this, or it is not runnable as-is" (e.g. the source-only `dbg` and `prompt` scripts are `-x` and refuse execution). In `test/`:
 
 | File | Bit | Why |
 | --- | --- | --- |
@@ -251,7 +251,7 @@ Most test files target one script: `<name>.test.sh` exercises `../<name>`, and d
 Conventions for a meta-test:
 
 - **Name it `meta-<topic>.test.sh`.** This is the signal. `meta-coverage.test.sh` keys off the prefix to exempt meta-tests from its "every test has a script" check -- a meta-test without the prefix would be flagged as an orphan (a test for a script that doesn't exist).
-- **No `UNDER_TEST`.** There is no single script under test. Walk `"$REPO_DIR"/*` (or `tests/*.test.sh`) instead.
+- **No `UNDER_TEST`.** There is no single script under test. Walk `"$REPO_DIR"/*` (or `test/*.test.sh`) instead.
 - **Reuse the `_is_bash_script` filter** when iterating the repo, so node scripts (`render-md`) and non-script `.sh`/`.md`/`.json` files are excluded consistently. `meta-cleanup-on-source.test.sh` and `meta-coverage.test.sh` carry identical copies.
 - **Cross-link it with the rule it enforces.** When a meta-test guards a prose rule in `CONVENTIONS.md`, name the test in that rule and name the rule's section in this file's meta-test table, so neither can be found without finding the other. (`meta-coverage` is the exception: its rule lives here, not in `CONVENTIONS.md`, so it links only within `TESTING.md`.) This linkage is a prose convention, not a checked one -- whether a link points at the *right* rule, and whether a convention even warrants a test, are judgment calls a script can't make.
 
@@ -263,11 +263,11 @@ A meta-test only fires when someone runs the suite, so a convention it polices c
 
 ```bash
 make setup                         # or, without make:
-tests/install-hooks.sh             # points core.hooksPath at tests/hooks/
-tests/install-hooks.sh --uninstall # restore the default
+test/install-hooks.sh             # points core.hooksPath at test/hooks/
+test/install-hooks.sh --uninstall # restore the default
 ```
 
-The hook (`tests/hooks/pre-commit`) runs only the static, no-script-execution meta-tests listed in its `STATIC_METATESTS` variable (currently `meta-comment-style`, `meta-canonical-letters`, and `meta-coverage`), so it stays fast and there is no incentive to skip it. The slower fleet meta-tests and per-script suites are **not** run by the hook -- run those with `test-runner.sh` before pushing.
+The hook (`test/hooks/pre-commit`) runs only the static, no-script-execution meta-tests listed in its `STATIC_METATESTS` variable (currently `meta-comment-style`, `meta-canonical-letters`, and `meta-coverage`), so it stays fast and there is no incentive to skip it. The slower fleet meta-tests and per-script suites are **not** run by the hook -- run those with `test-runner.sh` before pushing.
 
 The hook is a convenience gate, not a guarantee: `git commit --no-verify` bypasses it, and a clone that never runs `install` has no hook at all. Server-side CI is the only unskippable enforcement; until this repo has it, the hook plus a periodic full `test-runner.sh` run are the backstop.
 

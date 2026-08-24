@@ -1,15 +1,15 @@
 #!/bin/bash
 # install-hooks.sh - Activate this repo's tracked git hooks
 #
-# Points git's core.hooksPath at tests/hooks/, so the tracked pre-commit hook
+# Points git's core.hooksPath at test/hooks/, so the tracked pre-commit hook
 # runs without copying anything into .git/hooks. Because the hooks are
 # version-controlled, every clone activates the same set with one command, and
 # edits take effect immediately -- no re-install. Usually run via `make setup`,
 # but works standalone too.
 #
 # Usage:
-#   tests/install-hooks.sh             Activate the hooks
-#   tests/install-hooks.sh --uninstall   Restore git's default hooks path
+#   test/install-hooks.sh             Activate the hooks
+#   test/install-hooks.sh --uninstall   Restore git's default hooks path
 #
 # Run from anywhere inside the repo.
 
@@ -18,7 +18,7 @@ set -e
 # Resolve to physical paths (pwd -P) so the prefix strip below works even when
 # the repo is reached through a symlink: git rev-parse --show-toplevel always
 # returns the resolved path, so the hooks dir must be resolved to match. The
-# hooks live in the hooks/ subdir next to this script (tests/hooks/)
+# hooks live in the hooks/ subdir next to this script (test/hooks/)
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 hooks_dir="$(cd "$script_dir/hooks" && pwd -P)"
 repo_root="$(cd "$(git -C "$script_dir" rev-parse --show-toplevel)" && pwd -P)"

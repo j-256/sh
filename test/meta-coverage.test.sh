@@ -1,13 +1,13 @@
 #!/bin/bash
-# meta-coverage.test.sh - Verify the tests/ directory is well-formed
+# meta-coverage.test.sh - Verify the test/ directory is well-formed
 #
 # Cross-cutting meta-test (meta-*.test.sh): validates a convention across the
 # whole script fleet rather than a single script. See TESTING.md.
 #
 # Checks the script<->test bijection in both directions, so neither a new
 # script nor a new test can slip in unpaired:
-#   1. Every bash script in the repo has a tests/<name>.test.sh
-#   2. Every non-meta tests/<name>.test.sh has a matching bash script
+#   1. Every bash script in the repo has a test/<name>.test.sh
+#   2. Every non-meta test/<name>.test.sh has a matching bash script
 #
 # A test named meta-*.test.sh is exempt from direction 2: it is cross-cutting
 # and intentionally has no eponymous script. That exemption is the whole reason
@@ -35,7 +35,7 @@ FLEET_DIR="$(_fleet_dir "$REPO_DIR")"
 # --- test cases ---
 
 test_every_script_has_a_test() {
-    # Walk every bash script in the repo; each must have tests/<name>.test.sh.
+    # Walk every bash script in the repo; each must have test/<name>.test.sh.
     # One assertion per script keeps a missing test's failure message specific
     local script
     for script in "$FLEET_DIR"/*; do
@@ -120,7 +120,7 @@ test_test_files_are_executable() {
         if [ -x "$test_file" ]; then
             _ok "$name: executable"
         else
-            _fail "$name: not executable -- run: chmod +x tests/$name"
+            _fail "$name: not executable -- run: chmod +x test/$name"
         fi
     done
 }
@@ -131,10 +131,10 @@ test_infra_perms_match_role() {
     if [ -x "$SCRIPT_DIR/test-runner.sh" ]; then
         _ok "test-runner.sh: executable (entry point)"
     else
-        _fail "test-runner.sh: not executable -- run: chmod +x tests/test-runner.sh"
+        _fail "test-runner.sh: not executable -- run: chmod +x test/test-runner.sh"
     fi
     if [ -x "$SCRIPT_DIR/test-helpers.sh" ]; then
-        _fail "test-helpers.sh: executable -- it is sourced, not run; run: chmod -x tests/test-helpers.sh"
+        _fail "test-helpers.sh: executable -- it is sourced, not run; run: chmod -x test/test-helpers.sh"
     else
         _ok "test-helpers.sh: not executable (sourced)"
     fi

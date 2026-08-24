@@ -1,7 +1,7 @@
 # Makefile - task runner for the sh repo
 # Needs only GNU Make + bash (both ship with macOS). The scripts have no
 # runtime dependencies and there is no build step, so every target is a thin
-# wrapper around tests/*.sh
+# wrapper around test/*.sh
 
 # Absolute path to this Makefile's dir, so targets work from anywhere
 # (e.g. make -C /path/to/repo test) -- mirrors how the scripts resolve paths
@@ -19,12 +19,12 @@ help:
 
 # Run the test suite; target specific scripts with: make test ARGS="pin-dns"
 test:
-	@/bin/bash $(root)tests/test-runner.sh $(ARGS)
+	@/bin/bash $(root)test/test-runner.sh $(ARGS)
 
-# Activate this repo's tracked git hooks (points core.hooksPath at tests/hooks/)
+# Activate this repo's tracked git hooks (points core.hooksPath at test/hooks/)
 setup:
-	@/bin/bash $(root)tests/install-hooks.sh
+	@/bin/bash $(root)test/install-hooks.sh
 
 # Deactivate the tracked git hooks (restore git's default hooks path)
 uninstall:
-	@/bin/bash $(root)tests/install-hooks.sh --uninstall
+	@/bin/bash $(root)test/install-hooks.sh --uninstall

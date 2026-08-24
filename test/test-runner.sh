@@ -26,8 +26,8 @@ DESCRIPTION
   Finds and runs all .test.sh files in the same directory.
   If one or more names are given, only runs the tests they name. Each
   name is reduced to a script name (basename minus .test.sh), so a bare
-  name, a filename (pin-dns.test.sh), or a path (tests/pin-dns.test.sh)
-  all select the same test -- and a shell glob like tests/meta-*.test.sh
+  name, a filename (pin-dns.test.sh), or a path (test/pin-dns.test.sh)
+  all select the same test -- and a shell glob like test/meta-*.test.sh
   selects that whole group. Matching is exact, not substring: a name of
   s runs s alone, never stats.
   -m/--meta selects the cross-cutting meta-*.test.sh group by name,
@@ -68,9 +68,9 @@ EOF
                 done
                 ;;
             # A name may be a bare script name (pin-dns), a test filename
-            # (pin-dns.test.sh), or a path (tests/pin-dns.test.sh) -- basename
+            # (pin-dns.test.sh), or a path (test/pin-dns.test.sh) -- basename
             # reduces all three to the script name, so a shell-expanded glob
-            # like tests/meta-*.test.sh selects that group. The match downstream
+            # like test/meta-*.test.sh selects that group. The match downstream
             # stays exact (<name>.test.sh) -- no substring-glob footgun
             *) names+=("$(basename "$1" .test.sh)") ;;
         esac

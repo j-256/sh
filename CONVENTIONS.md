@@ -4,7 +4,7 @@ Standards for scripts in this repository.
 
 **See also:** [`DOCS.md`](DOCS.md) for how to write a `<script>.md` doc; [`TESTING.md`](TESTING.md) for how to write a `<script>.test.sh` test file.
 
-When a rule here is enforced by a meta-test (`tests/meta-*.test.sh`), the rule names its test and the test's row in the `TESTING.md` table names the rule, so the prose and its enforcement are reachable from each other. See [Meta-tests](TESTING.md#meta-tests) for the convention.
+When a rule here is enforced by a meta-test (`test/meta-*.test.sh`), the rule names its test and the test's row in the `TESTING.md` table names the rule, so the prose and its enforcement are reachable from each other. See [Meta-tests](TESTING.md#meta-tests) for the convention.
 
 <!-- BEGIN PORTABLE CLI BASELINE -->
 ## Portable CLI Baseline
@@ -253,7 +253,7 @@ _foo() {
 
 The path-based pre-check is deliberate: matching on the full path (`/dev/*`) rather than the basename (which could be `63`, `stdin`, etc.) avoids fragile globs that could misfire on legitimate filenames starting with a digit or literally named `stdin`. The post-basename case only handles the stdin-pipe shape, where basename is `bash` or empty. Real-file invocations pass through both cases untouched, so rename/symlink tracking still works. The canonical name is the one non-user-visible place besides the header comment where the literal filename appears.
 
-Enforced by `tests/meta-curl-pipe.test.sh`, which runs every script through all four pipe/procsub shapes with `--help` and asserts the help output names the script (never `bash` or a `/dev/fd` digit) (see TESTING.md).
+Enforced by `test/meta-curl-pipe.test.sh`, which runs every script through all four pipe/procsub shapes with `--help` and asserts the help output names the script (never `bash` or a `/dev/fd` digit) (see TESTING.md).
 
 ## Self-sufficiency
 
@@ -270,7 +270,7 @@ On the invocation surface -- the set of subcommands, flags, and environment-vari
 
 The header carries the invocation *surface* -- name, one-line description, synopsis, options, environment-variable names -- so a reader learns what the script does and how to invoke it without running it. It need not inline a bulky precondition's full *content*: a multi-line file schema or value-format table lives in `-h` only, and the header just names the knob that points to it (e.g. list `DAEMONS_REGISTRY` in the header, put its column layout in `-h`'s `FILES`). Inlining such a table in the header would defeat its role as the compact glance. A precondition small enough to state in a token or two (an argument's `--detail-stdin` form, an enum's values) can go in both; the split is about bulk, not about hiding preconditions from the header.
 
-Enforcement is two-tier. That `-h` documents every option the parser accepts, and that every short option has a long form, is mechanical and meta-tested by `tests/meta-surface-parity.test.sh` (the header-vs-`-h`-vs-`.md` parity is a documented follow-up not yet enforced). Whether every *precondition* actually reached `-h` is a semantic judgment no linter can make -- it is a review obligation. A green suite means the surfaces name the same things, not that `-h` suffices to use the script; that second bar is on author and reviewer.
+Enforcement is two-tier. That `-h` documents every option the parser accepts, and that every short option has a long form, is mechanical and meta-tested by `test/meta-surface-parity.test.sh` (the header-vs-`-h`-vs-`.md` parity is a documented follow-up not yet enforced). Whether every *precondition* actually reached `-h` is a semantic judgment no linter can make -- it is a review obligation. A green suite means the surfaces name the same things, not that `-h` suffices to use the script; that second bar is on author and reviewer.
 
 ## Cleanup Trap
 
@@ -288,7 +288,7 @@ trap '__prompt__unset || echo "'"$__prompt__name"' trap failed!" >&2; trap - RET
 - Place after inner function definitions, before main logic
 - The trailing `trap - RETURN` is load-bearing: it empties the trap slot before the function returns, which keeps the caller's pre-existing RETURN trap intact. See below.
 
-Enforced by `tests/meta-cleanup-on-source.test.sh`, which sources every script with `--help` and asserts no functions or variables leak into the caller's shell (see TESTING.md).
+Enforced by `test/meta-cleanup-on-source.test.sh`, which sources every script with `--help` and asserts no functions or variables leak into the caller's shell (see TESTING.md).
 
 ### Why `trap - RETURN` at the end of the handler
 
@@ -332,7 +332,7 @@ This ensures:
 ## Style
 
 - Single space before inline comments: `cmd # comment`
-- No trailing `.` or `!` on comments, even on multi-sentence ones. Same rule as error messages. Only the *trailing* terminator is banned: in a multi-line comment, an internal line may end in `.` to separate sentences (the block is one message, like `"X failed. Run -h"`); just the block's last line must not. Enforced by `tests/meta-comment-style.test.sh` and the pre-commit hook (see TESTING.md).
+- No trailing `.` or `!` on comments, even on multi-sentence ones. Same rule as error messages. Only the *trailing* terminator is banned: in a multi-line comment, an internal line may end in `.` to separate sentences (the block is one message, like `"X failed. Run -h"`); just the block's last line must not. Enforced by `test/meta-comment-style.test.sh` and the pre-commit hook (see TESTING.md).
 - No trailing `:` on comments that sit directly above code -- the colon adds no signal there, since "introduces follow-on output" is trivially true.
 - Trailing `:` IS load-bearing on comments that introduce more *comments*: header sections (`# Usage:`, `# Options:`, `# Dependencies:`, `# Environment:`, `# Examples:`, `# References:`), in-block list intros (`# Validate bracket syntax early:`, `# Accepts:`, `# Outputs:`, `# update BOTH:`), and any line whose subsequent comment lines are an indented list/sample/URL block. Keep the colon -- without it the reader can't see where the introducing sentence ends and the list begins.
 - `$(...)` for command substitution, not backticks
@@ -395,7 +395,7 @@ All diagnostic output follows a single canonical shape:
 
 All four helpers write to **stderr**. Program output stays on stdout. (Routing is a review obligation, not mechanically checked -- `_info` legitimately routes to stdout in some scripts, e.g. a `--list` mode that keeps stdout pipe-clean, so a static routing assertion would over-fire.)
 
-Two legacy prefix shapes are **non-conforming** and must not be reintroduced: `[SEV] name:` (a space and a trailing colon before the message, often the literal script name) and `[name] SEV:` (name-first, severity as a word). The canonical form is severity-led and bracket-adjacent -- `[SEV][$SCRIPT_NAME]` with no space and no colon. This is enforced by [`tests/meta-diagnostic-format.test.sh`](tests/meta-diagnostic-format.test.sh), which asserts every diagnostic helper's body contains the canonical `[SEV][` token (or a `PFX_<SEV>` reference for the structured colored variant below).
+Two legacy prefix shapes are **non-conforming** and must not be reintroduced: `[SEV] name:` (a space and a trailing colon before the message, often the literal script name) and `[name] SEV:` (name-first, severity as a word). The canonical form is severity-led and bracket-adjacent -- `[SEV][$SCRIPT_NAME]` with no space and no colon. This is enforced by [`test/meta-diagnostic-format.test.sh`](test/meta-diagnostic-format.test.sh), which asserts every diagnostic helper's body contains the canonical `[SEV][` token (or a `PFX_<SEV>` reference for the structured colored variant below).
 
 The severity token leads so `grep '^\[ERR\]'` is greppable across the repo without per-script awareness. Severity is the most actionable field when scanning output, matching the ordering in `journalctl` and most log viewers. Three-letter tokens also line up when levels mix, producing a tidy left column.
 
@@ -569,9 +569,9 @@ Short and long forms follow two asymmetric rules:
 - **Every option gets a short by default.** Give a new option both a short and a long form unless a listed exception applies. The short is the ergonomic path for a toolkit you type yourself; the mandatory long form (below) keeps `--help`, docs, and errors legible, so short-by-default costs nothing in readability.
 - **Every short must have a long; a long may go short-less only by exception.** The long form is what appears in scripts, docs, and error messages. Going long-only requires one of: **reserved namespace** (`pin-dns` gives its whole short space to curl passthrough); **negation flag** (`--no-save`, `--no-extensions` conventionally carry no short); **collision** (the letter is taken by a more-deserving option, or is a canonical letter for a behavior this script has); or **genuinely never hand-typed** (machine-facing or diagnostic flags like `--print-pool`). A long-only option carries a one-line comment naming which exception applies, mirroring the value-opts-exclusion comment rule below. When the option's absent short is a *canonical* letter (`--dry-run` without `-n`, `--force` without `-f`) the meta-test below would otherwise flag it, so that comment takes the form `# meta:canonical-exempt: <reason>` on the option's `case` arm, which the test reads to waive exactly that long (e.g. pin-dns's `--dry-run) # meta:canonical-exempt: reserved namespace -- -n is curl's --netrc`).
 
-The behavior-scoped half of the canonical-letter rule is enforced by `tests/meta-canonical-letters.test.sh`, which asserts that a script whose option set contains `--force` also has `-f`, and `--dry-run` also has `-n`, waiving any arm marked `# meta:canonical-exempt` (see TESTING.md). The short-by-default direction itself is a judgment call, not mechanically checked.
+The behavior-scoped half of the canonical-letter rule is enforced by `test/meta-canonical-letters.test.sh`, which asserts that a script whose option set contains `--force` also has `-f`, and `--dry-run` also has `-n`, waiving any arm marked `# meta:canonical-exempt` (see TESTING.md). The short-by-default direction itself is a judgment call, not mechanically checked.
 
-Spelling is canonical too: the dry-run long flag is `--dry-run` (hyphenated), never `--dryrun`. `meta-canonical-letters` keys off the literal `--dry-run`, so a script spelling it `--dryrun` slips past it entirely (no `--dry-run` token, no assertion). [`tests/meta-flag-spelling.test.sh`](tests/meta-flag-spelling.test.sh) closes that gap: it flags the non-canonical `--dryrun` spelling directly, via the shared `_option_flags` extractor.
+Spelling is canonical too: the dry-run long flag is `--dry-run` (hyphenated), never `--dryrun`. `meta-canonical-letters` keys off the literal `--dry-run`, so a script spelling it `--dryrun` slips past it entirely (no `--dry-run` token, no assertion). [`test/meta-flag-spelling.test.sh`](test/meta-flag-spelling.test.sh) closes that gap: it flags the non-canonical `--dryrun` spelling directly, via the shared `_option_flags` extractor.
 
 ### Preprocessor
 
@@ -748,5 +748,5 @@ The spec names `~/.local/bin` for user executables but defines no variable for i
 
 - **Subject format:** `Update <script> - <short description>` (leading verb "Update", no final period). For truly new additions, `Add <script> - <short description>`.
 - **Body:** bulleted, one bullet per concrete change. Focus on the "what" -- the rationale can go in the spec or commit message body paragraph if needed, but subject + bullets is usually enough.
-- **Scope:** one commit per script. The commit covers the script itself plus `docs/<name>.md` and `tests/<name>.test.sh` if those change. Cross-cutting edits (`CONVENTIONS.md`, `test-helpers.sh`, `test-runner.sh`) get their own commits.
+- **Scope:** one commit per script. The commit covers the script itself plus `docs/<name>.md` and `test/<name>.test.sh` if those change. Cross-cutting edits (`CONVENTIONS.md`, `test-helpers.sh`, `test-runner.sh`) get their own commits.
 - **Exceptions:** when a single change applies identically to multiple scripts -- typo sweeps, formatting passes, or one mechanical fix repeated across several files -- bundle them into one commit. The guiding principle is "splitting would add no clarity"; several near-identical commits add review cost without payoff. Subject format for bundled commits: `Update <script-a> + <script-b> - <description>` for two, `Update <N> scripts - <description>` for more.

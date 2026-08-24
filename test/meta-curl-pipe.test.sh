@@ -38,7 +38,7 @@ FLEET_DIR="$(_fleet_dir "$REPO_DIR")"
 # `<src> | bash -- -h` in all three shapes below. The historical exclusions are
 # now filtered structurally rather than hand-listed:
 #   - render-md      node shebang, not bash -- _is_bash_script rejects it
-#   - test-runner.sh lives in tests/, never reached by the repo-root walk
+#   - test-runner.sh lives in test/, never reached by the repo-root walk
 # Add a name here only if a real bash script genuinely cannot be -h-piped
 EXCLUDE=" "
 _is_excluded() { case "$EXCLUDE" in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
