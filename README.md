@@ -7,6 +7,8 @@ A mixed collection of small shell utilities I've written over the years to make 
 - Contributing: [CONTRIBUTING.md](CONTRIBUTING.md) – setup, conventions, and tests
 - Conventions: [CONVENTIONS.md](CONVENTIONS.md), [DOCS.md](DOCS.md), [TESTING.md](TESTING.md)
 
+![The Toolio shell-utility catalog showing categories, runnable scripts, and concise descriptions](docs/screenshots/cover.png)
+
 ## Some picks
 
 A few that might be worth a look before you scroll the catalog. These are mostly the ones where the script does something non-obvious or solves a recurring annoyance.
