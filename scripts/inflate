@@ -53,7 +53,7 @@ OPTIONS
 EXIT STATUS
   0  Success
   1  Runtime failure (BLS calculator response didn't yield a number)
-  2  Usage error (missing amount, missing year, month out of range)
+  2  Usage error (missing amount, missing year, invalid month)
   3  Dependency error (curl missing)
 DEPENDENCIES
   curl
@@ -79,10 +79,17 @@ EOF
     local input_year="$2"
     local input_month="${3:-1}" # default to January
 
-    # Validate month range before network request - an invalid month produces a
+    # Validate the month before network request - an invalid month produces a
     # confusing downstream error (blank month name in the failure message)
+    local month_error="month must be an integer in range [1, 12] (got: '$input_month'). Run \`$SCRIPT_NAME -h\` for usage"
+    case "$input_month" in
+        ""|*[!0-9]*)
+            _error "$month_error"
+            return 2
+            ;;
+    esac
     if [ "$input_month" -lt 1 ] || [ "$input_month" -gt 12 ]; then
-        _error "month must be in range [1, 12] (got: $input_month). Run \`$SCRIPT_NAME -h\` for usage"
+        _error "$month_error"
         return 2
     fi
     # Zero-pad month if necessary - printf is not good here because numbers with leading zeroes can be interpreted as octal

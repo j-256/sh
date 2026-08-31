@@ -138,6 +138,21 @@ test_month_with_leading_zero() {
     assert_contains "curl gets zero-padded month" "$(get_curl_args)" "year1=198003"
 }
 
+test_nonnumeric_month_is_usage_error() {
+    run_script 100 1980 Feb
+    assert_rc "nonnumeric month returns 2" 2
+    assert_stderr_contains "canonical month error" "[ERR][inflate] month must be an integer in range [1, 12] (got: 'Feb'). Run \`inflate -h\` for usage"
+    assert_stderr_not_contains "no shell arithmetic diagnostic" "integer expression expected"
+    assert_eq "invalid month skips network" "$(get_curl_args)" ""
+}
+
+test_out_of_range_month_is_usage_error() {
+    run_script 100 1980 13
+    assert_rc "month above range returns 2" 2
+    assert_stderr_contains "range error quotes value" "(got: '13')"
+    assert_eq "out-of-range month skips network" "$(get_curl_args)" ""
+}
+
 test_curl_called_twice() {
     run_script 150 1970 9
     assert_rc "conversion exits 0" 0
