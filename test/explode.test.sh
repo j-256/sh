@@ -156,11 +156,12 @@ test_dry_run_no_collision() {
     create_test_dir "dryrun"
     run_script --dry-run "$TEST_DIR/dryrun"
     assert_rc "dry-run succeeds" 0
-    assert_stdout_contains "dry-run: shows move target" "Would move to $TEST_DIR:"
-    assert_stdout_contains "dry-run: lists file1" "file1.txt"
+    assert_stdout_contains "dry-run: shows canonical move target" "[DRY][explode] Would move into '$TEST_DIR':"
+    assert_stdout_contains "dry-run: quotes and indents file1" "  'file1.txt'"
     assert_stdout_contains "dry-run: lists file2" "file2.txt"
     assert_stdout_contains "dry-run: lists subdir" "subdir"
-    assert_stdout_contains "dry-run: shows remove" "Would remove: $TEST_DIR/dryrun"
+    assert_stdout_contains "dry-run: shows canonical remove" "[DRY][explode] Would remove directory: '$TEST_DIR/dryrun'"
+    assert_eq "dry-run: has no diagnostics" "$(get_stderr)" ""
     assert_eq "dry-run: dir still exists" "$(dir_exists "$TEST_DIR/dryrun" && echo "yes" || echo "no")" "yes"
     assert_eq "dry-run: files not moved" "$(file_exists "$TEST_DIR/file1.txt" && echo "no" || echo "yes")" "yes"
 }
@@ -180,7 +181,7 @@ test_dry_run_with_force() {
     echo "existing" > "$TEST_DIR/file1.txt"
     run_script --dry-run --force "$TEST_DIR/dryrun"
     assert_rc "dry-run force succeeds" 0
-    assert_stdout_contains "dry-run force: shows overwrite" "Would overwrite (--force):"
+    assert_stdout_contains "dry-run force: shows canonical overwrite" "[DRY][explode] Would overwrite in '$TEST_DIR' (--force):"
     assert_stdout_contains "dry-run force: lists collision" "file1.txt"
     assert_eq "dry-run force: existing unchanged" "$(cat "$TEST_DIR/file1.txt")" "existing"
     assert_eq "dry-run force: dir still exists" "$(dir_exists "$TEST_DIR/dryrun" && echo "yes" || echo "no")" "yes"
@@ -228,7 +229,7 @@ test_bundled_short_opts() {
     create_test_dir "bundle"
     run_script -nv "$TEST_DIR/bundle"
     assert_rc "bundled -nv succeeds" 0
-    assert_stdout_contains "bundled: dry-run active" "Would move to"
+    assert_stdout_contains "bundled: dry-run active" "[DRY][explode] Would move into"
     assert_eq "bundled: dir still exists" "$(dir_exists "$TEST_DIR/bundle" && echo "yes" || echo "no")" "yes"
 }
 
@@ -237,8 +238,8 @@ test_bundled_with_force() {
     echo "existing" > "$TEST_DIR/file1.txt"
     run_script -nvf "$TEST_DIR/bundle3"
     assert_rc "bundled -nvf succeeds" 0
-    assert_stdout_contains "bundled: force active" "Would overwrite (--force):"
-    assert_stdout_contains "bundled: dry-run active" "Would move to"
+    assert_stdout_contains "bundled: force active" "[DRY][explode] Would overwrite in"
+    assert_stdout_contains "bundled: dry-run active" "[DRY][explode] Would move into"
 }
 
 test_empty_directory() {
@@ -301,7 +302,7 @@ test_combined_options() {
     create_test_dir "combined"
     run_script -n -v "$TEST_DIR/combined"
     assert_rc "combined options succeed" 0
-    assert_stdout_contains "combined: shows moves" "Would move to"
+    assert_stdout_contains "combined: shows moves" "[DRY][explode] Would move into"
     assert_eq "combined: dir still exists" "$(dir_exists "$TEST_DIR/combined" && echo "yes" || echo "no")" "yes"
 }
 

@@ -208,6 +208,16 @@ test_drop_in_url_hostname_target() {
     assert_contains "dig called" "$(get_dig_log)" "dig"
 }
 
+test_dry_run_prints_copyable_command_to_stdout() {
+    run_script --dry-run --no-impersonate --target "203.0.113.42" \
+        "https://example.com/path" -- -H "X-Test: two words"
+    assert_rc "dry-run" 0
+    assert_stdout_contains "canonical dry-run command" "[DRY][pin-dns] Would run: curl"
+    assert_stdout_contains "command shell-escapes spaces" 'X-Test:\ two\ words'
+    assert_stderr_not_contains "no legacy command banner" "[CMD]"
+    assert_eq "dry-run does not execute curl" "$(get_curl_args)" ""
+}
+
 test_useless_s_warning() {
     run_script -s "https://example.com" --target "edge.somesite.com"
     assert_rc "useless-s" 0

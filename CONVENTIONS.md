@@ -539,6 +539,28 @@ Palette: `[ERR]` red (`\033[31m`), `[WRN]` yellow (`\033[33m`), `[INF]` dim (`\0
 
 Default to the plain variant. Only reach for a colored variant when output disambiguation genuinely matters.
 
+## Dry-run output
+
+A script with `--dry-run` reports the mutation plan as program output on stdout. The plan is the requested result, not incidental progress. Warnings, failures, and supporting diagnostics remain on stderr through their normal helpers.
+
+Every script that parses `--dry-run` defines this exact helper and routes each counterfactual action header through it:
+
+```bash
+_dry() { printf '[DRY][%s] %s\n' "$SCRIPT_NAME" "$*"; }
+```
+
+The message uses sentence case, starts with `Would <verb>`, and has no trailing period or exclamation mark. Single-quote interpolated human-facing values so whitespace and empty strings remain visible:
+
+```bash
+_dry "Would move: '$src' -> '$dest'"
+```
+
+For a multi-line plan, emit one `_dry` header followed by indented continuation rows. For an exact command preview, use `Would run:` and shell-escape every dynamic argv value so the displayed command can be pasted into a shell. Bash's `printf '%q'` is available in the supported Bash 3.2 baseline.
+
+A dry-run still performs every read-only preflight check needed to decide whether the real operation could start. It returns the same usage, dependency, or runtime error class for a failed precondition while guaranteeing that mutation code is never reached.
+
+This contract is enforced by [`test/meta-dry-run-format.test.sh`](test/meta-dry-run-format.test.sh), which requires the canonical stdout helper in every script with `--dry-run`, rejects retired direct dry-run emitters, and self-tests both checks. Per-script tests remain responsible for runtime no-side-effect guarantees and the semantic accuracy of each plan.
+
 ## Argument Parsing
 
 Every script accepts three GNU-style input shapes, same as `curl`, `git`, and `grep`:

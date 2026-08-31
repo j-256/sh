@@ -60,6 +60,7 @@ EOF
     }
 
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+    _dry() { printf '[DRY][%s] %s\n' "$SCRIPT_NAME" "$*"; }
 
     # Return true if verbose flag is set
     _verbose() { [ "$verbose" = true ]; }
@@ -104,7 +105,7 @@ EOF
                 return 1
             fi
             if _dry_run; then
-                echo "$SCRIPT_NAME: Would move: $src -> $dest"
+                _dry "Would move: '$src' -> '$dest'"
             else
                 if _verbose; then
                     echo "$SCRIPT_NAME: Moving: $src -> $dest"

@@ -41,6 +41,7 @@ EXIT STATUS
 EOF
     }
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+    _dry() { printf '[DRY][%s] %s\n' "$SCRIPT_NAME" "$*"; }
 
     _expand_short_opts() {
         # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
@@ -155,15 +156,18 @@ EOF
 
     if $dryrun; then
         if [ ${#collisions[@]} -gt 0 ]; then
-            echo "Would overwrite (--force):"
+            _dry "Would overwrite in '$dest' (--force):"
             local c
             for c in "${collisions[@]}"; do
-                echo "  $c"
+                printf "  '%s'\n" "$c"
             done
         fi
-        echo "Would move to $dest:"
-        find "$dir" -mindepth 1 -maxdepth 1 -exec basename {} \; | sort
-        echo "Would remove: $dir"
+        _dry "Would move into '$dest':"
+        local item
+        find "$dir" -mindepth 1 -maxdepth 1 -exec basename {} \; | sort | while IFS= read -r item; do
+            printf "  '%s'\n" "$item"
+        done
+        _dry "Would remove directory: '$dir'"
         return 0
     fi
 

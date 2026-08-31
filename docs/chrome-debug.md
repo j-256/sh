@@ -37,11 +37,12 @@ It searches downward, ignores the nested helper bundles, and picks the newest ve
 
 ```
 $ chrome-debug -n ~/chrome
-browser: ~/chrome/mac_arm-150.0.7871.115/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing
-port: 9222
-server: chrome-devtools-9222
-profile: /tmp/chrome-debug-9222
-args: --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-debug-9222 --no-first-run --no-default-browser-check --disable-sync
+[DRY][chrome-debug] Would launch browser with:
+  browser: '~/chrome/mac_arm-150.0.7871.115/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'
+  port: '9222'
+  server: 'chrome-devtools-9222'
+  profile: '/tmp/chrome-debug-9222'
+  command: ~/chrome/mac_arm-150.0.7871.115/chrome-mac-arm64/Google\ Chrome\ for\ Testing.app/Contents/MacOS/Google\ Chrome\ for\ Testing --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-debug-9222 --no-first-run --no-default-browser-check --disable-sync
 ```
 
 **Clean slate** – wipe the port's profile and launch with no extensions:

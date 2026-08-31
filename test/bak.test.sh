@@ -138,7 +138,8 @@ test_dry_run_mode() {
     echo "content" > "$TEST_DIR/files/dryrun.txt"
     run_script -n "$TEST_DIR/files/dryrun.txt"
     assert_rc "dry run exits 0" 0
-    assert_stdout_contains "shows would move" "Would move"
+    assert_stdout_contains "shows canonical dry-run action" "[DRY][bak] Would move: '$TEST_DIR/files/dryrun.txt' -> '$TEST_DIR/files/dryrun.txt.bak'"
+    assert_eq "dry-run has no diagnostics" "$(get_stderr)" ""
     assert_file_exists "original still exists" "dryrun.txt"
     assert_file_not_exists "backup not created" "dryrun.txt.bak"
 }
@@ -147,7 +148,7 @@ test_dry_run_long_flag() {
     echo "content" > "$TEST_DIR/files/dryrun2.txt"
     run_script --dry-run "$TEST_DIR/files/dryrun2.txt"
     assert_rc "dry run long" 0
-    assert_stdout_contains "shows would move" "Would move"
+    assert_stdout_contains "long flag uses canonical dry-run action" "[DRY][bak] Would move:"
     assert_file_exists "original still exists" "dryrun2.txt"
 }
 
@@ -211,7 +212,7 @@ test_verbose_and_dry_run() {
     echo "content" > "$TEST_DIR/files/both.txt"
     run_script -v -n "$TEST_DIR/files/both.txt"
     assert_rc "both flags" 0
-    assert_stdout_contains "shows would move" "Would move"
+    assert_stdout_contains "shows dry-run action" "[DRY][bak] Would move:"
     assert_file_exists "file unchanged" "both.txt"
 }
 
@@ -219,7 +220,7 @@ test_bundled_short_opts() {
     echo "content" > "$TEST_DIR/files/bundle.txt"
     run_script -vn "$TEST_DIR/files/bundle.txt"
     assert_rc "bundled -vn exits 0" 0
-    assert_stdout_contains "bundled verbose active" "Would move"
+    assert_stdout_contains "bundled dry-run active" "[DRY][bak] Would move:"
     assert_file_exists "bundled dry-run leaves file" "bundle.txt"
     assert_file_not_exists "bundled dry-run makes no backup" "bundle.txt.bak"
 }
@@ -228,7 +229,7 @@ test_bundled_short_opts_reversed() {
     echo "content" > "$TEST_DIR/files/bundle2.txt"
     run_script -nv "$TEST_DIR/files/bundle2.txt"
     assert_rc "bundled -nv exits 0" 0
-    assert_stdout_contains "reversed bundle still verbose" "Would move"
+    assert_stdout_contains "reversed bundle keeps dry-run active" "[DRY][bak] Would move:"
     assert_file_exists "reversed bundle leaves file" "bundle2.txt"
 }
 

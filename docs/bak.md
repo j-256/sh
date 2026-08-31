@@ -26,7 +26,7 @@ bak database.sql server.conf
 
 ```bash
 $ bak --dry-run report.pdf
-bak: Would move: report.pdf -> report.pdf.bak
+[DRY][bak] Would move: 'report.pdf' -> 'report.pdf.bak'
 ```
 
 **Verbose** to see each rename:
@@ -57,7 +57,7 @@ config.yaml.bak  config.yaml.bak.bak
 | Flag | Description |
 |---|---|
 | `-v, --verbose` | Print filenames as they are backed up |
-| `-d, --dry-run` | Simulate actions without making changes |
+| `-n, --dry-run` | Simulate actions without making changes |
 | `-h, --help` | Display help |
 
 ### Exit codes

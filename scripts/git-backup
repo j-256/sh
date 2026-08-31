@@ -63,8 +63,21 @@ EOF
     }
 
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+    _dry() { printf '[DRY][%s] %s\n' "$SCRIPT_NAME" "$*"; }
 
     _failed() { _error "\`$1\` failed"; }
+
+    _shell_join() {
+        local out=""
+        local arg
+        local quoted
+        for arg in "$@"; do
+            printf -v quoted '%q' "$arg"
+            if [ -n "$out" ]; then out="$out "; fi
+            out="$out$quoted"
+        done
+        printf '%s' "$out"
+    }
 
     _expand_short_opts() {
         # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
@@ -130,19 +143,19 @@ EOF
     local backup_name="backup-$timestamp"
 
     if [ "$dry_run" -eq 1 ]; then
-        echo "[DRY RUN] would back up $repo_dir to $remote as tag $backup_name"
-        echo "[DRY RUN] cd \"$repo_dir\""
-        echo "[DRY RUN] git remote get-url \"$remote\"   # (pre-flight check)"
-        echo "[DRY RUN] git stash save --include-untracked \"$backup_name\""
-        echo "[DRY RUN] git checkout --detach"
-        echo "[DRY RUN] git stash apply   # (auto-resolves conflicts with --theirs)"
-        echo "[DRY RUN] git add ."
-        echo "[DRY RUN] git commit -m \"Backup $timestamp\""
-        echo "[DRY RUN] git tag \"$backup_name\""
-        echo "[DRY RUN] git push \"$remote\" \"refs/tags/$backup_name\""
-        echo "[DRY RUN] git checkout -"
-        echo "[DRY RUN] git stash apply"
-        echo "[DRY RUN] git tag -d \"$backup_name\""
+        _dry "Would back up: '$repo_dir' -> remote '$remote' as tag '$backup_name'"
+        _dry "Would run: $(_shell_join cd "$repo_dir")"
+        _dry "Would run: $(_shell_join git remote get-url "$remote")"
+        _dry "Would run: $(_shell_join git stash save --include-untracked "$backup_name")"
+        _dry "Would run: $(_shell_join git checkout --detach)"
+        _dry "Would run: $(_shell_join git stash apply)"
+        _dry "Would run: $(_shell_join git add .)"
+        _dry "Would run: $(_shell_join git commit -m "Backup $timestamp")"
+        _dry "Would run: $(_shell_join git tag "$backup_name")"
+        _dry "Would run: $(_shell_join git push "$remote" "refs/tags/$backup_name")"
+        _dry "Would run: $(_shell_join git checkout -)"
+        _dry "Would run: $(_shell_join git stash apply)"
+        _dry "Would run: $(_shell_join git tag -d "$backup_name")"
         return 0
     fi
 

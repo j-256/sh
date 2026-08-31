@@ -26,11 +26,11 @@ The directory `package-v1.2.3/` is removed after its contents are moved up.
 
 ```bash
 $ explode -n package-v1.2.3
-Would move to .:
-file1.txt
-file2.txt
-README.md
-Would remove: package-v1.2.3
+[DRY][explode] Would move into '.':
+  'file1.txt'
+  'file2.txt'
+  'README.md'
+[DRY][explode] Would remove directory: 'package-v1.2.3'
 ```
 
 **See each file as it moves:**

@@ -66,7 +66,7 @@ Or just pass an `http://` URL:
 pin-dns http://www.example.com:8080/path --target origin.example.net
 ```
 
-**Dry run -- see the curl command without executing:**
+**Dry run -- print the shell-copyable curl command to stdout without executing:**
 
 ```bash
 pin-dns --dry-run www.example.com origin.example.net /path
@@ -196,7 +196,7 @@ pin-dns --target origin.example.net -- https://www.example.com -v
 | `--client curl\|impersonate\|auto` | `auto` (default) uses curl-impersonate if on `PATH`, else stock curl. `impersonate` requires it (exit 3 if absent); `curl` forces stock curl. `curl-impersonate` is accepted as an alias for `impersonate` |
 | `--chrome-major N` | Pin the Chrome major version; skips all version detection |
 | `--no-impersonate` | Send a bare request (DNS pin only); emit no impersonation headers. Master off-switch (overrides `--client`) |
-| `--dry-run` | Print the curl command without executing |
+| `--dry-run` | Print the shell-copyable curl command to stdout without executing |
 | `--no-silent` | Don't add `curl -sS` |
 | `-q, --quiet` | Suppress info/warning messages (errors still shown) |
 | `--curlrc` | Allow curl to read `~/.curlrc` (normally disabled) |

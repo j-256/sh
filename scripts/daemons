@@ -32,6 +32,24 @@ _daemons() (
     local SECONDS_PER_DAY=86400
 
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+    _dry() { printf '[DRY][%s] %s\n' "$SCRIPT_NAME" "$*"; }
+
+    _shell_join() {
+        local out=""
+        local arg
+        local quoted
+        for arg in "$@"; do
+            printf -v quoted '%q' "$arg"
+            if [ -n "$out" ]; then out="$out "; fi
+            out="$out$quoted"
+        done
+        printf '%s' "$out"
+    }
+
+    _dry_command() {
+        local command; command="$(_shell_join "$@")"
+        _dry "Would run: $command"
+    }
 
     _expand_short_opts() {
         # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
@@ -591,9 +609,14 @@ EOF
         esac
 
         if [ -n "$dry" ]; then
-            printf 'plist:     %s\n' "$plist"
-            printf 'would run: %slaunchctl bootout %s\n' "$sudo_pfx" "$stgt"
-            printf 'would run: %slaunchctl bootstrap %s %s\n' "$sudo_pfx" "$dtgt" "$plist"
+            _dry "Would use plist: '$plist'"
+            if [ -n "$needs_root" ]; then
+                _dry_command sudo launchctl bootout "$stgt"
+                _dry_command sudo launchctl bootstrap "$dtgt" "$plist"
+            else
+                _dry_command launchctl bootout "$stgt"
+                _dry_command launchctl bootstrap "$dtgt" "$plist"
+            fi
             return 0
         fi
 
@@ -656,7 +679,11 @@ EOF
         fi
 
         if [ -n "$dry" ]; then
-            printf 'would run: %slaunchctl bootout %s\n' "$sudo_pfx" "$stgt"
+            if [ -n "$needs_root" ]; then
+                _dry_command sudo launchctl bootout "$stgt"
+            else
+                _dry_command launchctl bootout "$stgt"
+            fi
             return 0
         fi
 

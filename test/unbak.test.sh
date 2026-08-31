@@ -128,35 +128,36 @@ test_dry_run() {
     touch "$TEST_DIR/file.txt.bak"
     run_script -n "$TEST_DIR/file.txt.bak"
     assert_rc "dry run" 0
-    assert_stdout_contains "dry run shows would move" "Would move:"
+    assert_stdout_contains "dry run shows canonical action" "[DRY][unbak] Would move: '$TEST_DIR/file.txt.bak' -> '$TEST_DIR/file.txt'"
+    assert_eq "dry-run has no diagnostics" "$(get_stderr)" ""
 }
 
 test_dry_run_long() {
     touch "$TEST_DIR/file.txt.bak"
     run_script --dry-run "$TEST_DIR/file.txt.bak"
     assert_rc "dry run long" 0
-    assert_stdout_contains "dry run long shows would move" "Would move:"
+    assert_stdout_contains "dry run long shows canonical action" "[DRY][unbak] Would move:"
 }
 
 test_verbose_and_dry_run() {
     touch "$TEST_DIR/file.txt.bak"
     run_script -v -n "$TEST_DIR/file.txt.bak"
     assert_rc "verbose and dry run" 0
-    assert_stdout_contains "verbose + dry run shows would move" "Would move:"
+    assert_stdout_contains "verbose + dry run shows action" "[DRY][unbak] Would move:"
 }
 
 test_bundled_short_opts() {
     touch "$TEST_DIR/bundle.txt.bak"
     run_script -vn "$TEST_DIR/bundle.txt.bak"
     assert_rc "bundled -vn exits 0" 0
-    assert_stdout_contains "bundled verbose active" "Would move:"
+    assert_stdout_contains "bundled dry-run active" "[DRY][unbak] Would move:"
 }
 
 test_bundled_short_opts_reversed() {
     touch "$TEST_DIR/bundle2.txt.bak"
     run_script -nv "$TEST_DIR/bundle2.txt.bak"
     assert_rc "bundled -nv exits 0" 0
-    assert_stdout_contains "reversed bundle still verbose" "Would move:"
+    assert_stdout_contains "reversed bundle keeps dry-run active" "[DRY][unbak] Would move:"
 }
 
 test_multiple_files() {

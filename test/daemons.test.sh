@@ -764,8 +764,9 @@ test_load_dry_run_no_side_effects() {
     seed_loadable
     run_script load one --plist "$TEST_DIR/usr.test.one.plist" --dry-run
     assert_rc "dry-run exits 0" 0
-    assert_stdout_contains "prints resolved plist" "one.plist"
-    assert_stdout_contains "prints bootstrap command" "bootstrap"
+    assert_stdout_contains "prints canonical plist plan" "[DRY][daemons] Would use plist: '$TEST_DIR/usr.test.one.plist'"
+    assert_stdout_contains "prints canonical bootstrap plan" "[DRY][daemons] Would run: launchctl bootstrap"
+    assert_eq "dry-run has no diagnostics" "$(get_stderr)" ""
     assert_eq "not actually loaded" "" "$(cat "$TEST_DIR/loaded")"
     if [ -f "$TEST_DIR/log/one.log" ]; then
         _fail "dry-run must not append a record"
@@ -870,7 +871,7 @@ test_unload_dry_run_no_side_effects() {
     printf 'usr.test.one\n' > "$TEST_DIR/loaded"
     run_script unload one --dry-run
     assert_rc "dry-run exits 0" 0
-    assert_stdout_contains "prints bootout command" "bootout"
+    assert_stdout_contains "prints canonical bootout plan" "[DRY][daemons] Would run: launchctl bootout"
     assert_eq "still loaded after dry-run" "usr.test.one" "$(cat "$TEST_DIR/loaded")"
 }
 

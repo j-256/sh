@@ -120,7 +120,7 @@ test_resolve_app_bundle() {
     make_app "$TEST_DIR/Test.app" "Test Browser"
     CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n "$TEST_DIR/Test.app"
     assert_rc "resolve .app exits 0" 0
-    assert_stdout_contains "resolved to inner binary" "browser: $TEST_DIR/Test.app/Contents/MacOS/Test Browser"
+    assert_stdout_contains "resolved to inner binary" "browser: '$TEST_DIR/Test.app/Contents/MacOS/Test Browser'"
 }
 
 test_resolve_raw_executable() {
@@ -130,7 +130,7 @@ test_resolve_raw_executable() {
     chmod +x "$TEST_DIR/rawchrome"
     CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n "$TEST_DIR/rawchrome"
     assert_rc "resolve raw exe exits 0" 0
-    assert_stdout_contains "raw exe used directly" "browser: $TEST_DIR/rawchrome"
+    assert_stdout_contains "raw exe used directly" "browser: '$TEST_DIR/rawchrome'"
 }
 
 test_resolve_directory_finds_app() {
@@ -139,7 +139,7 @@ test_resolve_directory_finds_app() {
     make_app "$TEST_DIR/dl/chrome-mac-arm64/Chrome for Testing.app" "Google Chrome for Testing"
     CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n "$TEST_DIR/dl"
     assert_rc "resolve dir exits 0" 0
-    assert_stdout_contains "found buried app" "browser: $TEST_DIR/dl/chrome-mac-arm64/Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+    assert_stdout_contains "found buried app" "browser: '$TEST_DIR/dl/chrome-mac-arm64/Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'"
 }
 
 test_resolve_directory_multiple_versions_newest_wins() {
@@ -186,7 +186,7 @@ test_resolve_directory_ignores_nested_helper_apps() {
     make_app "$base/Contents/Frameworks/cr.framework/Versions/150/Helpers/Google Chrome for Testing Helper (Renderer).app" "Google Chrome for Testing Helper (Renderer)"
     CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n "$TEST_DIR/dl"
     assert_rc "nested-helper dir exits 0" 0
-    assert_stdout_contains "resolves top-level browser, not helper" "browser: $base/Contents/MacOS/Google Chrome for Testing"
+    assert_stdout_contains "resolves top-level browser, not helper" "browser: '$base/Contents/MacOS/Google Chrome for Testing'"
     assert_stdout_not_contains "does not pick a helper" "Helper (Renderer)"
 }
 
@@ -199,7 +199,7 @@ test_resolve_relative_app_path() {
     make_app "$TEST_DIR/Rel.app" "Rel Browser"
     CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script_in_dir "$TEST_DIR" -n "Rel.app"
     assert_rc "relative .app exits 0" 0
-    assert_stdout_contains "absolutized resolved path" "browser: $TEST_DIR/Rel.app/Contents/MacOS/Rel Browser"
+    assert_stdout_contains "absolutized resolved path" "browser: '$TEST_DIR/Rel.app/Contents/MacOS/Rel Browser'"
 }
 
 test_pool_parses_browser_url_entries() {
@@ -256,8 +256,8 @@ test_port_default_lowest_free() {
     : > "$TEST_DIR/busy_ports"    # nothing busy
     CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n "$(_any_browser)"
     assert_rc "default port exits 0" 0
-    assert_stdout_contains "picks 9222" "port: 9222"
-    assert_stdout_contains "names server" "server: chrome-devtools-9222"
+    assert_stdout_contains "picks 9222" "port: '9222'"
+    assert_stdout_contains "names server" "server: 'chrome-devtools-9222'"
 }
 
 test_port_default_skips_busy() {
@@ -265,7 +265,7 @@ test_port_default_skips_busy() {
     printf '9222\n' > "$TEST_DIR/busy_ports"   # 9222 busy -> pick 9223
     CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n "$(_any_browser)"
     assert_rc "skip busy exits 0" 0
-    assert_stdout_contains "picks 9223" "port: 9223"
+    assert_stdout_contains "picks 9223" "port: '9223'"
 }
 
 test_port_all_busy_errors() {
@@ -281,8 +281,8 @@ test_port_explicit_in_pool() {
     : > "$TEST_DIR/busy_ports"
     CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n -p 9223 "$(_any_browser)"
     assert_rc "explicit in-pool exits 0" 0
-    assert_stdout_contains "uses 9223" "port: 9223"
-    assert_stdout_contains "names server" "server: chrome-devtools-9223"
+    assert_stdout_contains "uses 9223" "port: '9223'"
+    assert_stdout_contains "names server" "server: 'chrome-devtools-9223'"
 }
 
 test_port_explicit_off_pool_warns_but_proceeds() {
@@ -290,8 +290,8 @@ test_port_explicit_off_pool_warns_but_proceeds() {
     : > "$TEST_DIR/busy_ports"
     CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n -p 9299 "$(_any_browser)"
     assert_rc "off-pool exits 0" 0
-    assert_stdout_contains "uses 9299" "port: 9299"
-    assert_stdout_contains "no server" "server: (none)"
+    assert_stdout_contains "uses 9299" "port: '9299'"
+    assert_stdout_contains "no server" "server: '(none)'"
     assert_stderr_contains "off-pool warning" "no chrome-devtools entry for :9299"
 }
 
@@ -307,21 +307,23 @@ test_profile_default_per_port() {
     write_mcp_fixture
     : > "$TEST_DIR/busy_ports"
     CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n "$(_any_browser)"
-    assert_stdout_contains "default profile" "profile: /tmp/chrome-debug-9222"
+    assert_stdout_contains "default profile" "profile: '/tmp/chrome-debug-9222'"
 }
 
 test_profile_explicit() {
     write_mcp_fixture
     : > "$TEST_DIR/busy_ports"
     CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n -d /tmp/myprof "$(_any_browser)"
-    assert_stdout_contains "explicit profile" "profile: /tmp/myprof"
+    assert_stdout_contains "explicit profile" "profile: '/tmp/myprof'"
 }
 
 test_args_include_baked_flags() {
     write_mcp_fixture
     : > "$TEST_DIR/busy_ports"
     CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n -p 9223 "$(_any_browser)"
-    assert_stdout_contains "remote-debugging-port" "args: --remote-debugging-port=9223"
+    assert_stdout_contains "canonical dry-run header" "[DRY][chrome-debug] Would launch browser with:"
+    assert_stdout_contains "remote-debugging-port" "command: "
+    assert_stdout_contains "remote-debugging-port value" "--remote-debugging-port=9223"
     assert_stdout_contains "user-data-dir flag" "--user-data-dir=/tmp/chrome-debug-9223"
     assert_stdout_contains "no-first-run" "--no-first-run"
     assert_stdout_contains "no-default-browser-check" "--no-default-browser-check"
@@ -405,7 +407,7 @@ test_dry_run_works_without_curl() {
         /bin/bash "$UNDER_TEST" -n "$app" >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
     assert_rc "dry-run without curl exits 0" 0
-    assert_stdout_contains "dry-run still prints args" "args:"
+    assert_stdout_contains "dry-run still prints command" "command:"
 }
 
 # Already-serving: nc reports the port busy AND curl reports DevTools serving.
@@ -575,8 +577,8 @@ test_walkup_finds_mcp_json_at_home_ceiling() {
     mkdir -p "$home/proj/sub"
     run_script_walkup "$home" "$home/proj/sub" -n "$(_any_browser)"
     assert_rc "walkup to home exits 0" 0
-    assert_stdout_contains "found home .mcp.json" "port: 9222"
-    assert_stdout_contains "names server" "server: chrome-devtools-9222"
+    assert_stdout_contains "found home .mcp.json" "port: '9222'"
+    assert_stdout_contains "names server" "server: 'chrome-devtools-9222'"
 }
 
 test_walkup_stops_at_home_not_above() {
@@ -665,7 +667,7 @@ test_port_equals_form() {
     : > "$TEST_DIR/busy_ports"
     CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n --port=9223 "$(_any_browser)"
     assert_rc "--port=N exits 0" 0
-    assert_stdout_contains "equals-form port used" "port: 9223"
+    assert_stdout_contains "equals-form port used" "port: '9223'"
 }
 
 test_port_attached_short_form() {
@@ -673,7 +675,7 @@ test_port_attached_short_form() {
     : > "$TEST_DIR/busy_ports"
     CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n -p9223 "$(_any_browser)"
     assert_rc "-p9223 exits 0" 0
-    assert_stdout_contains "attached short-form port used" "port: 9223"
+    assert_stdout_contains "attached short-form port used" "port: '9223'"
 }
 
 test_multiple_positionals_is_usage_error() {

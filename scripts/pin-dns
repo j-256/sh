@@ -98,7 +98,7 @@
 #         is still a bare request, not an error)
 #
 #     --dry-run
-#         Do not execute curl. Print the resolved mapping and the curl command to stderr
+#         Do not execute curl. Print the shell-copyable curl command to stdout
 #
 #     --no-silent
 #         Do not add curl -sS by default
@@ -221,6 +221,19 @@ _pin_dns() (
     _error() { printf '%s[ERR][%s] %s%s\n' "$C_ERR" "$SCRIPT_NAME" "$*" "$C_RST" >&2; }
     _warn()  { [ -n "$quiet" ] && return 0; printf '%s[WRN][%s] %s%s\n' "$C_WRN" "$SCRIPT_NAME" "$*" "$C_RST" >&2; }
     _info()  { [ -n "$quiet" ] && return 0; printf '%s[INF][%s] %s%s\n' "$C_INF" "$SCRIPT_NAME" "$*" "$C_RST" >&2; }
+    _dry() { printf '[DRY][%s] %s\n' "$SCRIPT_NAME" "$*"; }
+
+    _shell_join() {
+        local out=""
+        local arg
+        local quoted
+        for arg in "$@"; do
+            printf -v quoted '%q' "$arg"
+            if [ -n "$out" ]; then out="$out "; fi
+            out="$out$quoted"
+        done
+        printf '%s' "$out"
+    }
 
     # Temp-file registry cleaned by a single EXIT trap. Set early so any temp
     # registered later (the capture/decode body + header files) is removed when
@@ -322,7 +335,7 @@ OPTIONS
         a bare request, not a client error
 
     --dry-run
-        Do not execute curl. Print the resolved mapping and the curl command to stderr.
+        Do not execute curl. Print the shell-copyable curl command to stdout.
 
     --no-silent
         Do not add curl -sS by default.
@@ -2032,20 +2045,7 @@ EOF
     fi
 
     if [ -n "$dry_run" ]; then
-        _info "Dry run: curl command follows"
-        printf '%s' "[CMD] " >&2
-        local x=""
-        for x in "${cmd[@]}"; do
-            case "$x" in
-                *[[:space:]]*|*\"*|*\'*)
-                    printf '%s ' "'$x'" >&2
-                    ;;
-                *)
-                    printf '%s ' "$x" >&2
-                    ;;
-            esac
-        done
-        printf '\n' >&2
+        _dry "Would run: $(_shell_join "${cmd[@]}")"
         return 0
     fi
 

@@ -21,6 +21,19 @@ _chrome_debug() (
     _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
     _warn()  { echo "[WRN][$SCRIPT_NAME] $*" >&2; }
     _info()  { echo "[INF][$SCRIPT_NAME] $*" >&2; }
+    _dry() { printf '[DRY][%s] %s\n' "$SCRIPT_NAME" "$*"; }
+
+    _shell_join() {
+        local out=""
+        local arg
+        local quoted
+        for arg in "$@"; do
+            printf -v quoted '%q' "$arg"
+            if [ -n "$out" ]; then out="$out "; fi
+            out="$out$quoted"
+        done
+        printf '%s' "$out"
+    }
 
     _show_help() {
         local s; [ -t 1 ] && s=$'\033[4m'
@@ -453,11 +466,12 @@ EOF
 
     # Dry-run: resolve and print the launch plan without launching
     if [ -n "$dry_run" ]; then
-        echo "browser: $browser_exe"
-        echo "port: $port"
-        echo "server: ${server_name:-(none)}"
-        echo "profile: $user_data_dir"
-        echo "args: ${browser_argv[*]}"
+        _dry "Would launch browser with:"
+        printf "  browser: '%s'\n" "$browser_exe"
+        printf "  port: '%s'\n" "$port"
+        printf "  server: '%s'\n" "${server_name:-(none)}"
+        printf "  profile: '%s'\n" "$user_data_dir"
+        printf '  command: %s\n' "$(_shell_join "$browser_exe" "${browser_argv[@]}")"
         return 0
     fi
 

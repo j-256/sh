@@ -29,7 +29,7 @@ unbak notes.txt.bak report.pdf.bak
 
 ```bash
 $ unbak --dry-run server.conf.bak
-unbak: Would move: server.conf.bak -> server.conf
+[DRY][unbak] Would move: 'server.conf.bak' -> 'server.conf'
 ```
 
 **Verbose** to see each restore operation:
@@ -69,7 +69,7 @@ $ unbak report.pdf.bak
 | Flag | Description |
 |---|---|
 | `-v, --verbose` | Print filenames as they are restored |
-| `-d, --dry-run` | Simulate actions without making changes |
+| `-n, --dry-run` | Simulate actions without making changes |
 | `-h, --help` | Display help |
 
 ### Exit codes

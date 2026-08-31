@@ -269,8 +269,9 @@ test_remote_with_special_chars() {
 test_dry_run() {
     run_script --dry-run "$TEST_DIR/test-repo"
     assert_rc "dry-run exits 0" 0
-    assert_stdout_contains "dry-run header" "[DRY RUN] would back up"
-    assert_stdout_contains "dry-run mentions push" "git push"
+    assert_stdout_contains "dry-run header" "[DRY][git-backup] Would back up: '$TEST_DIR/test-repo'"
+    assert_stdout_contains "dry-run command prefix" "[DRY][git-backup] Would run: git push"
+    assert_eq "dry-run has no diagnostics" "$(get_stderr)" ""
     # Real git should NOT be called (only shimmed date may be logged)
     local git_log; git_log="$(get_git_log)"
     assert_eq "no git commands ran" "$git_log" ""
@@ -279,7 +280,7 @@ test_dry_run() {
 test_dry_run_short_flag() {
     run_script -n "$TEST_DIR/test-repo"
     assert_rc "dry-run -n exits 0" 0
-    assert_stdout_contains "dry-run header" "[DRY RUN] would back up"
+    assert_stdout_contains "dry-run header" "[DRY][git-backup] Would back up:"
 }
 
 test_missing_remote_preflight() {
