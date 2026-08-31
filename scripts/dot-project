@@ -38,8 +38,8 @@ DESCRIPTION
 OPTIONS
   -h, --help    Show this help message
 EXIT STATUS
-  0  Success (includes no-op cases: nonexistent dir, write errors
-     per-file logged to stderr but not propagated)
+  0  Success (includes no-op cases such as a nonexistent directory)
+  1  Runtime failure (one or more .project files could not be created)
   2  Usage error (unknown flag, multiple directories)
 EOF
     }
@@ -96,6 +96,7 @@ EOF
     # Default to current directory
     code_version="${code_version:-"."}"
     # Create a .project file in each subdirectory (cartridge)
+    local failed=0
     local cartridge
     for cartridge in "${code_version%"/"}"/*; do # remove trailing slash, if present, to avoid doubling
         if [ -d "$cartridge" ]; then
@@ -122,9 +123,11 @@ DOT_PROJECT_TEMPLATE
                 echo "Generated $project_file"
             else
                 _error "Failed to create $project_file"
+                failed=1
             fi
         fi
     done
+    return "$failed"
 )
 
 _dot_project "$@"

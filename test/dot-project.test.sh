@@ -104,10 +104,12 @@ test_special_chars_in_dirname() {
 
 test_readonly_directory_fails() {
     mkdir -p "$TEST_DIR/cv_readonly/readonly_cart"
+    mkdir -p "$TEST_DIR/cv_readonly/writable_cart"
     chmod 555 "$TEST_DIR/cv_readonly/readonly_cart"
     run_script "$TEST_DIR/cv_readonly"
-    assert_rc "readonly exits 0 despite error" 0
+    assert_rc "readonly exits 1" 1
     assert_stderr_contains "error message" "[ERR][dot-project] Failed to create $TEST_DIR/cv_readonly/readonly_cart/.project"
+    assert_stdout_contains "continues with writable cartridge" "Generated $TEST_DIR/cv_readonly/writable_cart/.project"
     chmod 755 "$TEST_DIR/cv_readonly/readonly_cart" # cleanup for temp dir removal
 }
 
