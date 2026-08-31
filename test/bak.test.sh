@@ -75,6 +75,17 @@ test_help_output() {
     assert_stdout_contains "help has OPTIONS" "OPTIONS"
 }
 
+test_help_style_environment() {
+    CLICOLOR_FORCE=1 NO_COLOR= run_script --help
+    assert_stdout_contains "CLICOLOR_FORCE styles captured help" $'\033[4mfile\033[24m'
+
+    CLICOLOR_FORCE=1 NO_COLOR=1 run_script --help
+    assert_stdout_not_contains "NO_COLOR wins over CLICOLOR_FORCE" $'\033[4m'
+
+    CLICOLOR_FORCE= NO_COLOR= run_script --help
+    assert_stdout_not_contains "captured help stays plain by default" $'\033[4m'
+}
+
 test_no_args_shows_help() {
     run_script
     assert_rc "no args exits 0" 0

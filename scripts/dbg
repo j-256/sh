@@ -42,8 +42,12 @@ __dbg__main() {
     case "$__dbg__name" in ""|bash|sh|zsh|dash) __dbg__name="dbg" ;; esac
 
     __dbg__show_help() {
-        local s; [ -t 1 ] && s=$'\033[4m' || s=""
-        local r; [ -t 1 ] && r=$'\033[24m' || r=""
+        local s=""
+        local r=""
+        if { [ -t 1 ] || [ -n "${CLICOLOR_FORCE:-}" ]; } && [ -z "${NO_COLOR:-}" ]; then
+            s=$'\033[4m'
+            r=$'\033[24m'
+        fi
         cat <<EOF
 NAME
   $__dbg__name - print variables as key-value pairs for debugging

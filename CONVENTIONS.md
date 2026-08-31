@@ -163,12 +163,16 @@ A plain comment block immediately after the shebang. Includes the script name, a
 
 ## --help
 
-Every script supports `-h` and `--help`. The help body is a single `cat <<EOF` heredoc, not a run of `echo` lines -- the block edits as plain text, so multi-line changes don't fight per-line `echo "` wrappers and their escaped inner quotes. It uses raw ANSI SGR escapes (`\033[4m`/`\033[24m`) for underlined parameter placeholders, guarded by `[ -t 1 ]` (only when stdout is a terminal):
+Every script supports `-h` and `--help`. The help body is a single `cat <<EOF` heredoc, not a run of `echo` lines -- the block edits as plain text, so multi-line changes don't fight per-line `echo "` wrappers and their escaped inner quotes. It uses raw ANSI SGR escapes (`\033[4m`/`\033[24m`) for underlined parameter placeholders. Enable them when stdout is a terminal or `CLICOLOR_FORCE` is nonempty, and disable them whenever `NO_COLOR` is nonempty. `NO_COLOR` wins when both variables are set:
 
 ```bash
 _show_help() {
-    local s; [ -t 1 ] && s=$'\033[4m'
-    local r; [ -t 1 ] && r=$'\033[24m'
+    local s=""
+    local r=""
+    if { [ -t 1 ] || [ -n "${CLICOLOR_FORCE:-}" ]; } && [ -z "${NO_COLOR:-}" ]; then
+        s=$'\033[4m'
+        r=$'\033[24m'
+    fi
     cat <<EOF
 NAME
   $SCRIPT_NAME - short description
@@ -184,6 +188,10 @@ DEPENDENCIES
 EOF
 }
 ```
+
+Use the same gate for underlined stdout text outside help. Raw ANSI escapes are the mechanism throughout the fleet; do not introduce a `tput` dependency for styling.
+
+This rule is enforced by [`test/meta-underline-style.test.sh`](test/meta-underline-style.test.sh), which checks every raw underline start and rejects `tput` styling. Per-script tests cover the environment precedence at runtime.
 
 Sections (use what's relevant): NAME, SYNOPSIS, DESCRIPTION, OPTIONS, ENVIRONMENT, FILES, DEPENDENCIES, EXAMPLES, EXIT STATUS, SEE ALSO, CAVEATS. Use `FILES` for a config or data file the script reads or writes -- and when that file has a schema the caller must author (a registry's columns, a config's keys), give the schema there, since it's a precondition (see [Self-sufficiency](#self-sufficiency)).
 

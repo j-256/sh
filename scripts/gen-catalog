@@ -17,8 +17,12 @@ _gen_catalog() (
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="gen-catalog" ;; esac
 
     _show_help() {
-        local s; [ -t 1 ] && s=$'\033[4m'
-        local r; [ -t 1 ] && r=$'\033[24m'
+        local s=""
+        local r=""
+        if { [ -t 1 ] || [ -n "${CLICOLOR_FORCE:-}" ]; } && [ -z "${NO_COLOR:-}" ]; then
+            s=$'\033[4m'
+            r=$'\033[24m'
+        fi
         cat <<EOF
 NAME
   $SCRIPT_NAME - generate SFCC catalog XML

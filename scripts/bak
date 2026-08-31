@@ -23,9 +23,13 @@ _bak() (
 
     # Print usage (help) info
     _show_help() {
-        # Underline only if output is a terminal (not a pipe or file)
-        local s; [ -t 1 ] && s=$'\033[4m'
-        local r; [ -t 1 ] && r=$'\033[24m'
+        # Underline placeholders on a TTY or when CLICOLOR_FORCE is set
+        local s=""
+        local r=""
+        if { [ -t 1 ] || [ -n "${CLICOLOR_FORCE:-}" ]; } && [ -z "${NO_COLOR:-}" ]; then
+            s=$'\033[4m'
+            r=$'\033[24m'
+        fi
         cat <<EOF
 NAME
   $SCRIPT_NAME - move ${s}file${r} to ${s}file.bak${r}

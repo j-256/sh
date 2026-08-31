@@ -35,8 +35,12 @@ _get() (
     local SKILL_ROOTS="$HOME/.claude/skills $HOME/.codex/skills"
 
     _show_help() {
-        local s; [ -t 1 ] && s="$(tput smul 2>/dev/null || echo '')"
-        local r; [ -t 1 ] && r="$(tput rmul 2>/dev/null || echo '')"
+        local s=""
+        local r=""
+        if { [ -t 1 ] || [ -n "${CLICOLOR_FORCE:-}" ]; } && [ -z "${NO_COLOR:-}" ]; then
+            s=$'\033[4m'
+            r=$'\033[24m'
+        fi
         cat <<EOF
 NAME
   $SCRIPT_NAME - install scripts from toolio.sh into a directory on \$PATH

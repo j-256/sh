@@ -14,8 +14,12 @@ _s() (
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="s" ;; esac
 
     _show_help() {
-        local s; [ -t 1 ] && s=$'\033[4m'
-        local r; [ -t 1 ] && r=$'\033[24m'
+        local s=""
+        local r=""
+        if { [ -t 1 ] || [ -n "${CLICOLOR_FORCE:-}" ]; } && [ -z "${NO_COLOR:-}" ]; then
+            s=$'\033[4m'
+            r=$'\033[24m'
+        fi
         cat <<EOF
 NAME
   $SCRIPT_NAME - sfcc-ci wrapper with shortcuts and enhanced output
@@ -85,8 +89,12 @@ EOF
             local exp; exp="$(sfcc-ci client:auth:token | jq -R -r 'split(".") | .[1] | @base64d | fromjson | .exp')"
             # TODO: Simplify date - use more format rather than sed
             local tz; tz="$(zdump /etc/localtime | sed 's/.* //g')"
-            local s; [ -t 1 ] && s=$'\033[4m'
-            local r; [ -t 1 ] && r=$'\033[24m'
+            local s=""
+            local r=""
+            if { [ -t 1 ] || [ -n "${CLICOLOR_FORCE:-}" ]; } && [ -z "${NO_COLOR:-}" ]; then
+                s=$'\033[4m'
+                r=$'\033[24m'
+            fi
             echo "Expires at $s$(TZ="/etc/localtime" date -r "$exp" -Iminutes | sed "s/.*T//; s/[-+][0-9]\{2\}:[0-9]\{2\}/ $tz/")$r ($(TZ=UTC date -u -r "$exp" -Iseconds | sed 's/T/ /; s/+00:00/ UTC/'))"
         ;;
         # Get a single instance and print important fields in a human-readable format

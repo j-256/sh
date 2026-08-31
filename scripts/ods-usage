@@ -59,8 +59,12 @@ _ods_usage() (
     }
 
     _show_help() {
-        local s; [ -t 1 ] && s=$'\033[4m'
-        local r; [ -t 1 ] && r=$'\033[24m'
+        local s=""
+        local r=""
+        if { [ -t 1 ] || [ -n "${CLICOLOR_FORCE:-}" ]; } && [ -z "${NO_COLOR:-}" ]; then
+            s=$'\033[4m'
+            r=$'\033[24m'
+        fi
         cat <<EOF
 NAME
   $SCRIPT_NAME - calculate On-Demand Sandbox credits used from an ODS API response
@@ -142,11 +146,11 @@ EOF
         return 2
     fi
 
-    # If output is being piped or redirected, do not print control characters for text formatting
-    local smul=''
-    local rmul=''
-    if [ -t 1 ]; then # stdout (fd1) is a terminal
-        smul=$'\033[4m'  # start underline
+    # Underline stdout text on a TTY or when CLICOLOR_FORCE is set, unless NO_COLOR is set
+    local smul=""
+    local rmul=""
+    if { [ -t 1 ] || [ -n "${CLICOLOR_FORCE:-}" ]; } && [ -z "${NO_COLOR:-}" ]; then
+        smul=$'\033[4m' # start underline
         rmul=$'\033[24m' # remove underline
     fi
 
