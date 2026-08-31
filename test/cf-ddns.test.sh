@@ -409,7 +409,7 @@ elif [[ "$url_path" =~ ^/zones/[^/]+/dns_records$ ]]; then
         printf '%s\n' '{"success":true,"result":{"id":"record789"}}'
         exit 0
     else
-        printf '%s\n' '{"success":true,"result":[{"type":"A","content":"192.0.2.10","id":"record456"}]}'
+        printf '%s\n' '{"success":true,"result":[{"type":"A","content":"192.0.2.10","id":"record456"},{"type":"A","content":"192.0.2.11","id":"record457"}]}'
         exit 0
     fi
 fi
@@ -420,8 +420,10 @@ SHIM
     chmod +x "$SHIM_DIR/curl"
 
     run_script "token123" "example.com"
-    assert_rc "delete failure still creates" 0
+    assert_rc "delete failure is reported after create" 1
     assert_stderr_contains "delete failed" "Delete DNS Record request failed"
+    assert_contains "later delete still attempted" "$(get_curl_log)" "/dns_records/record457"
+    assert_contains "create still attempted" "$(get_curl_log)" "-X POST"
 }
 
 test_create_record_api_failure() {
@@ -476,7 +478,7 @@ SHIM
     chmod +x "$SHIM_DIR/curl"
 
     run_script "token123" "example.com"
-    assert_rc "create failure" 0
+    assert_rc "create failure" 1
     assert_stderr_contains "create failed" "Create DNS Record request failed"
 }
 

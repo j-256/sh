@@ -47,8 +47,8 @@ ENVIRONMENT
   DDNS_DEBUG   Set to any value to enable verbose curl/debug output
 EXIT STATUS
   0  Success (DNS already correct or successfully updated)
-  1  Runtime failure (IP detection failed, API returned unexpected JSON,
-     no zone for domain)
+  1  Runtime failure (IP detection failed, API request failed, unexpected
+     API response, or no zone for domain)
   2  Usage error (missing API token or domain)
   3  Dependency error (curl, jq, or dig missing)
 DEPENDENCIES
@@ -223,6 +223,7 @@ EOF
     fi
 
     # Delete all found A records - this is why we are not using PUT
+    local failed=0
     local record
     for record in $a_records; do
         local record_ip="${record%=*}"
@@ -234,6 +235,7 @@ EOF
         else
             _error "Delete DNS Record request failed, printing raw response"
             echo "$delete_response" >&2
+            failed=1
         fi
     done
 
@@ -245,7 +247,9 @@ EOF
     else
         _error "Create DNS Record request failed, printing raw response"
         echo "$create_response" >&2
+        failed=1
     fi
+    return "$failed"
     ###\### ###/###
 
 )
