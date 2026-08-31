@@ -35,6 +35,12 @@ test_help_names_skill_short() {
     assert_stdout_contains "help documents SKILL_DIR" "SKILL_DIR"
 }
 
+test_help_exit_status_documents_argument_conflicts() {
+    run_script -h
+    assert_stdout_contains "help names all-mode conflict" "2   Argument error (unknown script/flag, --all with names,"
+    assert_stdout_contains "help names skill-mode conflict" "--skill with --all or names, no skill root found)"
+}
+
 test_unknown_flag_errors() {
     run_script --banana
     assert_rc "unknown flag exits 2" 2
