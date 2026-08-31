@@ -202,9 +202,11 @@ EOF
     fi
 
     # Process each argument
+    local rc=0
     for f in "${args[@]}"; do
-        _restore "$f"
+        _restore "$f" || rc=1
     done
+    return "$rc"
 )
 
 _unbak "$@"

@@ -174,7 +174,7 @@ test_multiple_files_one_fails() {
     touch "$TEST_DIR/file1.txt.bak"
     touch "$TEST_DIR/file2.txt.bak"
     touch "$TEST_DIR/file2.txt"
-    run_script "$TEST_DIR/file1.txt.bak" "$TEST_DIR/file2.txt.bak"
+    run_script "$TEST_DIR/file2.txt.bak" "$TEST_DIR/file1.txt.bak"
     # When any file fails, unbak returns non-zero
     # But it continues processing remaining files
     assert_rc "multiple files one fails returns 1" 1

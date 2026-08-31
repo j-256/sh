@@ -186,9 +186,10 @@ test_multiple_files() {
 
 test_multiple_files_one_missing() {
     echo "exists" > "$TEST_DIR/files/exists.txt"
-    run_script "$TEST_DIR/files/exists.txt" "$TEST_DIR/files/missing.txt"
+    run_script "$TEST_DIR/files/missing.txt" "$TEST_DIR/files/exists.txt"
     assert_rc "one missing" 1
     assert_stderr_contains "error for missing" "[ERR][bak] $TEST_DIR/files/missing.txt: No such file"
+    assert_file_exists "continues with later file" "exists.txt.bak"
 }
 
 test_unknown_option() {
