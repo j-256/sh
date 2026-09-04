@@ -19,12 +19,19 @@ get_rc() { cat "$TEST_DIR/rc" 2>/dev/null; }
 
 _ok() {
     _PASS=$((_PASS + 1))
-    [ "$_VERBOSE" -eq 1 ] && echo "[OK] $1"
+    if [ "$_VERBOSE" -eq 1 ]; then
+        echo "[OK] $1"
+    else
+        printf '.'
+    fi
     return 0
 }
 
 _fail() {
     _FAIL=$((_FAIL + 1))
+    if [ "$_VERBOSE" -eq 0 ]; then
+        printf 'F\n'
+    fi
     echo "[FAIL] $1" >&2
     return 1
 }

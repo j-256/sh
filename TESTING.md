@@ -141,8 +141,8 @@ Convenience wrappers for common patterns:
 
 ### Verbosity
 
-- Default: only `[FAIL]` lines print, plus a summary with total/pass/fail counts
-- `-v`: `[OK]` lines also print
+- Default: one progress marker prints per assertion (`.` for pass, `F` for fail), `[FAIL]` details print immediately, and the summary follows
+- `-v`: `[OK]` and `[FAIL]` assertion details print instead of compact progress markers
 
 ## Writing Shims
 
