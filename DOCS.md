@@ -6,6 +6,12 @@ Every script is available at `https://toolio.sh/<script>` and its docs render at
 
 The doc is an elaboration layer, not a prerequisite. A reader must be able to use the script from `-h` alone; everything the doc adds beyond `-h` is motivation and depth (the pitch, worked examples, background), never a precondition. A precondition -- a config file's schema, an argument's accepted formats, a required env var's shape -- belongs in `-h`, and the doc may restate it but is never its only home. See [CONVENTIONS.md](CONVENTIONS.md#self-sufficiency) for the full rule and the two-tier enforcement split.
 
+## Standalone guides
+
+Cross-cutting shell guidance that does not document one script may also live in `docs/`. Give it a lowercase hyphenated filename, list it in the Guides section of [INDEX.md](INDEX.md), and link it from [README.md](README.md) when it is a primary repository resource. A guide at `docs/topic.md` is available as raw Markdown at `https://toolio.sh/topic.md` and rendered HTML at `https://toolio.sh/topic.md.html`.
+
+Standalone guides do not need a matching script or test and must not add a fake `View script` link. The Toolio renderer uses that link to decide whether a page should show the script installation widget. The script-doc structure below is optional for a standalone guide, but the same tone, self-contained examples, and copy-pasteable shell apply.
+
 ## Structure
 
 Docs follow this order:

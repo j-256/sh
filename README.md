@@ -4,6 +4,7 @@ A mixed collection of small shell utilities I've written over the years to make 
 
 - Browse the catalog: [INDEX.md](INDEX.md) – rendered at <https://toolio.sh>
 - Rendered docs: `https://toolio.sh/<script>.md.html` (e.g. [tsd](https://toolio.sh/tsd.md.html))
+- Guide: [Fast shell startup and hot paths](docs/shell-hot-paths.md) – keep checks fresh without making every invocation wait for them
 - Contributing: [CONTRIBUTING.md](CONTRIBUTING.md) – setup, conventions, and tests
 - Conventions: [CONVENTIONS.md](CONVENTIONS.md), [DOCS.md](DOCS.md), [TESTING.md](TESTING.md)
 

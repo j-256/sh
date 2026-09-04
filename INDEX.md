@@ -2,9 +2,15 @@
 
 A mixed catalog of small shell utilities for everyday development, infrastructure, and command-line work.
 
-**Jump to:** [Shell scripting](#shell-scripting) · [Text & data](#text--data) · [Web & HTTP](#web--http) · [DNS & networking](#dns--networking) · [File operations](#file-operations) · [Security & auth](#security--auth) · [Development](#development) · [macOS](#macos) · [Salesforce B2C Commerce](#salesforce-b2c-commerce) · [Meta](#meta)
+**Jump to:** [Guides](#guides) · [Shell scripting](#shell-scripting) · [Text & data](#text--data) · [Web & HTTP](#web--http) · [DNS & networking](#dns--networking) · [File operations](#file-operations) · [Security & auth](#security--auth) · [Development](#development) · [macOS](#macos) · [Salesforce B2C Commerce](#salesforce-b2c-commerce) · [Meta](#meta)
 
-Each row's primary link opens the doc; the `script` link opens the raw script.
+Each tool row's primary link opens the doc; the `script` link opens the raw script.
+
+## Guides
+
+| Guide | Description |
+|------|-------------|
+| [Fast shell startup and hot paths](docs/shell-hot-paths.md) | Decide which shell work must block readiness, run asynchronously, load lazily, or leave startup entirely |
 
 ## Shell scripting
 
