@@ -139,6 +139,8 @@ Because it exits nonzero only on a problem and is silent when everything is heal
 daemons check || echo "a daemon needs attention - run: daemons status"
 ```
 
+Silence checks read backward from the end of each append-only log and stop at the newest `trigger`; a malformed record in that scanned suffix still fails the check. Nothing is cached or summarized in a sidecar, so every invocation observes the live log while its healthy-path work stays independent of years of older records. `status` still reads the full history needed for rolling event counts.
+
 ## Loading and unloading (`load` and `unload`)
 
 `load` and `unload` drive `launchctl` directly, so you don't need to remember the domain/label/plist incantation for a daemon you already registered.

@@ -407,6 +407,19 @@ TSV
     printf 'usr.test.one\n' > "$TEST_DIR/loaded"
 }
 
+seed_registry_two_with_silence() {
+    local max_silence="$1"
+    mkdir -p "$(dirname "$TEST_DIR/daemons.tsv")"
+    cat > "$TEST_DIR/daemons.tsv" <<TSV
+name	domain	label	script	plist	max_silence
+one	gui/\$UID/	usr.test.one	$TEST_DIR/one.sh	-	$max_silence
+two	gui/\$UID/	usr.test.two	$TEST_DIR/two.sh	-	$max_silence
+TSV
+    printf '#!/bin/bash\n' > "$TEST_DIR/one.sh"; chmod +x "$TEST_DIR/one.sh"
+    printf '#!/bin/bash\n' > "$TEST_DIR/two.sh"; chmod +x "$TEST_DIR/two.sh"
+    printf 'usr.test.one\nusr.test.two\n' > "$TEST_DIR/loaded"
+}
+
 seed_registry_6col() {
     mkdir -p "$(dirname "$TEST_DIR/daemons.tsv")"
     cat > "$TEST_DIR/daemons.tsv" <<TSV
@@ -582,6 +595,57 @@ test_check_healthy_silence_limit() {
     seed_log one "{\"ts\":\"$ts\",\"daemon\":\"one\",\"event\":\"trigger\",\"detail\":\"recent\"}"
     run_script check
     assert_rc "recent trigger passes silence check" 0
+}
+
+test_check_reads_current_time_once_for_multiple_daemons() {
+    seed_registry_two_with_silence 15m
+    local ts; ts="$(utc_ago 60)"
+    seed_log one "{\"ts\":\"$ts\",\"daemon\":\"one\",\"event\":\"trigger\",\"detail\":\"recent\"}"
+    seed_log two "{\"ts\":\"$ts\",\"daemon\":\"two\",\"event\":\"trigger\",\"detail\":\"recent\"}"
+    cat > "$SHIM_DIR/date" <<'SHIM'
+#!/bin/bash
+printf 'call\n' >> "$TEST_DIR/date.calls"
+exec /bin/date "$@"
+SHIM
+    chmod +x "$SHIM_DIR/date"
+    run_script check
+    assert_rc "two recent daemons pass silence check" 0
+    assert_eq "check reads the current time once" "1" "$(wc -l < "$TEST_DIR/date.calls" | tr -d ' ')"
+}
+
+test_check_does_not_need_id_or_temp_files() {
+    seed_registry
+    for command_name in id mktemp; do
+        cat > "$SHIM_DIR/$command_name" <<'SHIM'
+#!/bin/bash
+exit 99
+SHIM
+        chmod +x "$SHIM_DIR/$command_name"
+    done
+    run_script check
+    assert_rc "healthy check uses Bash state instead of id or temp files" 0
+}
+
+test_check_stops_after_newest_valid_trigger() {
+    seed_registry_with_silence 15m
+    local ts; ts="$(utc_ago 60)"
+    seed_log one \
+        'not historical json' \
+        "{\"ts\":\"$ts\",\"daemon\":\"one\",\"event\":\"trigger\",\"detail\":\"recent\"}" \
+        "{\"ts\":\"$ts\",\"daemon\":\"one\",\"event\":\"noop\",\"detail\":\"done\"}"
+    run_script check
+    assert_rc "archival data before the newest trigger is outside the health scan" 0
+}
+
+test_check_rejects_unreadable_record_after_newest_trigger() {
+    seed_registry_with_silence 15m
+    local ts; ts="$(utc_ago 60)"
+    seed_log one \
+        "{\"ts\":\"$ts\",\"daemon\":\"one\",\"event\":\"trigger\",\"detail\":\"recent\"}" \
+        'not recent json'
+    run_script check
+    assert_rc "unreadable recent activity fails check" 1
+    assert_stdout_contains "unreadable recent activity names the log" "activity log is unreadable"
 }
 
 test_check_overdue_silence_limit() {

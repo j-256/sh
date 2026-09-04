@@ -19,7 +19,7 @@
 PATH="/opt/homebrew/bin:/usr/local/bin:$PATH" # LaunchDaemons get a minimal PATH; need jq
 
 _daemons() (
-    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    local SCRIPT_NAME="${BASH_SOURCE[0]##*/}"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="daemons" ;; esac
 
@@ -165,6 +165,183 @@ EXIT STATUS
 EOF
     }
 
+    case "${1:-}" in
+        -h|--help) _show_help; return 0 ;;
+    esac
+    if ! command -v jq >/dev/null 2>&1; then _error "jq is required"; return 3; fi
+
+    # Convert an NNN[smhd] relative duration to seconds
+    _duration_to_seconds() {
+        local duration="$1"
+        local amount="${duration%?}"
+        local unit="${duration#"$amount"}"
+        local multiplier
+        case "$amount" in
+            ''|*[!0-9]*) return 1 ;;
+        esac
+        case "$unit" in
+            s) multiplier=1 ;;
+            m) multiplier=$SECONDS_PER_MINUTE ;;
+            h) multiplier=$SECONDS_PER_HOUR ;;
+            d) multiplier=$SECONDS_PER_DAY ;;
+            *) return 1 ;;
+        esac
+        amount=$((10#$amount))
+        printf '%s\n' "$((amount * multiplier))"
+    }
+
+    # Echo registry rows as six tab-separated fields, using - for absent optionals
+    # Skips the header row and blank lines
+    # Errors (return 1) if the registry file is absent
+    _read_registry() {
+        if [ ! -f "$REGISTRY" ]; then
+            _error "registry not found: $REGISTRY"
+            return 1
+        fi
+        # Skip the first row and blanks; split each daemon row on whitespace runs
+        local uid="$UID"
+        local first_row=true
+        local row
+        while IFS= read -r row || [ -n "$row" ]; do
+            if [ "$first_row" = true ]; then
+                first_row=false
+                continue
+            fi
+            [ -n "$row" ] || continue
+            # Split on whitespace runs; script and plist paths are space-free
+            local name
+            local domain
+            local label
+            local script
+            local plist
+            local max_silence
+            local max_silence_seconds
+            read -r name domain label script plist max_silence <<< "$row"
+            [ -n "$name" ] || continue
+            [ -n "$plist" ] || plist="$REGISTRY_NONE"
+            [ -n "$max_silence" ] || max_silence="$REGISTRY_NONE"
+            if [ "$max_silence" != "$REGISTRY_NONE" ]; then
+                if ! max_silence_seconds="$(_duration_to_seconds "$max_silence")" || [ "$max_silence_seconds" -le 0 ]; then
+                    _error "Invalid max_silence '$max_silence' for '$name' (valid: positive NNN[smhd] or -)"
+                    return 1
+                fi
+            fi
+            # Substitute $UID token in the domain
+            domain="${domain//\$UID/$uid}"
+            printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$name" "$domain" "$label" "$script" "$plist" "$max_silence"
+        done < "$REGISTRY"
+    }
+
+    # Echo `launchctl print <domain><label>` text; return nonzero if not loaded
+    _launchd_state() {
+        launchctl print "$1$2" 2>/dev/null
+    }
+
+    # Loud alert line (bold + red), to stdout so the login shell shows it inline
+    _alert() {
+        local b
+        local red
+        local rst
+        if [ -t 1 ]; then b=$'\033[1m'; red=$'\033[31m'; rst=$'\033[0m'; fi
+        printf '%s%s[daemons] %s%s\n' "$b" "$red" "$*" "$rst"
+    }
+
+    # Print the newest trigger's timestamp and epoch as tab-separated fields
+    # BSD tail makes the healthy path independent of the append-only log size
+    _latest_trigger() {
+        local logf="$1"
+        local trigger
+        if trigger="$(
+            tail -r "$logf" 2>/dev/null \
+                | jq -Rnr 'first(inputs | fromjson | select(.event == "trigger") | [.ts, (.ts | fromdateiso8601)] | @tsv)' 2>/dev/null
+            pipeline_status=("${PIPESTATUS[@]}")
+            [ "${pipeline_status[1]}" -eq 0 ] || exit 1
+            # tail receives SIGPIPE after jq finds the trigger and stops reading
+            [ "${pipeline_status[0]}" -eq 0 ] || [ "${pipeline_status[0]}" -eq 141 ] || exit 1
+        )"; then
+            printf '%s\n' "$trigger"
+            return 0
+        fi
+        # Portable fallback also distinguishes an unreadable log from no trigger
+        jq -nr '
+            reduce inputs as $record (null;
+                if $record.event == "trigger" then $record else . end)
+            | select(. != null)
+            | [.ts, (.ts | fromdateiso8601)]
+            | @tsv
+        ' "$logf" 2>/dev/null
+    }
+
+    _do_check() {
+        local rows; rows="$(_read_registry)" || return 1
+        local problems=0
+        local now_epoch=""
+        while IFS=$'\t' read -r name domain label script _ max_silence; do
+            [ -n "$name" ] || continue
+            local state
+            if ! state="$(_launchd_state "$domain" "$label")"; then
+                _alert "$label not loaded in launchd!"
+                problems=1
+                continue
+            fi
+            if [ -n "$script" ] && [ ! -f "$script" ]; then
+                _alert "$label points at a missing script ($script) -- re-run its install"
+                problems=1
+                continue
+            fi
+            # launchd reports a non-numeric marker before a service first exits
+            local last_exit=""
+            local state_line
+            while IFS= read -r state_line; do
+                case "$state_line" in
+                    *'last exit code = '*)
+                        last_exit="${state_line#*last exit code = }"
+                        break
+                        ;;
+                esac
+            done <<< "$state"
+            case "$last_exit" in
+                ''|0) ;;
+                *[!0-9]*) ;;
+                *) _alert "$label last run failed (exit $last_exit)"; problems=1 ;;
+            esac
+            if [ "$max_silence" != "$REGISTRY_NONE" ]; then
+                local last_trigger=""
+                local last_trigger_epoch=""
+                local trigger
+                local logf="$LOG_DIR/$name.log"
+                if [ -e "$logf" ]; then
+                    if ! trigger="$(_latest_trigger "$logf")"; then
+                        _alert "$label activity log is unreadable ($logf)"
+                        problems=1
+                        continue
+                    fi
+                    IFS=$'\t' read -r last_trigger last_trigger_epoch <<< "$trigger"
+                fi
+                if [ -z "$last_trigger" ]; then
+                    _alert "$label has never fired (silence limit $max_silence)"
+                    problems=1
+                    continue
+                fi
+                local max_silence_seconds; max_silence_seconds="$(_duration_to_seconds "$max_silence")" || return 1
+                if [ -z "$now_epoch" ]; then
+                    now_epoch="$(date '+%s')" || return 1
+                fi
+                if [ "$last_trigger_epoch" -lt "$((now_epoch - max_silence_seconds))" ]; then
+                    _alert "$label has not fired within its $max_silence silence limit (last trigger $last_trigger)"
+                    problems=1
+                fi
+            fi
+        done <<< "$rows"
+        [ "$problems" = 0 ]
+    }
+
+    if [ "${1:-}" = check ]; then
+        shift
+        _do_check "$@"
+        return $?
+    fi
+
     _do_append() {
         local name="${1:-}"
         local event="${2:-}"
@@ -197,26 +374,6 @@ EOF
         else
             [ -e "$LOG_DIR/$target.log" ] && printf '%s\n' "$LOG_DIR/$target.log"
         fi
-    }
-
-    # Convert an NNN[smhd] relative duration to seconds
-    _duration_to_seconds() {
-        local duration="$1"
-        local amount="${duration%?}"
-        local unit="${duration#"$amount"}"
-        local multiplier
-        case "$amount" in
-            ''|*[!0-9]*) return 1 ;;
-        esac
-        case "$unit" in
-            s) multiplier=1 ;;
-            m) multiplier=$SECONDS_PER_MINUTE ;;
-            h) multiplier=$SECONDS_PER_HOUR ;;
-            d) multiplier=$SECONDS_PER_DAY ;;
-            *) return 1 ;;
-        esac
-        amount=$((10#$amount))
-        printf '%s\n' "$((amount * multiplier))"
     }
 
     # Normalize --since into an ISO-8601 UTC timestamp
@@ -293,47 +450,6 @@ EOF
             "\(.ts) \(.daemon) \(.event|ascii_upcase) \(.detail | split("\n")[0] // "")",
             (.detail | split("\n")[1:][] | "  " + .)
         '
-    }
-
-    # Echo registry rows as six tab-separated fields, using - for absent optionals
-    # Skips the header row and blank lines
-    # Errors (return 1) if the registry file is absent
-    _read_registry() {
-        if [ ! -f "$REGISTRY" ]; then
-            _error "registry not found: $REGISTRY"
-            return 1
-        fi
-        # Skip header (first line) and blanks; split each row on whitespace runs
-        local uid; uid="$(id -u)"
-        tail -n +2 "$REGISTRY" | while IFS= read -r row; do
-            [ -n "$row" ] || continue
-            # Split on whitespace runs; script and plist paths are space-free
-            local name
-            local domain
-            local label
-            local script
-            local plist
-            local max_silence
-            local max_silence_seconds
-            read -r name domain label script plist max_silence <<< "$row"
-            [ -n "$name" ] || continue
-            [ -n "$plist" ] || plist="$REGISTRY_NONE"
-            [ -n "$max_silence" ] || max_silence="$REGISTRY_NONE"
-            if [ "$max_silence" != "$REGISTRY_NONE" ]; then
-                if ! max_silence_seconds="$(_duration_to_seconds "$max_silence")" || [ "$max_silence_seconds" -le 0 ]; then
-                    _error "Invalid max_silence '$max_silence' for '$name' (valid: positive NNN[smhd] or -)"
-                    return 1
-                fi
-            fi
-            # Substitute $UID token in the domain
-            domain="${domain//\$UID/$uid}"
-            printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$name" "$domain" "$label" "$script" "$plist" "$max_silence"
-        done
-    }
-
-    # Echo `launchctl print <domain><label>` text; return nonzero if not loaded
-    _launchd_state() {
-        launchctl print "$1$2" 2>/dev/null
     }
 
     # Compose one JSONL activity record on stdout (does NOT write it). Timestamps
@@ -498,67 +614,6 @@ EOF
             fi
             printf '%-24s %-11s %s\n' "$name" "$loaded" "$activity"
         done
-    }
-
-    # Loud alert line (bold + red), to stdout so the login shell shows it inline
-    _alert() {
-        local b; local red; local rst
-        if [ -t 1 ]; then b=$'\033[1m'; red=$'\033[31m'; rst=$'\033[0m'; fi
-        printf '%s%s[daemons] %s%s\n' "$b" "$red" "$*" "$rst"
-    }
-
-    _do_check() {
-        local rows; rows="$(_read_registry)" || return 1
-        local problems=0
-        # Use a temp file for the problem count: the while loop runs in a subshell
-        # (piped), so a plain variable increment wouldn't survive. Portable to bash 3.2
-        local flag; flag="$(mktemp)"
-        printf '0' > "$flag"
-        printf '%s\n' "$rows" | while IFS=$'\t' read -r name domain label script _ max_silence; do
-            [ -n "$name" ] || continue
-            local state
-            if ! state="$(_launchd_state "$domain" "$label")"; then
-                _alert "$label not loaded in launchd!"
-                printf '1' > "$flag"; continue
-            fi
-            if [ -n "$script" ] && [ ! -f "$script" ]; then
-                _alert "$label points at a missing script ($script) -- re-run its install"
-                printf '1' > "$flag"; continue
-            fi
-            # launchd prints "last exit code = (never exited)" for a loaded
-            # service that has not run yet this boot (every WatchPaths daemon,
-            # right after a restart, before its trigger first fires) -- that is
-            # not a failure. Read the value after "= " (not $NF, which would
-            # pluck "exited)" off "(never exited)") and alert only on a non-zero
-            # integer exit code (codes are 0-255, always digits); a non-numeric
-            # value like "(never exited)" means no run recorded, so skip it
-            local last_exit; last_exit="$(printf '%s\n' "$state" | awk -F' = ' '/last exit code/ {print $2; exit}')"
-            case "$last_exit" in
-                ''|0) ;; # no code recorded, or a clean exit
-                *[!0-9]*) ;; # non-numeric (e.g. "(never exited)") -- not a failure
-                *) _alert "$label last run failed (exit $last_exit)"; printf '1' > "$flag" ;;
-            esac
-            if [ "$max_silence" != "$REGISTRY_NONE" ]; then
-                local last_trigger=""
-                local logf="$LOG_DIR/$name.log"
-                if [ -e "$logf" ]; then
-                    if ! last_trigger="$(jq -rs '[.[] | select(.event == "trigger")] | last | .ts // ""' "$logf" 2>/dev/null)"; then
-                        _alert "$label activity log is unreadable ($logf)"
-                        printf '1' > "$flag"
-                        continue
-                    fi
-                fi
-                if [ -z "$last_trigger" ]; then
-                    _alert "$label has never fired (silence limit $max_silence)"
-                    printf '1' > "$flag"
-                elif _trigger_is_overdue "$last_trigger" "$max_silence"; then
-                    _alert "$label has not fired within its $max_silence silence limit (last trigger $last_trigger)"
-                    printf '1' > "$flag"
-                fi
-            fi
-        done
-        problems="$(cat "$flag")"; rm -f "$flag"
-        [ "$problems" = 0 ]
     }
 
     _do_load() {
@@ -753,8 +808,6 @@ EOF
             cat $files | jq -c . | sort | _render_records
         fi
     }
-
-    if ! command -v jq >/dev/null 2>&1; then _error "jq is required"; return 3; fi
 
     local subcmd="${1:-}"
     [ $# -gt 0 ] && shift
