@@ -376,6 +376,7 @@ test_sbx_prefix_expansion() {
 
 test_source_execute_handler() {
     # Test that script can be sourced
+    # shellcheck disable=SC2119 # Exercise the no-argument sourced path
     run_script_sourced
     assert_rc "source exits 0" 0
 }
