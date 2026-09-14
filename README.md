@@ -72,3 +72,9 @@ $ /bin/sh --version
 GNU bash, version 3.2.57(1)-release (x86_64-apple-darwin23)
 Copyright (C) 2007 Free Software Foundation, Inc.
 ```
+
+## Project cover automation
+
+Run `npm ci --prefix tools/cover`, `npm exec --prefix tools/cover -- playwright install chromium`, then `make capture-cover`. `make capture-cover ARGS="--output /tmp/toolio-cover.png"` writes a review image. The capture uses Toolio's actual public renderer for a published revision whose `INDEX.md` exactly matches the local catalog. Publish a changed catalog on a topic branch before capturing it locally. Capture fails when the source cannot be verified or the renderer is unavailable.
+
+The cover workflow runs the shell test suite before capture and retains the image as an artifact. Successful main builds publish a changed `docs/screenshots/cover.png` with an image-only commit. Pull requests render without publishing; superseded builds skip publication. A weekly run also picks up changes to the public renderer.

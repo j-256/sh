@@ -1,7 +1,6 @@
 # Makefile - task runner for the sh repo
-# Needs only GNU Make + bash (both ship with macOS). The scripts have no
-# runtime dependencies and there is no build step, so every target is a thin
-# wrapper around test/*.sh
+# Shell utility verification needs only GNU Make + bash
+# Browser capture dependencies live separately under tools/cover
 
 # Absolute path to this Makefile's dir, so targets work from anywhere
 # (e.g. make -C /path/to/repo test) -- mirrors how the scripts resolve paths
@@ -14,6 +13,7 @@ help:
 	@echo 'Usage:'
 	@echo '  make test       run the full test suite'
 	@echo '  make test ARGS="pin-dns tsd"   run named tests'
+	@echo '  make capture-cover  capture the published Toolio catalog'
 	@echo '  make setup      activate this repo'"'"'s git hooks'
 	@echo '  make uninstall  deactivate the git hooks'
 
@@ -28,3 +28,7 @@ setup:
 # Deactivate the tracked git hooks (restore git's default hooks path)
 uninstall:
 	@/bin/bash $(root)test/install-hooks.sh --uninstall
+
+.PHONY: capture-cover
+capture-cover:
+	@npm --prefix $(root)tools/cover run capture -- $(ARGS)
