@@ -376,10 +376,8 @@ test_sbx_prefix_expansion() {
 
 test_source_execute_handler() {
     # Test that script can be sourced
-    local rc
-    bash -c ". $UNDER_TEST >/dev/null 2>&1; printf '%s\n' \$?" > "$TEST_DIR/source_rc"
-    rc="$(cat "$TEST_DIR/source_rc")"
-    assert_eq "source exits 0" "$rc" "0"
+    run_script_sourced
+    assert_rc "source exits 0" 0
 }
 
 test_auth_failure_propagates() {
