@@ -61,23 +61,31 @@ procsub_exec_script() {
     printf '%s\n' "$?" > "$TEST_DIR/rc"
 }
 
-# Source a script via `cat script | bash -c '. /dev/stdin --help'`, capturing
-# output. Exercises the "source path is a /dev/* pseudo-file, basename isn't
-# a real filename" codepath -- the same class of SCRIPT_NAME fallback concern
-# as `. <(curl ...)` but via /dev/stdin, which works on bash 3.2
+# Source a script via a seekable `/dev/fd/N` opened from the real file,
+# capturing output. Exercises the "source path is a /dev/* pseudo-file whose
+# basename isn't a real filename" codepath -- the SCRIPT_NAME fallback concern
+# that the real one-shot form `. <(curl ...)` (BASH_SOURCE = /dev/fd/N) hits
 #
-# We deliberately avoid `. <(cat script) --help` here: bash 3.2 silently
-# fails process substitution when invoked inside `bash -c '...'`, producing
-# no output and rc 0. The user-facing form in the README (`. <(curl ...)`
-# from an interactive shell) does work on 3.2 -- it's the `-c` wrapper that
-# breaks, and that wrapper is a test-harness artifact
+# The source path must be a /dev/fd/N pseudo-file but must NOT be a pipe. Two
+# tempting alternatives are both wrong here:
+#   - `. <(cat script) --help`: bash 3.2 silently fails process substitution
+#     inside `bash -c '...'`, producing no output and rc 0. The README form
+#     (`. <(curl ...)` from an interactive shell) does work on 3.2 -- it's the
+#     `-c` wrapper that breaks, and that wrapper is a test-harness artifact
+#   - `cat script | bash -c '. /dev/stdin --help'`: sourcing a reopened pipe
+#     races with cat on Darwin's fdesc filesystem. Under load the source sees
+#     an immediate EOF, runs nothing, and yields empty output with rc 0 -- a
+#     flaky "help mentions" failure that only surfaces on a busy CI runner
+# A plain `3< file` redirect gives a seekable /dev/fd/3 with a digit basename:
+# the same observable BASH_SOURCE shape as `. <(curl ...)`, with no writer to
+# race against
 #
 # Only meaningful for scripts that must be sourced (prompt). Every other
 # script works sourced or executed via the source/execute exit handler, so
 # the procsub-exec case already covers them
 procsub_source_script() {
     local script="$1"
-    cat "$FLEET_DIR/$script" | /bin/bash -c '. /dev/stdin --help' \
+    /bin/bash -c '. /dev/fd/3 --help' 3< "$FLEET_DIR/$script" \
         >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
     printf '%s\n' "$?" > "$TEST_DIR/rc"
 }
