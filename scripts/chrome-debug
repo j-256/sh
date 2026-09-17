@@ -46,7 +46,7 @@ _chrome_debug() (
 NAME
   $SCRIPT_NAME - launch a Chromium-family browser in remote-debugging mode for MCP attach
 SYNOPSIS
-  $SCRIPT_NAME [-p ${s}port${r}] [-d ${s}dir${r}] [-nfv] [--no-extensions] <${s}browser-location${r}> [-- ${s}extra-chrome-args${r}]
+  $SCRIPT_NAME [-p ${s}port${r}] [-d ${s}dir${r}] [-nfv] [--no-extensions] [--devtools-pref ${s}kv${r}] <${s}browser-location${r}> [-- ${s}extra-chrome-args${r}]
   $SCRIPT_NAME -h
 DESCRIPTION
   Launches a Chromium-family browser (Chrome, Edge, Brave, Chromium, ...)
@@ -73,6 +73,13 @@ DESCRIPTION
   MDM-managed browser the account may still be force-signed-in, but sync-down
   is suppressed; use Chrome for Testing for a fully account-free session.
 
+  Two DevTools settings are enabled by default on launch -- "generate HAR with
+  sensitive data" and "disable cache (while DevTools is open)" -- by seeding the
+  profile's Preferences before the browser starts. Each is seeded only if the
+  profile doesn't already carry a value, so an in-session toggle survives the
+  next launch. Opt out with --no-har-sensitive, --no-disable-cache, or (for all)
+  --no-devtools-prefs; seed any other setting with --devtools-pref KEY=VALUE.
+
   If the chosen port is already serving a debug browser, $SCRIPT_NAME attaches
   to it -- it prints the linkage and exits rather than launching a second
   instance on the same profile (which Chrome would refuse). Use -f/--fresh to
@@ -86,6 +93,10 @@ OPTIONS
   -n, --dry-run             Resolve and print, but do not launch
   -f, --fresh               Wipe the port's profile dir before launching (clean session)
   --no-extensions           Launch with extensions disabled (passes --disable-extensions)
+  --no-har-sensitive        Force off the default-on DevTools "generate HAR with sensitive data" setting
+  --no-disable-cache        Force off the default-on DevTools "disable cache (while DevTools is open)" setting
+  --no-devtools-prefs       Skip all built-in DevTools setting seeding
+  --devtools-pref ${s}kv${r}       Seed a DevTools setting KEY=VALUE (repeatable); prefix KEY with synced: for the synced bucket
   -v, --verbose             Verbose resolution output
   -h, --help                Show this help message
 ENVIRONMENT
@@ -107,6 +118,7 @@ EXAMPLES
   $SCRIPT_NAME -p 9222 "/Applications/Google Chrome.app"
   $SCRIPT_NAME -n -v "/Applications/Google Chrome.app"
   $SCRIPT_NAME "/Applications/Google Chrome.app" -- --incognito
+  $SCRIPT_NAME --devtools-pref synced:ui-theme=dark "/Applications/Microsoft Edge.app"
 EOF
     }
 
@@ -380,6 +392,10 @@ EOF
     local verbose=""
     local fresh=""
     local no_extensions=""
+    local no_har=""
+    local no_cache=""
+    local no_devtools_prefs=""
+    local -a devtools_pref_args=()
     local -a chrome_args=()
     local -a positionals=()
     local -a browser_argv=()
@@ -394,6 +410,15 @@ EOF
             -n|--dry-run) dry_run=1; shift ;;
             -f|--fresh) fresh=1; shift ;;
             --no-extensions) no_extensions=1; shift ;; # long-only: negation flag
+            --no-har-sensitive)  no_har=1; shift ;;            # long-only: force the HAR-with-sensitive-data setting off
+            --no-disable-cache)  no_cache=1; shift ;;          # long-only: force the disable-cache setting off
+            --no-devtools-prefs) no_devtools_prefs=1; shift ;; # long-only: skip all built-in DevTools setting seeding
+            --devtools-pref)
+                [ -n "${2-}" ] || { _error "--devtools-pref requires KEY=VALUE. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                devtools_pref_args+=("$2"); shift 2 ;;
+            --devtools-pref=*)
+                [ -n "${1#*=}" ] || { _error "--devtools-pref requires KEY=VALUE. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                devtools_pref_args+=("${1#*=}"); shift ;;
             -p|--port)
                 [ -n "${2-}" ] || { _error "--port requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 port="$2"; shift 2 ;;
@@ -451,6 +476,119 @@ EOF
         user_data_dir="/tmp/chrome-debug-$port"
     fi
 
+    # --- DevTools setting seeding ------------------------------------------------
+    # DevTools persists frontend settings into the profile's Default/Preferences
+    # JSON, bucketed by each setting's storageType: global settings under
+    # devtools.preferences, SYNCED settings under
+    # devtools.synced_preferences_sync_disabled (the _sync_disabled variant
+    # because we always pass --disable-sync -- with sync on it would be
+    # _sync_enabled). Values are stored as JSON.stringify(value) strings. Seeding
+    # these buckets before launch means the frontend picks them up when it opens.
+    # Two settings are on by default via seed-if-unset (jq //=), so a value the
+    # profile already carries -- e.g. a prior in-session toggle -- is respected;
+    # the --no-* opt-outs and --devtools-pref force a value instead
+    local HAR_SETTING='network.show-options-to-generate-har-with-sensitive-data'
+    local CACHE_SETTING='cache-disabled'
+    local SYNCED_BUCKET='synced_preferences_sync_disabled'
+    local GLOBAL_BUCKET='preferences'
+    local -a seed_bucket=()
+    local -a seed_op=()
+    local -a seed_key=()
+    local -a seed_val=()
+
+    # Built-in defaults (skipped wholesale by --no-devtools-prefs). Each is
+    # seed-if-unset (//=) at "true", or forced (=) to "false" by its --no-* opt-out
+    if [ -z "$no_devtools_prefs" ]; then
+        if [ -n "$no_har" ]; then
+            seed_bucket+=("$SYNCED_BUCKET"); seed_op+=('='); seed_key+=("$HAR_SETTING"); seed_val+=('false')
+        else
+            seed_bucket+=("$SYNCED_BUCKET"); seed_op+=('//='); seed_key+=("$HAR_SETTING"); seed_val+=('true')
+        fi
+        if [ -n "$no_cache" ]; then
+            seed_bucket+=("$GLOBAL_BUCKET"); seed_op+=('='); seed_key+=("$CACHE_SETTING"); seed_val+=('false')
+        else
+            seed_bucket+=("$GLOBAL_BUCKET"); seed_op+=('//='); seed_key+=("$CACHE_SETTING"); seed_val+=('true')
+        fi
+    fi
+
+    # Explicit --devtools-pref KEY=VALUE, applied after the defaults so an explicit
+    # setting always wins. KEY may carry a synced:/global: prefix; a bare KEY uses
+    # the global bucket (still applied at launch via read-merge, re-seeded each
+    # run). VALUE is stored exactly as DevTools would: JSON.stringify(parsed-or-string)
+    if [ "${#devtools_pref_args[@]}" -gt 0 ]; then
+        local dp
+        local dp_key
+        local dp_bucket
+        local dp_enc
+        for dp in "${devtools_pref_args[@]}"; do
+            case "$dp" in
+                *=*) : ;;
+                *) _error "--devtools-pref needs KEY=VALUE (got '$dp'). Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+            esac
+            dp_key="${dp%%=*}"
+            dp_bucket="$GLOBAL_BUCKET"
+            case "$dp_key" in
+                synced:*) dp_bucket="$SYNCED_BUCKET"; dp_key="${dp_key#synced:}" ;;
+                global:*) dp_bucket="$GLOBAL_BUCKET"; dp_key="${dp_key#global:}" ;;
+            esac
+            [ -n "$dp_key" ] || { _error "--devtools-pref needs a non-empty KEY (got '$dp'). Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+            dp_enc="$(jq -rn --arg v "${dp#*=}" 'try ($v|fromjson) catch $v | tojson')"
+            seed_bucket+=("$dp_bucket"); seed_op+=('='); seed_key+=("$dp_key"); seed_val+=("$dp_enc")
+        done
+    fi
+
+    # Render the seed plan for the dry-run / verbose paths. Prints nothing if empty
+    _print_seed_plan() {
+        [ "${#seed_key[@]}" -gt 0 ] || return 0
+        printf '  devtools-prefs:\n'
+        local i=0
+        local tag
+        while [ "$i" -lt "${#seed_key[@]}" ]; do
+            tag='global'
+            [ "${seed_bucket[$i]}" = "$SYNCED_BUCKET" ] && tag='synced'
+            printf '    [%s] %s %s %s\n' "$tag" "${seed_key[$i]}" "${seed_op[$i]}" "${seed_val[$i]}"
+            i=$((i + 1))
+        done
+    }
+
+    # Merge the seed plan into <profile>/Default/Preferences via jq, creating the
+    # file if absent. Non-fatal: a parse or write failure warns and lets the launch
+    # proceed rather than clobbering the profile. Buckets/keys/values pass as --arg
+    # (never interpolated); only the operator (//= or =, a controlled set) is baked
+    _apply_devtools_seeds() {
+        [ "${#seed_key[@]}" -gt 0 ] || return 0
+        local prof_dir="$1/Default"
+        local prefs="$prof_dir/Preferences"
+        mkdir -p "$prof_dir" 2>/dev/null || { _warn "could not create '$prof_dir'; skipping DevTools seeding"; return 0; }
+
+        local prog='.'
+        local -a jq_args=()
+        local i=0
+        while [ "$i" -lt "${#seed_key[@]}" ]; do
+            prog="$prog | .devtools[\$b$i][\$k$i] ${seed_op[$i]} \$v$i"
+            jq_args+=(--arg "b$i" "${seed_bucket[$i]}" --arg "k$i" "${seed_key[$i]}" --arg "v$i" "${seed_val[$i]}")
+            i=$((i + 1))
+        done
+
+        local input='{}'
+        [ -f "$prefs" ] && input="$(< "$prefs")"
+
+        local out
+        if ! out="$(printf '%s' "$input" | jq "${jq_args[@]}" "$prog" 2>/dev/null)"; then
+            _warn "could not parse '$prefs'; skipping DevTools seeding (launch continues)"
+            return 0
+        fi
+
+        local tmp
+        tmp="$(mktemp "$prefs.XXXXXX" 2>/dev/null)" || tmp="$prefs.tmp.$$"
+        if printf '%s' "$out" > "$tmp" 2>/dev/null && mv "$tmp" "$prefs" 2>/dev/null; then
+            [ -n "$verbose" ] && _info "seeded ${#seed_key[@]} DevTools pref(s) into $prefs"
+        else
+            rm -f "$tmp" 2>/dev/null
+            _warn "could not write '$prefs'; skipping DevTools seeding (launch continues)"
+        fi
+    }
+
     browser_argv=(
         "--remote-debugging-port=$port"
         "--user-data-dir=$user_data_dir"
@@ -476,6 +614,7 @@ EOF
         printf "  server: '%s'\n" "${server_name:-(none)}"
         printf "  profile: '%s'\n" "$user_data_dir"
         printf '  command: %s\n' "$(_shell_join "$browser_exe" "${browser_argv[@]}")"
+        _print_seed_plan
         return 0
     fi
 
@@ -527,6 +666,9 @@ EOF
         # --fresh can't apply to a live browser (its profile is in use, and a
         # relaunch would singleton-abort), so say so rather than silently ignoring it
         [ -n "$fresh" ] && _warn "port :$port is already serving; --fresh ignored (close the browser first to start clean)"
+        if [ -n "$no_har" ] || [ -n "$no_cache" ] || [ "${#devtools_pref_args[@]}" -gt 0 ]; then
+            _warn "port :$port is already serving; requested DevTools prefs not seeded (close the browser first)"
+        fi
         local serving_ver; serving_ver="$(curl -s --max-time 2 "http://127.0.0.1:$port/json/version" 2>/dev/null | jq -r '.Browser // "unknown"' 2>/dev/null)"
         _print_attach_info "${serving_ver:-unknown}" serving ""
         return 0
@@ -538,6 +680,11 @@ EOF
     if [ -n "$fresh" ]; then
         rm -rf "$user_data_dir"
     fi
+
+    # Seed DevTools settings into the profile before launch (after any --fresh
+    # wipe, so a clean slate still gets the defaults). The frontend reads these
+    # buckets when it opens; the attach path above returns before reaching here
+    _apply_devtools_seeds "$user_data_dir"
 
     # Probe budget is env-overridable so tests run fast; defaults are for real use
     local probe_tries="${CHROME_DEBUG_PROBE_TRIES:-20}"

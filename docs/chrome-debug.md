@@ -43,6 +43,9 @@ $ chrome-debug -n ~/chrome
   server: 'chrome-devtools-9222'
   profile: '/tmp/chrome-debug-9222'
   command: ~/chrome/mac_arm-150.0.7871.115/chrome-mac-arm64/Google\ Chrome\ for\ Testing.app/Contents/MacOS/Google\ Chrome\ for\ Testing --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-debug-9222 --no-first-run --no-default-browser-check --disable-sync
+  devtools-prefs:
+    [synced] network.show-options-to-generate-har-with-sensitive-data //= true
+    [global] cache-disabled //= true
 ```
 
 **Clean slate** – wipe the port's profile and launch with no extensions:
@@ -92,6 +95,29 @@ The profile directory defaults to `/tmp/chrome-debug-<port>`, one per port. It *
 - **`-f` / `--fresh`** wipes the port's profile directory before launching, for a genuinely clean slate.
 - **`--no-extensions`** launches with `--disable-extensions`, suppressing any externally-installed or policy extensions. (It's a discoverable alias for `-- --disable-extensions`; both work.)
 
+## DevTools settings
+
+There's no command-line switch for DevTools *frontend* settings (the Settings-panel toggles) – DevTools reads them from the profile's `Default/Preferences` when it opens. `chrome-debug` seeds that file before launch, so a fresh debug browser opens with the settings you want. Two are on by default:
+
+- **Generate HAR with sensitive data** – lets you export un-sanitized HARs (cookies, auth headers) from the Network panel.
+- **Disable cache (while DevTools is open)** – the Network panel's "Disable cache" toggle.
+
+Each is seeded *only if the profile doesn't already carry a value*, so toggling one off inside a session sticks on the next launch. Force one off with `--no-har-sensitive` / `--no-disable-cache`, or skip all built-in seeding with `--no-devtools-prefs`.
+
+Seed any other setting with `--devtools-pref KEY=VALUE` (repeatable):
+
+```bash
+# preset a dark DevTools theme (the theme is a synced setting -- use synced:)
+chrome-debug --devtools-pref synced:ui-theme=dark "/Applications/Microsoft Edge.app"
+
+# silence the self-XSS console warning, and preset a numeric setting
+chrome-debug --devtools-pref disable-self-xss-warning=true --devtools-pref foo=3 ~/chrome
+```
+
+`VALUE` is encoded the way DevTools stores settings, and the subtlety is that DevTools keeps *every* setting as a JSON **string** in `Preferences` – the stored string's content is `JSON.stringify(value)`. So `=true` is stored as `"true"`, `=42` as `"42"`, and `=dark` as `"\"dark\""` (a string whose content is the quoted `"dark"`); DevTools reads each back with `JSON.parse`. The dry-run plan prints that inner `JSON.stringify` content – `true`, `42`, `"dark"` – for readability, not the outer quotes. Settings are bucketed by their `storageType`: most are **global** (in `devtools.preferences`), but a handful – the DevTools theme, "generate HAR with sensitive data", "preserve log", and others registered `SYNCED` – live in a separate synced bucket. A bare `KEY` targets the global bucket (which still applies at launch, since DevTools merges both buckets on read, and is re-seeded each run); prefix with `synced:` (or `global:`) to choose explicitly. The synced bucket is the `_sync_disabled` variant because `chrome-debug` always passes `--disable-sync`.
+
+Seeding happens on the launch path only; when `chrome-debug` attaches to an already-running browser it can't seed (and warns if you asked it to). `-n`/`--dry-run` prints the planned seeds without writing.
+
 ## Managed browsers (org policy)
 
 If your browser is managed by an organization (MDM/cloud policy), two things can surprise you:
@@ -126,13 +152,17 @@ chrome-debug -p 9222 "/Applications/Microsoft Edge.app"
 | `-n, --dry-run` | Resolve and print what would launch, but don't launch |
 | `-f, --fresh` | Wipe the port's profile directory before launching (clean session) |
 | `--no-extensions` | Launch with extensions disabled (passes `--disable-extensions`) |
+| `--no-har-sensitive` | Force off the default-on DevTools "generate HAR with sensitive data" setting |
+| `--no-disable-cache` | Force off the default-on DevTools "disable cache (while DevTools is open)" setting |
+| `--no-devtools-prefs` | Skip all built-in DevTools setting seeding |
+| `--devtools-pref KEY=VALUE` | Seed a DevTools setting (repeatable); prefix `KEY` with `synced:` for the synced bucket. See [DevTools settings](#devtools-settings) |
 | `-v, --verbose` | Verbose resolution output |
 | `-h, --help` | Show help |
 | `-- extra-chrome-args` | Everything after `--` is passed to the browser verbatim |
 
 `<browser-location>` (required positional) is a `.app` bundle, a raw executable, or a directory to search downward for the newest `.app`.
 
-Baked into every launch: `--remote-debugging-port`, `--user-data-dir`, `--no-first-run`, `--no-default-browser-check`, `--disable-sync`.
+Baked into every launch: `--remote-debugging-port`, `--user-data-dir`, `--no-first-run`, `--no-default-browser-check`, `--disable-sync`. Two DevTools settings are seeded on by default – see [DevTools settings](#devtools-settings).
 
 ### Environment variables
 

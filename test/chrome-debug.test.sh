@@ -67,6 +67,28 @@ run_script_in_dir() {
 # helper: a valid browser arg for tests that only care about port logic
 _any_browser() { make_app "$TEST_DIR/B.app" "B"; printf '%s' "$TEST_DIR/B.app"; }
 
+# A curl shim that always serves a version JSON so the launch path completes fast
+# (probe succeeds on the first try). For the DevTools-seeding launch-path tests.
+write_serving_curl() {
+    cat > "$SHIM_DIR/curl" <<'SHIM'
+#!/bin/bash
+for a in "$@"; do case "$a" in *json/version*) echo '{"Browser":"Chrome/151"}'; exit 0 ;; esac; done
+exit 0
+SHIM
+    chmod +x "$SHIM_DIR/curl"
+}
+
+# A fast-exit fake browser at $TEST_DIR/fastexit (so the foreground `wait` returns).
+make_fastexit() { printf '#!/bin/bash\nexit 0\n' > "$TEST_DIR/fastexit"; chmod +x "$TEST_DIR/fastexit"; }
+
+# Read a seeded DevTools pref from the test profile: $1 bucket, $2 key. Prints
+# "<absent>" when the key is missing (the tests run with the dev's full PATH, so
+# jq here is the host jq, not the run_script-pinned one).
+read_seeded_pref() {
+    jq -r --arg b "$1" --arg k "$2" '.devtools[$b][$k] // "<absent>"' \
+        "$TEST_DIR/prof/Default/Preferences" 2>/dev/null
+}
+
 # Run with a controlled HOME (walk-up ceiling) and CHROME_DEBUG_MCP_JSON unset,
 # from a chosen launch dir. For testing .mcp.json walk-up discovery.
 run_script_walkup() {
@@ -362,7 +384,7 @@ SHIM
     printf '#!/bin/bash\nexit 0\n' > "$TEST_DIR/fastexit"
     chmod +x "$TEST_DIR/fastexit"
 
-    CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -p 9222 "$TEST_DIR/fastexit"
+    CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -d "$TEST_DIR/prof" -p 9222 "$TEST_DIR/fastexit"
     assert_rc "launch exits 0" 0
     assert_stdout_contains "confirmation w/ browser+port" "launched Chrome/150.0.7871.46, listening on :9222"
     assert_stdout_contains "linkage line" "attach via MCP server 'chrome-devtools-9222'"
@@ -386,7 +408,7 @@ SHIM
     chmod +x "$TEST_DIR/fastexit"
 
     CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" CHROME_DEBUG_PROBE_TRIES=2 CHROME_DEBUG_PROBE_SLEEP=0 \
-        run_script -p 9222 "$TEST_DIR/fastexit"
+        run_script -d "$TEST_DIR/prof" -p 9222 "$TEST_DIR/fastexit"
     assert_rc "probe failure exits 1" 1
     assert_stderr_contains "probe fail msg" "debug endpoint never came up"
 }
@@ -542,7 +564,7 @@ SHIM
     chmod +x "$SHIM_DIR/curl"
     printf '#!/bin/bash\nexit 0\n' > "$TEST_DIR/fastexit"
     chmod +x "$TEST_DIR/fastexit"
-    CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -p 9222 "$TEST_DIR/fastexit"
+    CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -d "$TEST_DIR/prof" -p 9222 "$TEST_DIR/fastexit"
     assert_rc "launch exits 0" 0
     assert_stdout_contains "fresh launch says launched" "launched"
 }
@@ -692,6 +714,169 @@ test_empty_user_data_dir_value_is_usage_error() {
     CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n --user-data-dir= "$(_any_browser)"
     assert_rc "empty --user-data-dir= exits 2" 2
     assert_stderr_contains "requires a value" "requires a value"
+}
+
+# --- DevTools setting seeding ---
+
+test_devtools_defaults_planned_in_dry_run() {
+    write_mcp_fixture
+    : > "$TEST_DIR/busy_ports"
+    CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n "$(_any_browser)"
+    assert_rc "default dry-run exits 0" 0
+    assert_stdout_contains "seed plan header" "devtools-prefs:"
+    assert_stdout_contains "HAR default seed-if-unset in synced bucket" \
+        "[synced] network.show-options-to-generate-har-with-sensitive-data //= true"
+    assert_stdout_contains "cache default seed-if-unset in global bucket" \
+        "[global] cache-disabled //= true"
+}
+
+test_no_har_sensitive_forces_off() {
+    write_mcp_fixture
+    : > "$TEST_DIR/busy_ports"
+    CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n --no-har-sensitive "$(_any_browser)"
+    assert_rc "no-har dry-run exits 0" 0
+    assert_stdout_contains "HAR forced off" "[synced] network.show-options-to-generate-har-with-sensitive-data = false"
+    assert_stdout_contains "cache still default-on" "[global] cache-disabled //= true"
+}
+
+test_no_disable_cache_forces_off() {
+    write_mcp_fixture
+    : > "$TEST_DIR/busy_ports"
+    CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n --no-disable-cache "$(_any_browser)"
+    assert_rc "no-cache dry-run exits 0" 0
+    assert_stdout_contains "cache forced off" "[global] cache-disabled = false"
+}
+
+test_no_devtools_prefs_skips_all_seeding() {
+    write_mcp_fixture
+    : > "$TEST_DIR/busy_ports"
+    CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n --no-devtools-prefs "$(_any_browser)"
+    assert_rc "no-devtools-prefs dry-run exits 0" 0
+    assert_stdout_not_contains "no seed plan at all" "devtools-prefs:"
+}
+
+test_devtools_pref_general_defaults_to_global_bucket() {
+    write_mcp_fixture
+    : > "$TEST_DIR/busy_ports"
+    CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n --devtools-pref ui-theme=dark "$(_any_browser)"
+    assert_rc "devtools-pref dry-run exits 0" 0
+    # a bare string value is stored JSON-quoted; a bare KEY uses the global bucket
+    assert_stdout_contains "general pref in global bucket, quoted string" '[global] ui-theme = "dark"'
+}
+
+test_devtools_pref_synced_prefix_targets_synced_bucket() {
+    write_mcp_fixture
+    : > "$TEST_DIR/busy_ports"
+    CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n --devtools-pref synced:ui-theme=dark "$(_any_browser)"
+    assert_rc "synced-prefix dry-run exits 0" 0
+    assert_stdout_contains "synced prefix routes to synced bucket" '[synced] ui-theme = "dark"'
+}
+
+test_devtools_pref_boolean_stored_bare() {
+    write_mcp_fixture
+    : > "$TEST_DIR/busy_ports"
+    CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n --devtools-pref a=true --devtools-pref b=false "$(_any_browser)"
+    assert_rc "bool dry-run exits 0" 0
+    assert_stdout_contains "true stored bare (not quoted)" "[global] a = true"
+    assert_stdout_contains "false stored bare (not quoted)" "[global] b = false"
+}
+
+test_devtools_pref_requires_key_equals_value() {
+    write_mcp_fixture
+    : > "$TEST_DIR/busy_ports"
+    CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n --devtools-pref noequals "$(_any_browser)"
+    assert_rc "missing = exits 2" 2
+    assert_stderr_contains "names KEY=VALUE" "needs KEY=VALUE"
+}
+
+test_devtools_pref_missing_value_token_errors() {
+    write_mcp_fixture
+    : > "$TEST_DIR/busy_ports"
+    # --devtools-pref consumes the browser arg as its value, leaving no positional
+    CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n --devtools-pref "$(_any_browser)"
+    assert_rc "dangling --devtools-pref exits 2" 2
+}
+
+test_seed_written_to_fresh_profile() {
+    write_mcp_fixture
+    : > "$TEST_DIR/busy_ports"
+    write_serving_curl
+    make_fastexit
+    CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -d "$TEST_DIR/prof" -p 9222 "$TEST_DIR/fastexit"
+    assert_rc "seeded launch exits 0" 0
+    assert_file_exists "Preferences created in fresh profile" "$TEST_DIR/prof/Default/Preferences"
+    assert_eq "HAR seeded true in synced bucket" \
+        "$(read_seeded_pref synced_preferences_sync_disabled network.show-options-to-generate-har-with-sensitive-data)" "true"
+    assert_eq "cache-disabled seeded true in global bucket" \
+        "$(read_seeded_pref preferences cache-disabled)" "true"
+}
+
+test_seed_if_unset_respects_existing_value() {
+    write_mcp_fixture
+    : > "$TEST_DIR/busy_ports"
+    write_serving_curl
+    make_fastexit
+    mkdir -p "$TEST_DIR/prof/Default"
+    # profile already carries HAR=false (a prior in-session toggle-off)
+    printf '%s\n' '{"devtools":{"synced_preferences_sync_disabled":{"network.show-options-to-generate-har-with-sensitive-data":"false"}}}' \
+        > "$TEST_DIR/prof/Default/Preferences"
+    CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -d "$TEST_DIR/prof" -p 9222 "$TEST_DIR/fastexit"
+    assert_rc "reuse launch exits 0" 0
+    assert_eq "HAR stays false (//= respects existing)" \
+        "$(read_seeded_pref synced_preferences_sync_disabled network.show-options-to-generate-har-with-sensitive-data)" "false"
+    assert_eq "cache-disabled added (was unset)" \
+        "$(read_seeded_pref preferences cache-disabled)" "true"
+}
+
+test_seed_merge_preserves_unrelated_keys() {
+    write_mcp_fixture
+    : > "$TEST_DIR/busy_ports"
+    write_serving_curl
+    make_fastexit
+    mkdir -p "$TEST_DIR/prof/Default"
+    printf '%s\n' '{"devtools":{"preferences":{"my-existing":"keep"}},"profile":{"name":"x"}}' \
+        > "$TEST_DIR/prof/Default/Preferences"
+    CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -d "$TEST_DIR/prof" -p 9222 "$TEST_DIR/fastexit"
+    assert_rc "merge launch exits 0" 0
+    assert_eq "unrelated devtools pref preserved" "$(read_seeded_pref preferences my-existing)" "keep"
+    assert_eq "unrelated top-level key preserved" \
+        "$(jq -r '.profile.name' "$TEST_DIR/prof/Default/Preferences" 2>/dev/null)" "x"
+    assert_eq "cache default merged in" "$(read_seeded_pref preferences cache-disabled)" "true"
+}
+
+test_no_devtools_prefs_writes_no_preferences() {
+    write_mcp_fixture
+    : > "$TEST_DIR/busy_ports"
+    write_serving_curl
+    make_fastexit
+    CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script --no-devtools-prefs -d "$TEST_DIR/prof" -p 9222 "$TEST_DIR/fastexit"
+    assert_rc "no-devtools-prefs launch exits 0" 0
+    # nothing to seed -> the script never creates a Preferences file
+    if [ -f "$TEST_DIR/prof/Default/Preferences" ]; then
+        echo "[FAIL] --no-devtools-prefs must not write Preferences" >&2
+        return 1
+    fi
+    _ok "no Preferences written when seeding skipped"
+}
+
+test_already_serving_warns_when_prefs_requested() {
+    write_mcp_fixture
+    printf '9222\n' > "$TEST_DIR/busy_ports"
+    printf '9222\n' > "$TEST_DIR/serving_ports"
+    cat > "$SHIM_DIR/curl" <<'SHIM'
+#!/bin/bash
+port=""
+for a in "$@"; do case "$a" in *127.0.0.1:*) port="${a##*127.0.0.1:}"; port="${port%%/*}" ;; esac; done
+if [ -f "$TEST_DIR/serving_ports" ] && grep -qx "$port" "$TEST_DIR/serving_ports"; then
+    echo '{"Browser":"Chrome/151"}'; exit 0
+fi
+exit 7
+SHIM
+    chmod +x "$SHIM_DIR/curl"
+    printf '#!/bin/bash\nexit 0\n' > "$TEST_DIR/recorder"; chmod +x "$TEST_DIR/recorder"
+    CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -p 9222 --devtools-pref foo=bar "$TEST_DIR/recorder"
+    assert_rc "already-serving exits 0" 0
+    assert_stderr_contains "warns prefs not seeded" "DevTools prefs not seeded"
 }
 
 # --- run ---
