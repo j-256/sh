@@ -533,6 +533,84 @@ EOF
         return 0
     }
 
+    # macOS CfT platform key from the CPU arch. CHROME_DEBUG_PLATFORM is a testing
+    # knob that overrides the detected arch, so fixtures pinned to one platform
+    # (e.g. mac-arm64) behave the same regardless of the host running the tests
+    _cft_platform() {
+        # Honor the testing override only if it is a safe platform token ([a-z0-9-],
+        # no path separators or spaces); otherwise fall back to arch detection
+        case "$CHROME_DEBUG_PLATFORM" in
+            "") : ;;
+            *[!a-z0-9-]*) : ;;
+            *) printf '%s' "$CHROME_DEBUG_PLATFORM"; return 0 ;;
+        esac
+        case "$(uname -m)" in
+            arm64|aarch64) printf 'mac-arm64' ;;
+            *) printf 'mac-x64' ;;
+        esac
+    }
+
+    # Cache dir for a specific build: <root>/cft/<version>/<platform>
+    _cft_version_dir() {
+        printf '%s/cft/%s/%s' "$(_cft_cache_root)" "$1" "$2"
+    }
+
+    # Deterministic CfT download URL for <version> <platform>
+    _cft_download_url() {
+        local base="${CHROME_DEBUG_CFT_DOWNLOAD_BASE:-https://storage.googleapis.com/chrome-for-testing-public}"
+        printf '%s/%s/%s/chrome-%s.zip' "$base" "$1" "$2" "$2"
+    }
+
+    # Resolve a channel's tip version from the CfT last-known-good JSON. Prints the
+    # version (rc 0), or nothing (rc 1) on fetch/parse failure. $1 is lowercase channel
+    _cft_channel_version() {
+        local ch="$1"
+        local key
+        case "$ch" in
+            stable) key="Stable" ;;
+            beta)   key="Beta" ;;
+            dev)    key="Dev" ;;
+            canary) key="Canary" ;;
+            *) return 1 ;;
+        esac
+        local endpoint="${CHROME_DEBUG_CFT_ENDPOINT:-https://googlechromelabs.github.io/chrome-for-testing}"
+        local v
+        v="$(curl -fsS --max-time 20 "$endpoint/last-known-good-versions-with-downloads.json" 2>/dev/null \
+            | jq -r --arg k "$key" '.channels[$k].version // empty' 2>/dev/null)"
+        [ -n "$v" ] || return 1
+        # Guard the resolved version before it flows into cache paths (mkdir/mv and the
+        # self-heal rm): a channel tip must look like N.N.N.N, same shape as --cft-version
+        printf '%s' "$v" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' || return 1
+        printf '%s' "$v"
+    }
+
+    # Print the resolved .app executable for a cached build if present and runnable
+    # (rc 0); nothing / rc 1 otherwise. Reuses _resolve_browser on the version dir
+    _cft_cached_path() {
+        local dir; dir="$(_cft_version_dir "$1" "$2")"
+        [ -d "$dir" ] || return 1
+        _resolve_browser "$dir" 2>/dev/null
+    }
+
+    # Print the highest cached version (for the platform) that resolves to a runnable
+    # browser, or nothing (rc 1). Backs bare run-and-go's "reuse newest cached"
+    _cft_newest_cached() {
+        local platform="$1"
+        local root; root="$(_cft_cache_root)/cft"
+        [ -d "$root" ] || return 1
+        local v
+        while IFS= read -r v; do
+            [ -n "$v" ] || continue
+            if _cft_cached_path "$v" "$platform" >/dev/null 2>&1; then
+                printf '%s' "$v"
+                return 0
+            fi
+        done <<EOF
+$(ls -1 "$root" 2>/dev/null | sort -Vr)
+EOF
+        return 1
+    }
+
     # Executable paths of currently-running debug browsers (best-effort, ps-based):
     # the main process carries --remote-debugging-port and no --type=. Used to avoid
     # pruning a cached build that is in use
@@ -594,78 +672,6 @@ EOF
         return 0
     }
 
-    # macOS CfT platform key from the CPU arch. CHROME_DEBUG_PLATFORM is a testing
-    # knob that overrides the detected arch, so fixtures pinned to one platform
-    # (e.g. mac-arm64) behave the same regardless of the host running the tests
-    _cft_platform() {
-        if [ -n "$CHROME_DEBUG_PLATFORM" ]; then
-            printf '%s' "$CHROME_DEBUG_PLATFORM"
-            return 0
-        fi
-        case "$(uname -m)" in
-            arm64|aarch64) printf 'mac-arm64' ;;
-            *) printf 'mac-x64' ;;
-        esac
-    }
-
-    # Cache dir for a specific build: <root>/cft/<version>/<platform>
-    _cft_version_dir() {
-        printf '%s/cft/%s/%s' "$(_cft_cache_root)" "$1" "$2"
-    }
-
-    # Deterministic CfT download URL for <version> <platform>
-    _cft_download_url() {
-        local base="${CHROME_DEBUG_CFT_DOWNLOAD_BASE:-https://storage.googleapis.com/chrome-for-testing-public}"
-        printf '%s/%s/%s/chrome-%s.zip' "$base" "$1" "$2" "$2"
-    }
-
-    # Resolve a channel's tip version from the CfT last-known-good JSON. Prints the
-    # version (rc 0), or nothing (rc 1) on fetch/parse failure. $1 is lowercase channel
-    _cft_channel_version() {
-        local ch="$1"
-        local key
-        case "$ch" in
-            stable) key="Stable" ;;
-            beta)   key="Beta" ;;
-            dev)    key="Dev" ;;
-            canary) key="Canary" ;;
-            *) return 1 ;;
-        esac
-        local endpoint="${CHROME_DEBUG_CFT_ENDPOINT:-https://googlechromelabs.github.io/chrome-for-testing}"
-        local v
-        v="$(curl -fsS --max-time 20 "$endpoint/last-known-good-versions-with-downloads.json" 2>/dev/null \
-            | jq -r --arg k "$key" '.channels[$k].version // empty' 2>/dev/null)"
-        [ -n "$v" ] || return 1
-        printf '%s' "$v"
-    }
-
-    # Print the resolved .app executable for a cached build if present and runnable
-    # (rc 0); nothing / rc 1 otherwise. Reuses _resolve_browser on the version dir
-    _cft_cached_path() {
-        local dir; dir="$(_cft_version_dir "$1" "$2")"
-        [ -d "$dir" ] || return 1
-        _resolve_browser "$dir" 2>/dev/null
-    }
-
-    # Print the highest cached version (for the platform) that resolves to a runnable
-    # browser, or nothing (rc 1). Backs bare run-and-go's "reuse newest cached"
-    _cft_newest_cached() {
-        local platform="$1"
-        local root; root="$(_cft_cache_root)/cft"
-        [ -d "$root" ] || return 1
-        local v
-        while IFS= read -r v; do
-            [ -n "$v" ] || continue
-            if _cft_cached_path "$v" "$platform" >/dev/null 2>&1; then
-                printf '%s' "$v"
-                return 0
-            fi
-        done <<EOF
-$(ls -1 "$root" 2>/dev/null | sort -Vr)
-EOF
-        return 1
-    }
-
     # Download and cache a CfT build; prints the resolved .app executable (rc 0).
     # rc 3 if unzip is missing; rc 1 on download/unzip/publish failure. Atomic:
     # extract into a temp dir under the cache, then rename into place
@@ -678,8 +684,10 @@ EOF
         fi
         local url; url="$(_cft_download_url "$version" "$platform")"
         local dest; dest="$(_cft_version_dir "$version" "$platform")"
-        if [ -d "$dest" ]; then                        # already present (race / leftover)
+        if [ -d "$dest" ]; then # already present (race / leftover)
             _resolve_browser "$dest" 2>/dev/null && return 0
+            # present but unresolvable (corrupt/partial leftover): drop it and re-download
+            rm -rf "$dest"
         fi
         local parent; parent="$(dirname "$dest")"
         mkdir -p "$parent" 2>/dev/null || { _error "could not create cache dir '$parent'"; return 1; }
@@ -698,7 +706,7 @@ EOF
             return 1
         fi
         rm -f "$zip"
-        if [ -d "$dest" ]; then                        # lost a race; keep the existing tree
+        if [ -d "$dest" ]; then # lost a race; keep the existing tree
             rm -rf "$tmp"
         elif ! mv "$tmp" "$dest" 2>/dev/null; then
             rm -rf "$tmp"
@@ -721,7 +729,7 @@ EOF
             [ -d "$apps/$name" ] || continue
             exe="$(_resolve_browser "$apps/$name" 2>/dev/null)"
             if [ -n "$exe" ]; then
-                printf '%s' "$exe"
+                printf '%s\n' "$exe"
                 return 0
             fi
         done
@@ -805,10 +813,12 @@ EOF
         return 1
     }
 
-    # --help must work even when dependencies are missing, so short-circuit it
-    # before the jq check below (matches ods-usage/dw-jwt/httpcode)
+    # --help and --list-cache must work even when dependencies are missing:
+    # --help is always available, and --list-cache is a pure filesystem read
+    # (needs neither jq nor nc). Both are recognized as the first argument
     case "$1" in
         -h|--help) _show_help; return 0 ;;
+        --list-cache) _cft_list; return $? ;;
     esac
 
     if ! command -v jq >/dev/null 2>&1; then
@@ -817,22 +827,11 @@ EOF
     fi
 
     # --list needs jq (pool mapping + /json/version parse) but never nc, so handle it
-    # after the jq check and before the nc requirement below
+    # after the jq check. The nc requirement is deferred to the launch path (below the
+    # cache-maintenance dispatch), so --prune-cache doesn't require nc either
     case "$1" in
         -l|--list) _list_debug_browsers; return $? ;;
     esac
-
-    # --list-cache lists downloaded CfT builds (filesystem-only: needs neither nc
-    # nor the parse loop), so dispatch it here alongside --list. Like --list, it is
-    # recognized as the first argument
-    case "$1" in
-        --list-cache) _cft_list; return $? ;;
-    esac
-
-    if ! command -v nc >/dev/null 2>&1; then
-        _error "nc is required"
-        return 3
-    fi
 
     # --- defaults and parse arguments ---
     local port=""
@@ -881,7 +880,7 @@ EOF
                 channel="${1#*=}"
                 [ -n "$channel" ] || { _error "--channel requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 shift ;;
-            --cft-version) # long-only: precise version string, no natural short
+            --cft-version) # long-only: -v is taken by --verbose
                 [ -n "${2-}" ] || { _error "--cft-version requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
                 cft_version="$2"; shift 2 ;;
             --cft-version=*)
@@ -939,6 +938,15 @@ EOF
     if [ "$cache_mode" = "prune" ]; then
         _cft_prune "$prune_keep"
         return $?
+    fi
+
+    # nc is needed by the launch path (_select_port); check it here -- after the
+    # cache-maintenance modes have returned, so those filesystem-only modes don't
+    # require it, and before acquisition so a run-and-go download can't start only
+    # to fail on a missing nc afterward
+    if ! command -v nc >/dev/null 2>&1; then
+        _error "nc is required"
+        return 3
     fi
 
     if [ "${#positionals[@]}" -gt 1 ]; then

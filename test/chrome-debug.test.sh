@@ -1317,5 +1317,86 @@ test_help_lists_run_and_go_flags() {
     assert_stdout_contains "help has --prune-cache" "--prune-cache"
 }
 
+# --- run-and-go: cleanup follow-up coverage ---
+test_last_resort_prefers_edge_over_brave() {
+    write_shims; write_offline_cft_curl; write_mcp_fixture
+    mkdir -p "$TEST_DIR/apps"
+    make_app "$TEST_DIR/apps/Microsoft Edge.app" "edge-fake"
+    make_app "$TEST_DIR/apps/Brave Browser.app" "brave-fake"
+    CHROME_DEBUG_CACHE="$TEST_DIR/cache" CHROME_DEBUG_APPS_DIR="$TEST_DIR/apps" \
+        CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n -p 9222
+    assert_rc "dry-run last-resort exits 0" 0
+    assert_stdout_contains "prefers Edge (earlier in the allowlist)" "Microsoft Edge.app/Contents/MacOS/edge-fake"
+    assert_stdout_not_contains "does not pick Brave when Edge is present" "Brave Browser.app"
+}
+
+test_last_resort_skips_unresolvable_candidate() {
+    write_shims; write_offline_cft_curl; write_mcp_fixture
+    mkdir -p "$TEST_DIR/apps/Google Chrome for Testing.app"   # .app dir with no valid bundle -> unresolvable
+    make_app "$TEST_DIR/apps/Microsoft Edge.app" "edge-fake"
+    CHROME_DEBUG_CACHE="$TEST_DIR/cache" CHROME_DEBUG_APPS_DIR="$TEST_DIR/apps" \
+        CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n -p 9222
+    assert_rc "dry-run exits 0" 0
+    assert_stdout_contains "falls through the unresolvable CfT to Edge" "Microsoft Edge.app/Contents/MacOS/edge-fake"
+}
+
+test_prune_cache_bad_value_usage_error() {
+    write_shims
+    run_script --prune-cache=nope
+    assert_rc "bad --prune-cache value exits 2" 2
+    assert_stderr_contains "names the accepted values" "must be a number or 'all'"
+}
+
+test_prune_cache_warns_on_removal_failure() {
+    if [ "$(id -u)" = 0 ]; then _ok "skipped: running as root bypasses directory perms"; return 0; fi
+    write_shims
+    mkdir -p "$TEST_DIR/cache/cft/151.0.1.0/mac-arm64/chrome-mac-arm64" \
+             "$TEST_DIR/cache/cft/153.0.1.0/mac-arm64/chrome-mac-arm64"
+    chmod 500 "$TEST_DIR/cache/cft"   # read-only parent: unlinking a child dir fails
+    CHROME_DEBUG_CACHE="$TEST_DIR/cache" run_script --prune-cache 1
+    chmod 700 "$TEST_DIR/cache/cft"   # restore so teardown can clean up
+    assert_rc "prune stays best-effort (rc 0) on a removal failure" 0
+    assert_stderr_contains "warns on the removal failure" "could not remove cft/151.0.1.0"
+}
+
+test_platform_override_rejects_unsafe_value() {
+    write_shims; write_cft_fixture; write_cft_curl; write_mcp_fixture
+    # a garbage override (path separators) must be ignored, falling back to arch detection
+    CHROME_DEBUG_PLATFORM='../evil' CHROME_DEBUG_CACHE="$TEST_DIR/cache" \
+        CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n -p 9222 --latest
+    assert_rc "dry-run exits 0" 0
+    assert_stdout_not_contains "unsafe override never reaches the plan/path" "evil"
+    assert_stdout_contains "a valid mac platform key is used instead" "chrome-mac-"
+}
+
+test_run_and_go_self_heals_corrupt_cache() {
+    write_shims; write_cft_fixture; write_cft_zip_fixture; write_cft_curl; write_mcp_fixture
+    # pre-seed a corrupt/partial cache dir for the stable tip: dir exists, no valid bundle
+    mkdir -p "$TEST_DIR/cache/cft/153.0.8010.47/mac-arm64" "$TEST_DIR/apps"
+    # pin an empty apps dir so a self-heal regression fails cleanly via the last-resort
+    # scan instead of finding (and launching) a real /Applications browser during tests
+    CHROME_DEBUG_CACHE="$TEST_DIR/cache" CHROME_DEBUG_APPS_DIR="$TEST_DIR/apps" \
+        CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" CHROME_DEBUG_PROBE_SLEEP=0 \
+        run_script --latest -p 9222
+    assert_rc "self-heal download+launch exits 0 (did not wedge)" 0
+    assert_stderr_contains "re-downloaded rather than failing on the corrupt dir" "downloading CfT 153.0.8010.47"
+    assert_file_exists "corrupt cache dir replaced with a real bundle" "$TEST_DIR/cache/cft/153.0.8010.47/mac-arm64/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/cft-fake"
+}
+
+test_channel_version_rejects_malformed() {
+    write_shims; write_mcp_fixture
+    # CfT JSON returns a path-traversal version string; it must be rejected, never used
+    cat > "$SHIM_DIR/curl" <<'SHIM'
+#!/bin/bash
+for a in "$@"; do case "$a" in *last-known-good-versions-with-downloads.json) echo '{"channels":{"Stable":{"version":"../../evil"}}}'; exit 0 ;; esac; done
+exit 0
+SHIM
+    chmod +x "$SHIM_DIR/curl"
+    CHROME_DEBUG_CACHE="$TEST_DIR/cache" CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n -p 9222 --latest
+    assert_rc "malformed channel version is rejected" 1
+    assert_stderr_contains "reports resolution failure" "could not resolve CfT stable version"
+    assert_stdout_not_contains "traversal string never reaches a plan or path" "evil"
+}
+
 # --- run ---
 run_tests "$@"
