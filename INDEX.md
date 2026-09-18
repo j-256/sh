@@ -38,7 +38,7 @@ Each tool row's primary link opens the doc; the `script` link opens the raw scri
 |------|-------------|
 | [`pin-dns`](docs/pin-dns.md) · [script](scripts/pin-dns) | curl wrapper that overrides DNS resolution for a hostname without touching /etc/hosts, and sends a full, internally consistent Chrome request (client hints, Sec-Fetch, ordered Accept headers; TLS/JA3 + HTTP-2 fingerprint too when curl-impersonate is installed) |
 | [`chrome-ua`](docs/chrome-ua.md) · [script](scripts/chrome-ua) | Print a realistic Chrome User-Agent from the local install or Google's live API |
-| [`chrome-debug`](docs/chrome-debug.md) · [script](scripts/chrome-debug) | Launch a Chromium browser in remote-debugging mode for MCP/CDP attach, with an auto-picked port from your .mcp.json pool |
+| [`chrome-debug`](docs/chrome-debug.md) · [script](scripts/chrome-debug) | Launch a Chromium browser in remote-debugging mode for MCP/CDP attach; run-and-go auto-installs Chrome for Testing when given no browser, with an auto-picked port from your .mcp.json pool |
 | [`httpcode`](docs/httpcode.md) · [script](scripts/httpcode) | Quick HTTP status code lookup — standard codes plus Cloudflare, nginx, and IIS non-standard codes, all offline |
 | [`curl-timing`](docs/curl-timing.md) · [script](scripts/curl-timing) | Time HTTP requests and compare URLs head-to-head with IQR-aware outlier detection |
 | [`slow-server`](docs/slow-server.md) · [script](scripts/slow-server) | Local HTTP server that responds after a configurable delay, for testing timeout logic |

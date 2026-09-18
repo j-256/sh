@@ -2,7 +2,7 @@
 
 [View script](../scripts/chrome-debug)
 
-Launch any Chromium-family browser (Chrome, Edge, Brave, Chrome for Testing) in remote-debugging mode so any CDP client of your choice – `agent-browser`, [`chrome-devtools-mcp`](https://github.com/ChromeDevTools/chrome-devtools-mcp), Playwright, `chrome://inspect` – can attach to it over the DevTools protocol. The browser runs with a lifecycle independent of any one client, so it survives client restarts and is there before and after your automation work. By default it holds the launching terminal (Ctrl-C tears it down); with `--detached` it exits immediately and leaves the browser running so you can reuse a persistent debug browser across sessions.
+Launch any Chromium-family browser (Chrome, Edge, Brave, Chrome for Testing) in remote-debugging mode so any CDP client of your choice – `agent-browser`, [`chrome-devtools-mcp`](https://github.com/ChromeDevTools/chrome-devtools-mcp), Playwright, `chrome://inspect` – can attach to it over the DevTools protocol. Hand it a browser, or nothing at all: with no browser it runs *run and go*, fetching a clean Chrome for Testing itself (see below). The browser runs with a lifecycle independent of any one client, so it survives client restarts and is there before and after your automation work. By default it holds the launching terminal (Ctrl-C tears it down); with `--detached` it exits immediately and leaves the browser running so you can reuse a persistent debug browser across sessions.
 
 It kills two forms of busywork. First, the **deep bundle path**: hand it a `.app`, an executable, or just a *directory* (like a freshly-downloaded Chrome for Testing) and it finds the right binary – no `…/Contents/MacOS/Google Chrome for Testing` archaeology. Second, **port bookkeeping**: the debug port is the identity key that ties a running browser to its MCP server entry, so `chrome-debug` reads your `.mcp.json` (discovered by walking up from the current directory), picks a free configured port, and prints exactly which MCP server can attach.
 
@@ -18,6 +18,24 @@ chrome-debug: launched Microsoft Edge/150.0.0.0, listening on :9222
 ```
 
 The command holds the foreground – the browser lives in that terminal tab, and Ctrl-C closes it. From another tab, point any CDP client at `127.0.0.1:9222` – `agent-browser`, `chrome-devtools-mcp`, Playwright, or `chrome://inspect`. The port was chosen automatically as the lowest free port in your `.mcp.json` chrome-devtools pool, and the mapped MCP entry name is printed for convenience. To leave the browser running instead of holding the terminal, add `--detached` (see [Detached mode](#detached-mode)).
+
+## Run and go (auto-install Chrome for Testing)
+
+Run `chrome-debug` with **no browser location** and it acquires a browser itself:
+
+```
+$ chrome-debug
+[INF][chrome-debug] downloading CfT 153.0.8010.47 (mac-arm64) from https://storage.googleapis.com/chrome-for-testing-public/153.0.8010.47/mac-arm64/chrome-mac-arm64.zip
+[INF][chrome-debug] cached CfT 153.0.8010.47 at ~/.cache/chrome-debug/cft/153.0.8010.47/mac-arm64
+chrome-debug: launched Google Chrome for Testing/153.0.8010.47, listening on :9222
+```
+
+- **What it picks.** A [Chrome for Testing](https://developer.chrome.com/blog/chrome-for-testing) build – unmanaged, account-free, version-pinnable. It reuses a cached build if one is present (no download), so only the first run on a fresh cache hits the network.
+- **Choosing the build.** `--channel stable|beta|dev|canary` (default `stable`) selects what to download; `--cft-version 153.0.8010.47` pins an exact build (great for reproducing an issue on an old version – cached builds accumulate, so re-pinning an old one never re-downloads); `--latest` forces the channel's current tip even when an older build is cached.
+- **The cache.** Downloads live under `$CHROME_DEBUG_CACHE` (default `${XDG_CACHE_HOME:-~/.cache}/chrome-debug`), keyed by version and platform. `chrome-debug --list-cache` shows what's there; `chrome-debug --prune-cache [keep]` removes old builds keeping the newest `keep` (default 1, `all` removes all), never touching a build a running debug browser is using, and honoring `--dry-run`.
+- **Fallback.** If Chrome for Testing can't be obtained (offline, API/download failure) and nothing is cached, `chrome-debug` falls back to a debuggable Chromium already in `/Applications` – Chrome for Testing, Edge, Brave, or Chromium – in that order. It never auto-picks the org-managed **Google Chrome** (it usually policy-blocks remote debugging); pass that explicitly if you really want it.
+
+Passing an explicit `<browser-location>` keeps the classic behavior: that browser is launched, with no discovery or install.
 
 ## Common examples
 
@@ -194,6 +212,11 @@ chrome-debug --detached -p 9223 "/Applications/Microsoft Edge.app"
 |---|---|
 | `-p, --port PORT` | Debug port. Default: lowest free port in the discovered `.mcp.json` chrome-devtools pool |
 | `-d, --user-data-dir DIR` | Chrome profile directory. Default: `/tmp/chrome-debug-<port>` |
+| `-c, --channel CHANNEL` | CfT channel for run-and-go: `stable\|beta\|dev\|canary` (default `stable`). See [Run and go](#run-and-go-auto-install-chrome-for-testing) |
+| `--cft-version VER` | Pin an exact Chrome for Testing build (`x.y.z.w`); overrides `--channel` |
+| `--latest` | Force the channel tip even if an older build is cached |
+| `--list-cache` | List cached Chrome for Testing builds and exit |
+| `--prune-cache [KEEP]` | Remove cached builds, keeping the newest `KEEP` (default 1; `all` removes all); honors `--dry-run` |
 | `-l, --list` | List running debug browsers and exit (takes no browser-location). See [Listing running debug browsers](#listing-running-debug-browsers) |
 | `-n, --dry-run` | Resolve and print what would launch, but don't launch |
 | `-f, --fresh` | Wipe the port's profile directory before launching (clean session) |
@@ -207,7 +230,7 @@ chrome-debug --detached -p 9223 "/Applications/Microsoft Edge.app"
 | `-h, --help` | Show help |
 | `-- extra-chrome-args` | Everything after `--` is passed to the browser verbatim |
 
-`<browser-location>` (required positional) is a `.app` bundle, a raw executable, or a directory to search downward for the newest `.app`.
+`<browser-location>` (optional positional) is a `.app` bundle, a raw executable, or a directory to search downward for the newest `.app`. Omit it to run *run and go* – see [Run and go](#run-and-go-auto-install-chrome-for-testing).
 
 Baked into every launch: `--remote-debugging-port`, `--user-data-dir`, `--no-first-run`, `--no-default-browser-check`, `--disable-sync`. Two DevTools settings are seeded on by default – see [DevTools settings](#devtools-settings).
 
@@ -216,17 +239,22 @@ Baked into every launch: `--remote-debugging-port`, `--user-data-dir`, `--no-fir
 | Variable | Meaning |
 |---|---|
 | `CHROME_DEBUG_MCP_JSON` | Path to a single `.mcp.json`, overriding the default cwd-to-`$HOME` walk-up discovery |
+| `CHROME_DEBUG_CACHE` | Cache root for downloaded Chrome for Testing builds. Default: `$XDG_CACHE_HOME/chrome-debug` or `~/.cache/chrome-debug` |
 | `CHROME_DEBUG_PROBE_TRIES` | *(advanced/testing)* Number of `/json/version` probe attempts after launch (default: 20) |
 | `CHROME_DEBUG_PROBE_SLEEP` | *(advanced/testing)* Seconds between probe attempts (default: 0.25) |
+| `CHROME_DEBUG_CFT_ENDPOINT` | *(advanced/testing)* Base URL for the Chrome for Testing "last known good versions" API, overriding the default `https://googlechromelabs.github.io/chrome-for-testing` |
+| `CHROME_DEBUG_CFT_DOWNLOAD_BASE` | *(advanced/testing)* Base URL for downloading Chrome for Testing archives, overriding the default `https://storage.googleapis.com/chrome-for-testing-public` |
+| `CHROME_DEBUG_APPS_DIR` | *(advanced/testing)* Directory scanned for a last-resort debuggable browser, overriding the default `/Applications` |
+| `CHROME_DEBUG_PLATFORM` | *(advanced/testing)* Overrides the detected macOS platform key (`mac-arm64`/`mac-x64`) used for Chrome for Testing acquisition, instead of deriving it from `uname -m` |
 
 ### Exit codes
 
 | Code | Meaning |
 |---|---|
 | 0 | Success (launched and serving, attached to an already-serving port, or dry-run resolved) |
-| 1 | Runtime failure (resolution failed, port busy but not serving, debug endpoint never came up) |
-| 2 | Usage error (missing/invalid browser-location, non-numeric port, unknown flag, bad flag value) |
-| 3 | Dependency error (`jq`, `nc`, or `curl` not installed) |
+| 1 | Runtime failure (resolution failed, port busy but not serving, debug endpoint never came up, CfT download or unzip failed) |
+| 2 | Usage error (missing/invalid browser-location, non-numeric port, unknown flag, bad flag value, invalid `--channel`/`--cft-version`, contradictory flags) |
+| 3 | Dependency error (`jq`, `nc`, `curl`, or `unzip` not installed) |
 
 ### Dependencies
 
@@ -234,6 +262,7 @@ Baked into every launch: `--remote-debugging-port`, `--user-data-dir`, `--no-fir
 - `nc` – check whether a candidate port is already in use
 - `curl` – probe the debug endpoint (required to launch; best-effort for `--list`'s version column; not needed for `--dry-run` or `--help`)
 - `defaults` (macOS built-in) – resolve `.app` bundle metadata
+- `unzip` (only when downloading) – extract a downloaded Chrome for Testing archive
 
 ### Caveats
 
@@ -241,3 +270,4 @@ Baked into every launch: `--remote-debugging-port`, `--user-data-dir`, `--no-fir
 - Managed browsers may block remote debugging or force account sign-in – see [Managed browsers](#managed-browsers-org-policy). Chrome for Testing sidesteps both.
 - The default per-port profile persists across relaunches. Use `-f`/`--fresh` for a clean slate, or `-d` to point at your own directory.
 - On probe failure the browser is deliberately left running (it may just be slow to start, or a browser is already open on the profile) – the error message says so and suggests `--fresh`.
+- A downloaded Chrome for Testing build actually launching isn't exercised by the automated suite, which shims `curl`/`unzip` – see [Manual verification](#manual-verification). The cache only covers macOS (`mac-arm64`/`mac-x64`).

@@ -2,8 +2,10 @@
 # chrome-debug - Launch a Chromium-family browser in remote-debugging mode for MCP attach
 #
 # Usage:
-#   chrome-debug [-p port] [-d dir] [-nfv] [--detached] [--no-extensions] <browser-location> [-- extra-chrome-args]
+#   chrome-debug [-p port] [-d dir] [-nfv] [--detached] [--no-extensions] [<browser-location>] [-- extra-chrome-args]
 #   chrome-debug -l | --list
+#   chrome-debug [-c channel] [--cft-version ver] [--latest] [options] [<browser-location>]
+#   chrome-debug --list-cache | --prune-cache [keep]
 #
 # Options:
 #   -p, --port PORT          Debug port (default: lowest free port in the .mcp.json pool)
@@ -15,6 +17,11 @@
 #   --no-extensions          Launch with extensions disabled (--disable-extensions)
 #   -v, --verbose            Verbose resolution output
 #   -h, --help               Show help message
+#   -c, --channel CH         CfT channel for run-and-go: stable|beta|dev|canary (default stable)
+#   --cft-version VER        Pin an exact Chrome for Testing build; overrides --channel
+#   --latest                 Force the channel tip even if an older build is cached
+#   --list-cache             List cached Chrome for Testing builds and exit
+#   --prune-cache [KEEP]     Remove cached builds, keeping the newest KEEP (default 1)
 
 _chrome_debug() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
@@ -49,8 +56,10 @@ _chrome_debug() (
 NAME
   $SCRIPT_NAME - launch a Chromium-family browser in remote-debugging mode for MCP attach
 SYNOPSIS
-  $SCRIPT_NAME [-p ${s}port${r}] [-d ${s}dir${r}] [-nfv] [--detached] [--no-extensions] [--devtools-pref ${s}kv${r}] <${s}browser-location${r}> [-- ${s}extra-chrome-args${r}]
+  $SCRIPT_NAME [-p ${s}port${r}] [-d ${s}dir${r}] [-nfv] [--detached] [--no-extensions] [--devtools-pref ${s}kv${r}] [${s}browser-location${r}] [-- ${s}extra-chrome-args${r}]
+  $SCRIPT_NAME [-c ${s}channel${r}] [--cft-version ${s}ver${r}] [--latest] [-p ${s}port${r}] [--detached]
   $SCRIPT_NAME -l | --list
+  $SCRIPT_NAME --list-cache | --prune-cache [${s}keep${r}]
   $SCRIPT_NAME -h
 DESCRIPTION
   Launches a Chromium-family browser (Chrome, Edge, Brave, Chromium, ...)
@@ -60,6 +69,15 @@ DESCRIPTION
   ${s}browser-location${r} identifies the browser to launch -- a path to a
   .app bundle, a raw executable, or a directory to search for the newest
   bundle inside (e.g. a freshly-downloaded Chrome for Testing).
+
+  With no ${s}browser-location${r}, $SCRIPT_NAME runs "run and go": it acquires a
+  Chrome for Testing build itself and launches that. It reuses a cached build when
+  present, else downloads one (curl + unzip) into a version-keyed cache under
+  \$CHROME_DEBUG_CACHE. Pick the build with --channel (default stable), pin an exact
+  one with --cft-version, or force the channel tip with --latest. If Chrome for
+  Testing cannot be obtained (offline, etc.) and nothing is cached, it falls back to
+  a debuggable Chromium already in /Applications -- never the org-managed Google
+  Chrome. Manage the cache with --list-cache and --prune-cache.
 
   Without -p, the debug port is chosen from the pool of chrome-devtools
   MCP server entries configured in .mcp.json, picking the lowest port not
@@ -105,6 +123,11 @@ DESCRIPTION
 OPTIONS
   -p, --port ${s}port${r}            Debug port (default: lowest free port in the MCP pool)
   -d, --user-data-dir ${s}dir${r}     Chrome profile dir (default: /tmp/chrome-debug-<port>)
+  -c, --channel ${s}channel${r}    CfT channel for run-and-go: stable|beta|dev|canary (default stable)
+  --cft-version ${s}ver${r}      Pin an exact Chrome for Testing build (x.y.z.w); overrides --channel
+  --latest                  Force the channel tip even if an older build is cached
+  --list-cache              List cached Chrome for Testing builds and exit
+  --prune-cache [${s}keep${r}]     Remove cached builds, keeping the newest keep (default 1; 'all' removes all); honors --dry-run
   -l, --list                List running debug browsers and exit (takes no browser-location)
   -n, --dry-run             Resolve and print, but do not launch
   -f, --fresh               Wipe the port's profile dir before launching (clean session)
@@ -119,17 +142,20 @@ OPTIONS
 ENVIRONMENT
   CHROME_DEBUG_MCP_JSON  Path to a single .mcp.json for port-pool discovery,
                             overriding the default cwd-to-\$HOME walk-up
+  CHROME_DEBUG_CACHE     Cache root for downloaded Chrome for Testing builds
+                            (default: \$XDG_CACHE_HOME/chrome-debug or ~/.cache/chrome-debug)
 DEPENDENCIES
   jq        Parse .mcp.json to discover the chrome-devtools MCP port pool
   curl      Verify the remote-debugging port is responding (required for launching, best-effort for --list; not needed for --dry-run)
   nc        Check whether a candidate port is already in use
   defaults  Resolve .app bundle metadata on macOS
   lsof      Optional: resolve the owning PID when attaching to an already-serving browser
+  unzip     Extract a downloaded Chrome for Testing archive (required only when downloading)
 EXIT STATUS
-  0  Success (launched, or dry-run resolved and printed)
-  1  Runtime failure (resolution failed, port busy but not serving, debug endpoint never came up)
-  2  Usage error (missing browser-location, unknown flag, bad flag value)
-  3  Dependency error (required tool not installed)
+  0  Success (launched, attached, or dry-run/list resolved)
+  1  Runtime failure (resolution/download/unzip failed, port busy but not serving, endpoint never came up)
+  2  Usage error (missing/invalid value, bad --channel/--cft-version, contradictory flags)
+  3  Dependency error (jq/nc/curl, or unzip when downloading)
 EXAMPLES
   $SCRIPT_NAME "/Applications/Google Chrome.app"
   $SCRIPT_NAME -p 9222 "/Applications/Google Chrome.app"
@@ -138,6 +164,10 @@ EXAMPLES
   $SCRIPT_NAME -n -v "/Applications/Google Chrome.app"
   $SCRIPT_NAME "/Applications/Google Chrome.app" -- --incognito
   $SCRIPT_NAME --devtools-pref synced:ui-theme=dark "/Applications/Microsoft Edge.app"
+  $SCRIPT_NAME
+  $SCRIPT_NAME --latest --detached
+  $SCRIPT_NAME --cft-version 153.0.8010.47
+  $SCRIPT_NAME --list-cache
 EOF
     }
 
@@ -464,6 +494,317 @@ LIST
         return 0
     }
 
+    # --- Chrome for Testing acquisition (run-and-go) ----------------------------
+    # Cache root for downloaded Chrome for Testing builds. Script-specific override
+    # in front of the XDG cache base -- CfT is re-downloadable, so cache is the
+    # correct base. Tree layout: <root>/cft/<version>/<platform>/chrome-<platform>/
+    _cft_cache_root() {
+        printf '%s' "${CHROME_DEBUG_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/chrome-debug}"
+    }
+
+    # List cached CfT builds on stdout (program output): one row per version+platform
+    # with on-disk size and path, sorted by version. Empty cache prints "(empty)".
+    # Filesystem-only; rc 0 always
+    _cft_list() {
+        local root; root="$(_cft_cache_root)/cft"
+        if [ ! -d "$root" ]; then
+            echo "(empty)"
+            return 0
+        fi
+        local found=""
+        local v
+        local p
+        local plat
+        local size
+        while IFS= read -r v; do
+            [ -n "$v" ] || continue
+            [ -d "$root/$v" ] || continue
+            for p in "$root/$v"/*/; do
+                [ -d "$p" ] || continue
+                plat="$(basename "$p")"
+                size="$(du -sh "$p" 2>/dev/null | cut -f1)"
+                printf '%s  %-10s  %-6s  %s\n' "$v" "$plat" "${size:-?}" "$p"
+                found=1
+            done
+        done <<EOF
+$(ls -1 "$root" 2>/dev/null | sort -V)
+EOF
+        [ -n "$found" ] || echo "(empty)"
+        return 0
+    }
+
+    # Executable paths of currently-running debug browsers (best-effort, ps-based):
+    # the main process carries --remote-debugging-port and no --type=. Used to avoid
+    # pruning a cached build that is in use
+    _running_browser_exes() {
+        local line
+        local exe
+        while IFS= read -r line; do
+            case "$line" in *--remote-debugging-port=*) ;; *) continue ;; esac
+            case "$line" in *--type=*) continue ;; esac
+            line="${line#"${line%%[![:space:]]*}"}"
+            exe="$line"
+            case "$exe" in *" --"*) exe="${exe%% --*}" ;; esac
+            printf '%s\n' "$exe"
+        done <<EOF
+$(ps -Ao command 2>/dev/null)
+EOF
+    }
+
+    # Prune cached CfT builds, keeping the newest $1 versions ("all" or 0 removes all
+    # eligible). Cache-only -- only ever touches <root>/cft. Never removes a build a
+    # running debug browser is using. Honors $dry_run (plans, deletes nothing). rc 0
+    _cft_prune() {
+        local keep="$1"
+        case "$keep" in all) keep=0 ;; esac
+        local root; root="$(_cft_cache_root)/cft"
+        if [ ! -d "$root" ]; then
+            echo "(empty)"
+            return 0
+        fi
+        local running; running="$(_running_browser_exes)"
+        local platform; platform="$(_cft_platform)"
+        local i=0
+        local v
+        local dir
+        local exe
+        while IFS= read -r v; do
+            [ -n "$v" ] || continue
+            [ -d "$root/$v" ] || continue
+            i=$((i + 1))
+            [ "$i" -le "$keep" ] && continue
+            dir="$root/$v"
+            exe="$(_cft_cached_path "$v" "$platform" 2>/dev/null)"
+            if [ -n "$exe" ] && printf '%s\n' "$running" | grep -qxF "$exe"; then
+                _warn "keeping in-use CfT $v"
+                continue
+            fi
+            if [ -n "$dry_run" ]; then
+                _dry "Would remove: cft/$v ($(du -sh "$dir" 2>/dev/null | cut -f1))"
+            else
+                if rm -rf "$dir"; then
+                    _info "removed cft/$v"
+                else
+                    _warn "could not remove cft/$v"
+                fi
+            fi
+        done <<EOF
+$(ls -1 "$root" 2>/dev/null | sort -Vr)
+EOF
+        return 0
+    }
+
+    # macOS CfT platform key from the CPU arch. CHROME_DEBUG_PLATFORM is a testing
+    # knob that overrides the detected arch, so fixtures pinned to one platform
+    # (e.g. mac-arm64) behave the same regardless of the host running the tests
+    _cft_platform() {
+        if [ -n "$CHROME_DEBUG_PLATFORM" ]; then
+            printf '%s' "$CHROME_DEBUG_PLATFORM"
+            return 0
+        fi
+        case "$(uname -m)" in
+            arm64|aarch64) printf 'mac-arm64' ;;
+            *) printf 'mac-x64' ;;
+        esac
+    }
+
+    # Cache dir for a specific build: <root>/cft/<version>/<platform>
+    _cft_version_dir() {
+        printf '%s/cft/%s/%s' "$(_cft_cache_root)" "$1" "$2"
+    }
+
+    # Deterministic CfT download URL for <version> <platform>
+    _cft_download_url() {
+        local base="${CHROME_DEBUG_CFT_DOWNLOAD_BASE:-https://storage.googleapis.com/chrome-for-testing-public}"
+        printf '%s/%s/%s/chrome-%s.zip' "$base" "$1" "$2" "$2"
+    }
+
+    # Resolve a channel's tip version from the CfT last-known-good JSON. Prints the
+    # version (rc 0), or nothing (rc 1) on fetch/parse failure. $1 is lowercase channel
+    _cft_channel_version() {
+        local ch="$1"
+        local key
+        case "$ch" in
+            stable) key="Stable" ;;
+            beta)   key="Beta" ;;
+            dev)    key="Dev" ;;
+            canary) key="Canary" ;;
+            *) return 1 ;;
+        esac
+        local endpoint="${CHROME_DEBUG_CFT_ENDPOINT:-https://googlechromelabs.github.io/chrome-for-testing}"
+        local v
+        v="$(curl -fsS --max-time 20 "$endpoint/last-known-good-versions-with-downloads.json" 2>/dev/null \
+            | jq -r --arg k "$key" '.channels[$k].version // empty' 2>/dev/null)"
+        [ -n "$v" ] || return 1
+        printf '%s' "$v"
+    }
+
+    # Print the resolved .app executable for a cached build if present and runnable
+    # (rc 0); nothing / rc 1 otherwise. Reuses _resolve_browser on the version dir
+    _cft_cached_path() {
+        local dir; dir="$(_cft_version_dir "$1" "$2")"
+        [ -d "$dir" ] || return 1
+        _resolve_browser "$dir" 2>/dev/null
+    }
+
+    # Print the highest cached version (for the platform) that resolves to a runnable
+    # browser, or nothing (rc 1). Backs bare run-and-go's "reuse newest cached"
+    _cft_newest_cached() {
+        local platform="$1"
+        local root; root="$(_cft_cache_root)/cft"
+        [ -d "$root" ] || return 1
+        local v
+        while IFS= read -r v; do
+            [ -n "$v" ] || continue
+            if _cft_cached_path "$v" "$platform" >/dev/null 2>&1; then
+                printf '%s' "$v"
+                return 0
+            fi
+        done <<EOF
+$(ls -1 "$root" 2>/dev/null | sort -Vr)
+EOF
+        return 1
+    }
+
+    # Download and cache a CfT build; prints the resolved .app executable (rc 0).
+    # rc 3 if unzip is missing; rc 1 on download/unzip/publish failure. Atomic:
+    # extract into a temp dir under the cache, then rename into place
+    _cft_download() {
+        local version="$1"
+        local platform="$2"
+        if ! command -v unzip >/dev/null 2>&1; then
+            _error "unzip is required"
+            return 3
+        fi
+        local url; url="$(_cft_download_url "$version" "$platform")"
+        local dest; dest="$(_cft_version_dir "$version" "$platform")"
+        if [ -d "$dest" ]; then                        # already present (race / leftover)
+            _resolve_browser "$dest" 2>/dev/null && return 0
+        fi
+        local parent; parent="$(dirname "$dest")"
+        mkdir -p "$parent" 2>/dev/null || { _error "could not create cache dir '$parent'"; return 1; }
+        local tmp
+        tmp="$(mktemp -d "$parent/.dl.XXXXXX" 2>/dev/null)" || { _error "mktemp failed"; return 1; }
+        local zip="$tmp/cft.zip"
+        _info "downloading CfT $version ($platform) from $url"
+        if ! curl -fL --progress-bar --max-time 300 -o "$zip" "$url"; then
+            rm -rf "$tmp"
+            _error "download failed: $url"
+            return 1
+        fi
+        if ! unzip -q "$zip" -d "$tmp" 2>/dev/null; then
+            rm -rf "$tmp"
+            _error "could not unzip CfT archive"
+            return 1
+        fi
+        rm -f "$zip"
+        if [ -d "$dest" ]; then                        # lost a race; keep the existing tree
+            rm -rf "$tmp"
+        elif ! mv "$tmp" "$dest" 2>/dev/null; then
+            rm -rf "$tmp"
+            _error "could not publish CfT into cache '$dest'"
+            return 1
+        fi
+        _info "cached CfT $version at $dest"
+        _resolve_browser "$dest" 2>/dev/null || { _error "downloaded CfT but could not resolve its executable under '$dest'"; return 1; }
+    }
+
+    # Last resort when CfT cannot be obtained: pick a debuggable Chromium already in
+    # ${CHROME_DEBUG_APPS_DIR:-/Applications}, most debug-friendly first. Managed
+    # Google Chrome is deliberately excluded -- it commonly policy-blocks remote
+    # debugging, so auto-picking it would dead-end. Prints the exe (rc 0), else rc 1
+    _last_resort_browser() {
+        local apps="${CHROME_DEBUG_APPS_DIR:-/Applications}"
+        local name
+        local exe
+        for name in "Google Chrome for Testing.app" "Microsoft Edge.app" "Brave Browser.app" "Chromium.app"; do
+            [ -d "$apps/$name" ] || continue
+            exe="$(_resolve_browser "$apps/$name" 2>/dev/null)"
+            if [ -n "$exe" ]; then
+                printf '%s' "$exe"
+                return 0
+            fi
+        done
+        return 1
+    }
+
+    # Resolve the run-and-go browser: pick a CfT version (explicit pin / channel tip /
+    # newest cached), reuse the cache when possible, else download; fall back to a
+    # debuggable /Applications browser only when CfT cannot be obtained. Sets
+    # browser_exe and the cft_* plan vars. rc 0 ok, 1 runtime, 3 dependency.
+    # Under $dry_run it never mutates -- it records the plan and, for reuse, browser_exe
+    _resolve_default_browser() {
+        cft_platform="$(_cft_platform)"
+        local target=""
+        if [ -n "$cft_version" ]; then
+            target="$cft_version"                       # explicit pin (already validated)
+        elif [ -n "$latest" ]; then
+            target="$(_cft_channel_version "$channel")"
+            [ -n "$target" ] || { _error "could not resolve CfT $channel version (network or API failure)"; return 1; }
+        else
+            local newest; newest="$(_cft_newest_cached "$cft_platform")"
+            if [ -n "$newest" ]; then
+                target="$newest"                        # bare: reuse newest cached
+            else
+                target="$(_cft_channel_version "$channel")"   # empty if offline -> handled below
+            fi
+        fi
+
+        local cached=""
+        [ -n "$target" ] && cached="$(_cft_cached_path "$target" "$cft_platform" 2>/dev/null)"
+
+        cft_version="$target"
+        if [ -n "$cached" ]; then
+            cft_from="cache"; cft_path="$cached"
+        elif [ -n "$target" ]; then
+            cft_from="download"
+            cft_url="$(_cft_download_url "$target" "$cft_platform")"
+            cft_dest="$(_cft_version_dir "$target" "$cft_platform")"
+        else
+            cft_from="none"
+        fi
+
+        if [ -n "$dry_run" ]; then
+            if [ "$cft_from" = "cache" ]; then
+                browser_exe="$cached"
+            elif [ "$cft_from" = "none" ]; then
+                local lr; lr="$(_last_resort_browser 2>/dev/null)"
+                if [ -n "$lr" ]; then
+                    browser_exe="$lr"; cft_from="last-resort"
+                else
+                    _error "cannot resolve a Chrome for Testing version (offline?) and nothing cached; connect to a network or pass an explicit <browser-location>"
+                    return 1
+                fi
+            fi
+            return 0
+        fi
+
+        if [ "$cft_from" = "cache" ]; then
+            _info "reusing cached CfT $target at $cached"
+            browser_exe="$cached"
+            return 0
+        fi
+        if [ "$cft_from" = "download" ]; then
+            local exe
+            exe="$(_cft_download "$target" "$cft_platform")"
+            local dl_rc=$?
+            if [ "$dl_rc" -eq 0 ] && [ -n "$exe" ]; then
+                browser_exe="$exe"
+                return 0
+            fi
+            [ "$dl_rc" -eq 3 ] && return 3
+            # download failed -> fall through to last resort
+        fi
+        local lr; lr="$(_last_resort_browser)"
+        if [ -n "$lr" ]; then
+            _warn "Chrome for Testing unavailable; falling back to $lr"
+            browser_exe="$lr"
+            return 0
+        fi
+        _error "could not obtain a browser: Chrome for Testing unavailable and no debuggable browser found in ${CHROME_DEBUG_APPS_DIR:-/Applications}; connect to a network or pass an explicit <browser-location>"
+        return 1
+    }
+
     # --help must work even when dependencies are missing, so short-circuit it
     # before the jq check below (matches ods-usage/dw-jwt/httpcode)
     case "$1" in
@@ -481,6 +822,13 @@ LIST
         -l|--list) _list_debug_browsers; return $? ;;
     esac
 
+    # --list-cache lists downloaded CfT builds (filesystem-only: needs neither nc
+    # nor the parse loop), so dispatch it here alongside --list. Like --list, it is
+    # recognized as the first argument
+    case "$1" in
+        --list-cache) _cft_list; return $? ;;
+    esac
+
     if ! command -v nc >/dev/null 2>&1; then
         _error "nc is required"
         return 3
@@ -495,6 +843,17 @@ LIST
     local verbose=""
     local fresh=""
     local detached=""
+    local channel="stable"
+    local cft_version=""
+    local latest=""
+    local run_and_go=""
+    local cft_from=""
+    local cft_platform=""
+    local cft_path=""
+    local cft_url=""
+    local cft_dest=""
+    local cache_mode=""
+    local prune_keep="1"
     local no_extensions=""
     local no_har=""
     local no_cache=""
@@ -504,7 +863,7 @@ LIST
     local -a positionals=()
     local -a browser_argv=()
 
-    _expand_short_opts "pd" "$@"
+    _expand_short_opts "pdc" "$@"
     set -- "${_EXPANDED[@]}"; unset _EXPANDED
 
     while [ $# -gt 0 ]; do
@@ -514,6 +873,31 @@ LIST
             -n|--dry-run) dry_run=1; shift ;;
             -f|--fresh) fresh=1; shift ;;
             --detached) detached=1; shift ;; # long-only: -d is taken by --user-data-dir
+            --latest) latest=1; shift ;; # long-only: -l is taken by --list
+            -c|--channel)
+                [ -n "${2-}" ] || { _error "--channel requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                channel="$2"; shift 2 ;;
+            --channel=*)
+                channel="${1#*=}"
+                [ -n "$channel" ] || { _error "--channel requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                shift ;;
+            --cft-version) # long-only: precise version string, no natural short
+                [ -n "${2-}" ] || { _error "--cft-version requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                cft_version="$2"; shift 2 ;;
+            --cft-version=*)
+                cft_version="${1#*=}"
+                [ -n "$cft_version" ] || { _error "--cft-version requires a value. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                shift ;;
+            --prune-cache) # long-only maintenance; optional [keep] value (value-optional recipe)
+                cache_mode="prune"; shift
+                if [ -n "${1:-}" ] && printf '%s' "$1" | grep -qE '^([0-9]+|all)$'; then
+                    prune_keep="$1"; shift
+                fi
+                ;;
+            --prune-cache=*)
+                cache_mode="prune"; prune_keep="${1#*=}"; shift
+                printf '%s' "$prune_keep" | grep -qE '^([0-9]+|all)$' || { _error "--prune-cache keep must be a number or 'all'. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                ;;
             --no-extensions) no_extensions=1; shift ;; # long-only: negation flag
             --no-har-sensitive)  no_har=1; shift ;;            # long-only: force the HAR-with-sensitive-data setting off
             --no-disable-cache)  no_cache=1; shift ;;          # long-only: force the disable-cache setting off
@@ -550,15 +934,44 @@ LIST
         esac
     done
 
-    if [ "${#positionals[@]}" -eq 0 ]; then
-        _error "Must provide a browser location. Run \`$SCRIPT_NAME -h\` for usage"
-        return 2
+    # Cache-maintenance modes act and return before any browser logic (they need
+    # neither a browser-location nor curl/nc; --dry-run applies to --prune-cache)
+    if [ "$cache_mode" = "prune" ]; then
+        _cft_prune "$prune_keep"
+        return $?
     fi
+
     if [ "${#positionals[@]}" -gt 1 ]; then
         _error "Multiple browser locations not allowed (already set to '${positionals[0]}'). Run \`$SCRIPT_NAME -h\` for usage"
         return 2
     fi
-    local browser_location="${positionals[0]}"
+    local browser_location=""
+    if [ "${#positionals[@]}" -eq 0 ]; then
+        run_and_go=1   # no location -> acquire Chrome for Testing (run-and-go)
+    else
+        browser_location="${positionals[0]}"
+    fi
+
+    # Validate acquisition flags -- only meaningful in run-and-go. With an explicit
+    # location they are ignored, so warn to surface a typo
+    if [ -n "$run_and_go" ]; then
+        case "$channel" in
+            stable|beta|dev|canary) ;;
+            *) _error "Invalid --channel '$channel' (valid: stable|beta|dev|canary). Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+        esac
+        if [ -n "$cft_version" ]; then
+            if ! printf '%s' "$cft_version" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
+                _error "Invalid --cft-version '$cft_version' (expected N.N.N.N). Run \`$SCRIPT_NAME -h\` for usage"
+                return 2
+            fi
+            if [ -n "$latest" ]; then
+                _error "--cft-version and --latest are mutually exclusive. Run \`$SCRIPT_NAME -h\` for usage"
+                return 2
+            fi
+        fi
+    elif [ "$channel" != "stable" ] || [ -n "$cft_version" ] || [ -n "$latest" ]; then
+        _warn "run-and-go flags (--channel/--cft-version/--latest) ignored with an explicit browser-location"
+    fi
 
     # Validate an explicit port is numeric: it flows into /tmp/chrome-debug-<port>
     # and, with --fresh, into rm -rf, so a non-numeric value must never get through
@@ -568,9 +981,15 @@ LIST
         esac
     fi
 
-    local browser_exe
-    if ! browser_exe="$(_resolve_browser "$browser_location")"; then
-        return 1
+    local browser_exe=""
+    if [ -n "$run_and_go" ]; then
+        _resolve_default_browser
+        local rag_rc=$?
+        [ "$rag_rc" -eq 0 ] || return "$rag_rc"
+    else
+        if ! browser_exe="$(_resolve_browser "$browser_location")"; then
+            return 1
+        fi
     fi
 
     if ! _select_port; then
@@ -713,13 +1132,22 @@ LIST
 
     # Dry-run: resolve and print the launch plan without launching
     if [ -n "$dry_run" ]; then
+        if [ -n "$run_and_go" ]; then
+            case "$cft_from" in
+                cache)       _dry "Would reuse cached CfT $cft_version at $cft_path" ;;
+                download)    _dry "Would download CfT $cft_version ($cft_platform) from $cft_url to $cft_dest" ;;
+                last-resort) _dry "Would fall back to $browser_exe (Chrome for Testing unavailable)" ;;
+            esac
+        fi
         _dry "Would launch browser with:"
-        printf "  browser: '%s'\n" "$browser_exe"
+        printf "  browser: '%s'\n" "${browser_exe:-(Chrome for Testing $cft_version, pending download)}"
         printf "  port: '%s'\n" "$port"
         printf "  server: '%s'\n" "${server_name:-(none)}"
         printf "  profile: '%s'\n" "$user_data_dir"
         [ -n "$detached" ] && printf '  detached: yes\n'
-        printf '  command: %s\n' "$(_shell_join "$browser_exe" "${browser_argv[@]}")"
+        if [ -n "$browser_exe" ]; then
+            printf '  command: %s\n' "$(_shell_join "$browser_exe" "${browser_argv[@]}")"
+        fi
         _print_seed_plan
         return 0
     fi

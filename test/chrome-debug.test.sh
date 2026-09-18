@@ -13,6 +13,11 @@ source "$SCRIPT_DIR/test-helpers.sh"
 
 UNDER_TEST="$SCRIPT_DIR/../scripts/chrome-debug"
 
+# Pin the CfT platform key so run-and-go fixtures (mac-arm64 zips, cache paths,
+# fixture JSON) behave the same regardless of host arch. Exported once here so
+# every run_script* helper's `env ...` call inherits it without a per-case prefix
+export CHROME_DEBUG_PLATFORM=mac-arm64
+
 # --- shims ---
 # nc shim: ports listed in $TEST_DIR/busy_ports (one per line) report busy (rc 0),
 # all others free (rc 1). Mirrors `nc -z host port`.
@@ -121,6 +126,62 @@ write_pool_at() {
 JSON
 }
 
+# CfT last-known-good JSON fixture (Stable + Beta), mac-arm64 downloads.
+write_cft_fixture() {
+    cat > "$TEST_DIR/cft-lkg.json" <<'JSON'
+{"channels":{
+  "Stable":{"version":"153.0.8010.47","downloads":{"chrome":[{"platform":"mac-arm64","url":"https://x/153.0.8010.47/mac-arm64/chrome-mac-arm64.zip"}]}},
+  "Beta":{"version":"154.0.8090.5","downloads":{"chrome":[{"platform":"mac-arm64","url":"https://x/154.0.8090.5/mac-arm64/chrome-mac-arm64.zip"}]}}
+}}
+JSON
+}
+
+# curl shim: serves the CfT last-known-good JSON, /json/version, and (for the
+# download URL) copies a prebuilt fake zip to curl's -o target. The zip branch is
+# only exercised once write_cft_zip_fixture exists (Task 3); harmless before then.
+write_cft_curl() {
+    cat > "$SHIM_DIR/curl" <<'SHIM'
+#!/bin/bash
+kind=""; out=""; prev=""
+for a in "$@"; do
+    case "$a" in
+        *last-known-good-versions-with-downloads.json) kind="lkg" ;;
+        *json/version*) kind="ver" ;;
+        *chrome-mac-arm64.zip) kind="zip" ;;
+    esac
+    [ "$prev" = "-o" ] && out="$a"
+    prev="$a"
+done
+case "$kind" in
+    lkg) cat "$TEST_DIR/cft-lkg.json"; exit 0 ;;
+    ver) echo '{"Browser":"Chrome/153"}'; exit 0 ;;
+    zip) [ -n "$out" ] && cp "$TEST_DIR/cft.zip" "$out"; exit 0 ;;
+esac
+exit 0
+SHIM
+    chmod +x "$SHIM_DIR/curl"
+}
+
+# Build a fake CfT zip: chrome-mac-arm64/Google Chrome for Testing.app with a
+# fast-exit executable. Real `unzip` extracts it in the download path.
+write_cft_zip_fixture() {
+    local stage="$TEST_DIR/zipstage"
+    rm -rf "$stage"
+    make_app "$stage/chrome-mac-arm64/Google Chrome for Testing.app" "cft-fake"
+    ( cd "$stage" && zip -qr "$TEST_DIR/cft.zip" chrome-mac-arm64 )
+}
+
+# curl shim simulating CfT unavailability: JSON + download fail (exit 22), but a
+# launched fallback browser's /json/version still answers (as Edge).
+write_offline_cft_curl() {
+    cat > "$SHIM_DIR/curl" <<'SHIM'
+#!/bin/bash
+for a in "$@"; do case "$a" in *json/version*) echo '{"Browser":"Edge/153"}'; exit 0 ;; esac; done
+exit 22
+SHIM
+    chmod +x "$SHIM_DIR/curl"
+}
+
 # --- test cases ---
 
 test_help_exits_0_and_has_sections() {
@@ -128,12 +189,6 @@ test_help_exits_0_and_has_sections() {
     assert_rc "help exits 0" 0
     assert_stdout_contains "help NAME" "NAME"
     assert_stdout_contains "help SYNOPSIS" "SYNOPSIS"
-}
-
-test_missing_positional_is_usage_error() {
-    run_script
-    assert_rc "no browser-location exits 2" 2
-    assert_stderr_contains "usage hint" "Run \`chrome-debug -h\` for usage"
 }
 
 test_unknown_flag_is_usage_error() {
@@ -1044,6 +1099,222 @@ PS
     assert_stdout_contains "list still works without nc (fixture pid)" "12345"
     assert_stdout_contains "list still works without nc (fixture profile)" "/tmp/chrome-debug-9222"
     assert_stderr_not_contains "does not complain about nc" "nc is required"
+}
+
+# --- run-and-go: cache listing ---
+test_list_cache_empty_when_no_cache() {
+    write_shims
+    CHROME_DEBUG_CACHE="$TEST_DIR/cache" run_script --list-cache
+    assert_rc "list-cache empty exits 0" 0
+    assert_stdout_contains "empty cache noted" "(empty)"
+}
+
+test_list_cache_shows_seeded_version() {
+    write_shims
+    mkdir -p "$TEST_DIR/cache/cft/153.0.8010.47/mac-arm64/chrome-mac-arm64"
+    CHROME_DEBUG_CACHE="$TEST_DIR/cache" run_script --list-cache
+    assert_rc "list-cache seeded exits 0" 0
+    assert_stdout_contains "lists the cached version" "153.0.8010.47"
+    assert_stdout_contains "lists the platform" "mac-arm64"
+}
+
+test_list_cache_orders_by_version_not_lexicographic() {
+    write_shims
+    # Lexicographic order would be 10.0.0.0, 152.0.1.0, 9.0.0.0 (string compare);
+    # sort -V must produce ascending numeric order: 9, 10, 152
+    mkdir -p "$TEST_DIR/cache/cft/9.0.0.0/mac-arm64/chrome-mac-arm64"
+    mkdir -p "$TEST_DIR/cache/cft/10.0.0.0/mac-arm64/chrome-mac-arm64"
+    mkdir -p "$TEST_DIR/cache/cft/152.0.1.0/mac-arm64/chrome-mac-arm64"
+    CHROME_DEBUG_CACHE="$TEST_DIR/cache" run_script --list-cache
+    assert_rc "version-order list exits 0" 0
+    assert_stdout_contains_blob "lists versions in ascending version order, not lexicographic" "9.0.0.0*10.0.0.0*152.0.1.0"
+    assert_stdout_contains "pins the path column" "/cache/cft/152.0.1.0/mac-arm64/"
+}
+
+test_list_cache_empty_when_cft_dir_has_no_versions() {
+    write_shims
+    # cft/ exists but has no version children -- distinct branch from the
+    # missing-root short-circuit covered by test_list_cache_empty_when_no_cache
+    mkdir -p "$TEST_DIR/cache/cft"
+    CHROME_DEBUG_CACHE="$TEST_DIR/cache" run_script --list-cache
+    assert_rc "empty cft dir exits 0" 0
+    assert_stdout_contains "empty cache noted (dir exists, no versions)" "(empty)"
+}
+
+# --- run-and-go: resolution + dry-run plan ---
+test_run_and_go_dry_run_plans_download() {
+    write_shims; write_mcp_fixture; write_cft_fixture; write_cft_curl
+    CHROME_DEBUG_CACHE="$TEST_DIR/cache" CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n
+    assert_rc "dry-run run-and-go exits 0" 0
+    assert_stdout_contains "plans download of stable tip" "Would download CfT 153.0.8010.47 (mac-arm64)"
+    assert_stdout_contains "still prints launch plan" "Would launch browser with:"
+}
+
+test_run_and_go_dry_run_plans_reuse() {
+    write_shims; write_mcp_fixture; write_cft_fixture; write_cft_curl
+    make_app "$TEST_DIR/cache/cft/153.0.8010.47/mac-arm64/chrome-mac-arm64/Google Chrome for Testing.app" "cft-fake"
+    CHROME_DEBUG_CACHE="$TEST_DIR/cache" CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n --latest
+    assert_rc "dry-run reuse exits 0" 0
+    assert_stdout_contains "plans reuse of cached tip" "Would reuse cached CfT 153.0.8010.47"
+}
+
+test_run_and_go_channel_resolves_beta() {
+    write_shims; write_mcp_fixture; write_cft_fixture; write_cft_curl
+    CHROME_DEBUG_CACHE="$TEST_DIR/cache" CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n --channel beta
+    assert_rc "beta channel exits 0" 0
+    assert_stdout_contains "resolves beta tip" "Would download CfT 154.0.8090.5"
+}
+
+test_run_and_go_explicit_version_builds_url() {
+    write_shims; write_mcp_fixture; write_cft_fixture; write_cft_curl
+    CHROME_DEBUG_CACHE="$TEST_DIR/cache" CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n --cft-version 152.0.1.2
+    assert_rc "explicit version exits 0" 0
+    assert_stdout_contains "uses pinned version" "Would download CfT 152.0.1.2 (mac-arm64) from"
+    assert_stdout_contains "deterministic url" "152.0.1.2/mac-arm64/chrome-mac-arm64.zip"
+}
+
+test_run_and_go_bad_channel_usage_error() {
+    write_shims; write_cft_fixture; write_cft_curl
+    CHROME_DEBUG_CACHE="$TEST_DIR/cache" CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n --channel wobble
+    assert_rc "bad channel exits 2" 2
+    assert_stderr_contains "names valid channels" "valid: stable|beta|dev|canary"
+}
+
+test_run_and_go_version_and_latest_conflict() {
+    write_shims
+    run_script -n --cft-version 1.2.3.4 --latest
+    assert_rc "conflict exits 2" 2
+    assert_stderr_contains "mutually exclusive" "mutually exclusive"
+}
+
+test_run_and_go_bad_version_usage_error() {
+    write_shims
+    run_script -n --cft-version not-a-version
+    assert_rc "bad version exits 2" 2
+    assert_stderr_contains "expects N.N.N.N" "expected N.N.N.N"
+}
+
+test_run_and_go_reuse_launches_fake() {
+    write_shims; write_cft_fixture; write_cft_curl
+    make_app "$TEST_DIR/cache/cft/153.0.8010.47/mac-arm64/chrome-mac-arm64/Google Chrome for Testing.app" "cft-fake"
+    CHROME_DEBUG_CACHE="$TEST_DIR/cache" CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" CHROME_DEBUG_PROBE_SLEEP=0 \
+        run_script --latest -p 9222
+    assert_rc "reuse launch exits 0" 0
+    assert_stdout_contains "launched line" "launched Chrome/153"
+    assert_stderr_contains "reuse note" "reusing cached CfT 153.0.8010.47"
+}
+
+# --- run-and-go: real download ---
+test_run_and_go_downloads_caches_launches() {
+    write_shims; write_cft_fixture; write_cft_zip_fixture; write_cft_curl
+    CHROME_DEBUG_CACHE="$TEST_DIR/cache" CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" CHROME_DEBUG_PROBE_SLEEP=0 \
+        run_script -p 9222
+    assert_rc "download+launch exits 0" 0
+    assert_stderr_contains "narrates download" "downloading CfT 153.0.8010.47"
+    assert_stdout_contains "launched fake" "launched Chrome/153"
+    assert_file_exists "cached the app" "$TEST_DIR/cache/cft/153.0.8010.47/mac-arm64/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/cft-fake"
+}
+
+test_run_and_go_reuses_after_download() {
+    write_shims; write_cft_fixture; write_cft_zip_fixture; write_cft_curl
+    CHROME_DEBUG_CACHE="$TEST_DIR/cache" CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" CHROME_DEBUG_PROBE_SLEEP=0 \
+        run_script -p 9222 >/dev/null 2>&1   # first run downloads
+    # second run: break the download URL so any re-download would fail; must reuse
+    printf '#!/bin/bash\nfor a in "$@"; do case "$a" in *json/version*) echo '\''{"Browser":"Chrome/153"}'\''; exit 0;; *last-known-good*) cat "$TEST_DIR/cft-lkg.json"; exit 0;; esac; done\nexit 0\n' > "$SHIM_DIR/curl"
+    chmod +x "$SHIM_DIR/curl"
+    CHROME_DEBUG_CACHE="$TEST_DIR/cache" CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" CHROME_DEBUG_PROBE_SLEEP=0 \
+        run_script -p 9222
+    assert_rc "second run exits 0" 0
+    assert_stderr_contains "reused, did not re-download" "reusing cached CfT 153.0.8010.47"
+    assert_stderr_not_contains "no second download" "downloading CfT"
+}
+
+test_run_and_go_missing_unzip_is_dependency_error() {
+    write_shims; write_cft_fixture; write_cft_zip_fixture; write_cft_curl
+    # Shadow unzip with a PATH that lacks it: symlink only the needed tools, minus unzip
+    local nz="$TEST_DIR/nounzip"
+    mkdir -p "$nz"
+    local t
+    for t in bash env basename dirname cat printf grep sed find sort tail head awk jq curl nc mktemp du ls cut mv rm mkdir chmod uname sleep; do
+        src="$(command -v "$t" 2>/dev/null)"; [ -n "$src" ] && ln -sf "$src" "$nz/$t"
+    done
+    ln -sf "$SHIM_DIR/curl" "$nz/curl"; ln -sf "$SHIM_DIR/nc" "$nz/nc"
+    env TEST_DIR="$TEST_DIR" PATH="$nz" CHROME_DEBUG_CACHE="$TEST_DIR/cache" \
+        CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" /bin/bash "$UNDER_TEST" -p 9222 \
+        >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
+    printf '%s\n' "$?" > "$TEST_DIR/rc"
+    assert_rc "missing unzip exits 3" 3
+    assert_stderr_contains "names unzip" "unzip is required"
+}
+
+# --- run-and-go: last-resort fallback ---
+test_last_resort_picks_edge_when_cft_unavailable() {
+    write_shims; write_offline_cft_curl
+    mkdir -p "$TEST_DIR/apps"
+    make_app "$TEST_DIR/apps/Microsoft Edge.app" "edge-fake"
+    CHROME_DEBUG_CACHE="$TEST_DIR/cache" CHROME_DEBUG_APPS_DIR="$TEST_DIR/apps" \
+        CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" CHROME_DEBUG_PROBE_SLEEP=0 \
+        run_script -p 9222
+    assert_rc "fallback launch exits 0" 0
+    assert_stderr_contains "warns fallback" "Chrome for Testing unavailable; falling back to"
+    assert_stdout_contains "launched edge fake" "launched Edge/153"
+}
+
+test_last_resort_skips_managed_chrome() {
+    write_shims; write_offline_cft_curl
+    mkdir -p "$TEST_DIR/apps"
+    make_app "$TEST_DIR/apps/Google Chrome.app" "chrome-fake"
+    CHROME_DEBUG_CACHE="$TEST_DIR/cache" CHROME_DEBUG_APPS_DIR="$TEST_DIR/apps" \
+        CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -p 9222
+    assert_rc "no debuggable browser exits 1" 1
+    assert_stderr_contains "guidance names the miss" "no debuggable browser found"
+}
+
+# --- run-and-go: cache pruning ---
+test_prune_cache_keeps_newest() {
+    write_shims
+    mkdir -p "$TEST_DIR/cache/cft/151.0.1.0/mac-arm64/chrome-mac-arm64" \
+             "$TEST_DIR/cache/cft/152.0.1.0/mac-arm64/chrome-mac-arm64" \
+             "$TEST_DIR/cache/cft/153.0.1.0/mac-arm64/chrome-mac-arm64"
+    CHROME_DEBUG_CACHE="$TEST_DIR/cache" run_script --prune-cache
+    assert_rc "prune exits 0" 0
+    if [ -d "$TEST_DIR/cache/cft/153.0.1.0/mac-arm64/chrome-mac-arm64" ]; then _ok "keeps newest"; else _fail "keeps newest: directory not found"; fi
+    if [ -d "$TEST_DIR/cache/cft/151.0.1.0" ]; then _fail "should have pruned 151"; else _ok "pruned 151"; fi
+    if [ -d "$TEST_DIR/cache/cft/152.0.1.0" ]; then _fail "should have pruned 152"; else _ok "pruned 152"; fi
+}
+
+test_prune_cache_dry_run_removes_nothing() {
+    write_shims
+    mkdir -p "$TEST_DIR/cache/cft/151.0.1.0/mac-arm64" "$TEST_DIR/cache/cft/152.0.1.0/mac-arm64"
+    CHROME_DEBUG_CACHE="$TEST_DIR/cache" run_script --prune-cache -n
+    assert_rc "prune dry-run exits 0" 0
+    assert_stdout_contains "plans removal" "Would remove: cft/151.0.1.0"
+    if [ -d "$TEST_DIR/cache/cft/151.0.1.0/mac-arm64" ]; then _ok "kept on dry-run"; else _fail "kept on dry-run: directory not found"; fi
+}
+
+test_prune_cache_keeps_in_use_build() {
+    write_shims
+    make_app "$TEST_DIR/cache/cft/151.0.1.0/mac-arm64/chrome-mac-arm64/Google Chrome for Testing.app" "cft-fake"
+    make_app "$TEST_DIR/cache/cft/153.0.1.0/mac-arm64/chrome-mac-arm64/Google Chrome for Testing.app" "cft-fake"
+    local inuse="$TEST_DIR/cache/cft/151.0.1.0/mac-arm64/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/cft-fake"
+    cat > "$TEST_DIR/ps_table" <<PS
+$inuse --remote-debugging-port=9222 --user-data-dir=/tmp/x
+PS
+    write_ps_shim
+    CHROME_DEBUG_CACHE="$TEST_DIR/cache" run_script --prune-cache 1
+    assert_rc "prune exits 0" 0
+    assert_file_exists "kept the in-use old build" "$inuse"
+    assert_stderr_contains "notes in-use skip" "keeping in-use CfT 151.0.1.0"
+}
+
+test_help_lists_run_and_go_flags() {
+    run_script --help
+    assert_rc "help exits 0" 0
+    assert_stdout_contains "help has --channel" "--channel"
+    assert_stdout_contains "help has --cft-version" "--cft-version"
+    assert_stdout_contains "help has --latest" "--latest"
+    assert_stdout_contains "help has --list-cache" "--list-cache"
+    assert_stdout_contains "help has --prune-cache" "--prune-cache"
 }
 
 # --- run ---
