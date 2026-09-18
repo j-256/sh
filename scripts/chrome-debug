@@ -2,13 +2,16 @@
 # chrome-debug - Launch a Chromium-family browser in remote-debugging mode for MCP attach
 #
 # Usage:
-#   chrome-debug [-p port] [-d dir] [-nfv] [--no-extensions] <browser-location> [-- extra-chrome-args]
+#   chrome-debug [-p port] [-d dir] [-nfv] [--detached] [--no-extensions] <browser-location> [-- extra-chrome-args]
+#   chrome-debug -l | --list
 #
 # Options:
 #   -p, --port PORT          Debug port (default: lowest free port in the .mcp.json pool)
 #   -d, --user-data-dir DIR  Chrome profile dir (default: /tmp/chrome-debug-<port>)
+#   -l, --list               List running debug browsers and exit
 #   -n, --dry-run            Resolve and print, but do not launch
 #   -f, --fresh              Wipe the port's profile dir before launching
+#   --detached               Launch, print PID/port, then detach and exit (leave browser running)
 #   --no-extensions          Launch with extensions disabled (--disable-extensions)
 #   -v, --verbose            Verbose resolution output
 #   -h, --help               Show help message
@@ -46,7 +49,8 @@ _chrome_debug() (
 NAME
   $SCRIPT_NAME - launch a Chromium-family browser in remote-debugging mode for MCP attach
 SYNOPSIS
-  $SCRIPT_NAME [-p ${s}port${r}] [-d ${s}dir${r}] [-nfv] [--no-extensions] [--devtools-pref ${s}kv${r}] <${s}browser-location${r}> [-- ${s}extra-chrome-args${r}]
+  $SCRIPT_NAME [-p ${s}port${r}] [-d ${s}dir${r}] [-nfv] [--detached] [--no-extensions] [--devtools-pref ${s}kv${r}] <${s}browser-location${r}> [-- ${s}extra-chrome-args${r}]
+  $SCRIPT_NAME -l | --list
   $SCRIPT_NAME -h
 DESCRIPTION
   Launches a Chromium-family browser (Chrome, Edge, Brave, Chromium, ...)
@@ -85,13 +89,26 @@ DESCRIPTION
   instance on the same profile (which Chrome would refuse). Use -f/--fresh to
   wipe the port's profile directory first for a clean-slate session.
 
+  By default $SCRIPT_NAME holds the foreground so the launching terminal owns the
+  browser -- Ctrl-C (or stopping the process) tears it down. With --detached it
+  instead prints the PID and port, then exits 0 and leaves the browser running, so
+  a persistent debug browser can be reused across sessions; kill it later with the
+  reported PID. This is the tidy alternative to backgrounding with "&".
+
+  -l/--list reports the running debug browsers -- every Chromium-family process
+  launched with --remote-debugging-port -- one row each: port, PID, browser
+  version, the mapped .mcp.json chrome-devtools entry (if any), and profile dir. It
+  takes no ${s}browser-location${r} and exits 0 even when none are running.
+
   Use -- to pass additional arguments through to the browser executable
   unchanged.
 OPTIONS
   -p, --port ${s}port${r}            Debug port (default: lowest free port in the MCP pool)
   -d, --user-data-dir ${s}dir${r}     Chrome profile dir (default: /tmp/chrome-debug-<port>)
+  -l, --list                List running debug browsers and exit (takes no browser-location)
   -n, --dry-run             Resolve and print, but do not launch
   -f, --fresh               Wipe the port's profile dir before launching (clean session)
+  --detached                Launch, print PID/port, then detach and exit (leave the browser running for reuse)
   --no-extensions           Launch with extensions disabled (passes --disable-extensions)
   --no-har-sensitive        Force off the default-on DevTools "generate HAR with sensitive data" setting
   --no-disable-cache        Force off the default-on DevTools "disable cache (while DevTools is open)" setting
@@ -104,7 +121,7 @@ ENVIRONMENT
                             overriding the default cwd-to-\$HOME walk-up
 DEPENDENCIES
   jq        Parse .mcp.json to discover the chrome-devtools MCP port pool
-  curl      Verify the remote-debugging port is responding (required only for launching, not --dry-run)
+  curl      Verify the remote-debugging port is responding (required for launching, best-effort for --list; not needed for --dry-run)
   nc        Check whether a candidate port is already in use
   defaults  Resolve .app bundle metadata on macOS
   lsof      Optional: resolve the owning PID when attaching to an already-serving browser
@@ -116,6 +133,8 @@ EXIT STATUS
 EXAMPLES
   $SCRIPT_NAME "/Applications/Google Chrome.app"
   $SCRIPT_NAME -p 9222 "/Applications/Google Chrome.app"
+  $SCRIPT_NAME --detached "/Applications/Microsoft Edge.app"
+  $SCRIPT_NAME --list
   $SCRIPT_NAME -n -v "/Applications/Google Chrome.app"
   $SCRIPT_NAME "/Applications/Google Chrome.app" -- --incognito
   $SCRIPT_NAME --devtools-pref synced:ui-theme=dark "/Applications/Microsoft Edge.app"
@@ -367,6 +386,84 @@ EOF
         return 1
     }
 
+    # List the running debug browsers: every Chromium-family MAIN process launched
+    # with --remote-debugging-port. Its renderer/gpu/utility children carry --type=
+    # and never the debug port, so filtering on "has the port, has no --type=" yields
+    # exactly one row per browser. Per row: port, PID, browser/version (from
+    # /json/version when curl answers, else the executable basename), the mapped
+    # .mcp.json chrome-devtools entry (or "(none)"), and the --user-data-dir profile.
+    # Program output on stdout; an empty list is a normal result (rc 0), not an error.
+    # Needs jq (checked before this runs); curl is best-effort; ps is universal
+    _list_debug_browsers() {
+        local pool; pool="$(_parse_pool)"   # rc ignored: an empty pool just maps every port to (none)
+        local have_curl=""
+        command -v curl >/dev/null 2>&1 && have_curl=1
+
+        # Collect rows first so we can tell "none running" from "some" for the footer
+        local rows=""
+        local line
+        local pid
+        local rest
+        local port
+        local profile
+        local exe
+        local browser
+        local server
+        while IFS= read -r line; do
+            case "$line" in *--remote-debugging-port=*) ;; *) continue ;; esac
+            case "$line" in *--type=*) continue ;; esac
+
+            # ps right-justifies the pid column, so left-trim before splitting off pid
+            line="${line#"${line%%[![:space:]]*}"}"
+            pid="${line%% *}"
+            case "$pid" in *[!0-9]*|"") continue ;; esac
+            rest="${line#"$pid"}"
+            rest="${rest#"${rest%%[![:space:]]*}"}"
+
+            port="${line##*--remote-debugging-port=}"
+            port="${port%% *}"
+            case "$port" in *[!0-9]*|"") continue ;; esac
+
+            # Profile: the --user-data-dir value, up to the next " --" flag or line end
+            # (so a profile path containing spaces still resolves in full)
+            case "$line" in
+                *--user-data-dir=*)
+                    profile="${line##*--user-data-dir=}"
+                    case "$profile" in *" --"*) profile="${profile%% --*}" ;; esac ;;
+                *) profile="(default)" ;;
+            esac
+
+            # Browser identity: prefer the live /json/version Browser string; fall back
+            # to the executable basename (command up to the first " --", then basename)
+            browser=""
+            if [ -n "$have_curl" ]; then
+                browser="$(curl -s --max-time 2 "http://127.0.0.1:$port/json/version" 2>/dev/null | jq -r '.Browser // empty' 2>/dev/null)"
+            fi
+            if [ -z "$browser" ]; then
+                exe="$rest"
+                case "$exe" in *" --"*) exe="${exe%% --*}" ;; esac
+                browser="${exe##*/}"
+                [ -n "$browser" ] || browser="unknown"
+            fi
+
+            server="$(printf '%s\n' "$pool" | awk -v p="$port" '$1==p {print $2; exit}')"
+            [ -n "$server" ] || server="(none)"
+
+            rows="$rows$(printf '%-6s %-8s %-32s %-22s %s' "$port" "$pid" "$browser" "$server" "$profile")
+"
+        done <<LIST
+$(ps -Ao pid,command 2>/dev/null)
+LIST
+
+        if [ -z "$rows" ]; then
+            echo "No debug browsers running (nothing launched with --remote-debugging-port)"
+            return 0
+        fi
+        printf '%-6s %-8s %-32s %-22s %s\n' "PORT" "PID" "BROWSER" "MCP ENTRY" "PROFILE"
+        printf '%s' "$rows"
+        return 0
+    }
+
     # --help must work even when dependencies are missing, so short-circuit it
     # before the jq check below (matches ods-usage/dw-jwt/httpcode)
     case "$1" in
@@ -377,6 +474,12 @@ EOF
         _error "jq is required"
         return 3
     fi
+
+    # --list needs jq (pool mapping + /json/version parse) but never nc, so handle it
+    # after the jq check and before the nc requirement below
+    case "$1" in
+        -l|--list) _list_debug_browsers; return $? ;;
+    esac
 
     if ! command -v nc >/dev/null 2>&1; then
         _error "nc is required"
@@ -391,6 +494,7 @@ EOF
     local dry_run=""
     local verbose=""
     local fresh=""
+    local detached=""
     local no_extensions=""
     local no_har=""
     local no_cache=""
@@ -409,6 +513,7 @@ EOF
             -v|--verbose) verbose=1; shift ;;
             -n|--dry-run) dry_run=1; shift ;;
             -f|--fresh) fresh=1; shift ;;
+            --detached) detached=1; shift ;; # long-only: -d is taken by --user-data-dir
             --no-extensions) no_extensions=1; shift ;; # long-only: negation flag
             --no-har-sensitive)  no_har=1; shift ;;            # long-only: force the HAR-with-sensitive-data setting off
             --no-disable-cache)  no_cache=1; shift ;;          # long-only: force the disable-cache setting off
@@ -613,6 +718,7 @@ EOF
         printf "  port: '%s'\n" "$port"
         printf "  server: '%s'\n" "${server_name:-(none)}"
         printf "  profile: '%s'\n" "$user_data_dir"
+        [ -n "$detached" ] && printf '  detached: yes\n'
         printf '  command: %s\n' "$(_shell_join "$browser_exe" "${browser_argv[@]}")"
         _print_seed_plan
         return 0
@@ -641,10 +747,12 @@ EOF
         # tears the whole browser down. Direct-exec launch (not `open -a`) keeps this
         # PID valid -- it's the process that holds the debug port
         echo "  pid: ${pid:-unknown}  port: $port"
+        # Lead with the CDP endpoint so any client attaches; the mapped .mcp.json
+        # chrome-devtools entry (when present) is a convenience, not a requirement
         if [ -n "$server_name" ]; then
-            echo "  → attach via MCP server '$server_name'"
+            echo "  → connect a CDP client to 127.0.0.1:$port (e.g. agent-browser); MCP entry '$server_name' maps to this port"
         else
-            echo "  (no chrome-devtools MCP entry for :$port; attach another CDP client)"
+            echo "  → connect a CDP client to 127.0.0.1:$port (e.g. agent-browser, chrome-devtools-mcp, Playwright)"
         fi
         # Surface the literal teardown command as a reminder (when the PID is known).
         # Kills the whole browser: the main process owns every renderer/helper child
@@ -719,6 +827,16 @@ EOF
     local browser_ver; browser_ver="$(printf '%s' "$version_json" | jq -r '.Browser // "unknown"' 2>/dev/null)"
 
     _print_attach_info "${browser_ver:-unknown}" launched "$browser_pid"
+
+    # --detached: leave the browser running and return instead of holding the
+    # foreground. Safe because an executed (non-interactive) shell does not SIGHUP
+    # its background jobs on exit, so the browser reparents to launchd and keeps
+    # running -- the same clean detach the plain-& launch above relies on. This is
+    # the tidy alternative to backgrounding the whole command with "chrome-debug ... &"
+    if [ -n "$detached" ]; then
+        echo "  detached -- not holding the terminal; browser persists for reuse across sessions"
+        return 0
+    fi
 
     # Hold the foreground so this terminal tab owns the browser: Ctrl-C here kills it
     # and nothing else. Exit status follows the browser

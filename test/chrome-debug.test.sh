@@ -81,6 +81,18 @@ SHIM
 # A fast-exit fake browser at $TEST_DIR/fastexit (so the foreground `wait` returns).
 make_fastexit() { printf '#!/bin/bash\nexit 0\n' > "$TEST_DIR/fastexit"; chmod +x "$TEST_DIR/fastexit"; }
 
+# A ps shim that emits a controlled process table from $TEST_DIR/ps_table, so
+# --list's discovery (ps -Ao pid,command) parses a known set of processes instead
+# of the host's live ones. Ignores its args, like the real ps would for -Ao.
+write_ps_shim() {
+    cat > "$SHIM_DIR/ps" <<'SHIM'
+#!/bin/bash
+cat "$TEST_DIR/ps_table" 2>/dev/null
+exit 0
+SHIM
+    chmod +x "$SHIM_DIR/ps"
+}
+
 # Read a seeded DevTools pref from the test profile: $1 bucket, $2 key. Prints
 # "<absent>" when the key is missing (the tests run with the dev's full PATH, so
 # jq here is the host jq, not the run_script-pinned one).
@@ -387,7 +399,9 @@ SHIM
     CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -d "$TEST_DIR/prof" -p 9222 "$TEST_DIR/fastexit"
     assert_rc "launch exits 0" 0
     assert_stdout_contains "confirmation w/ browser+port" "launched Chrome/150.0.7871.46, listening on :9222"
-    assert_stdout_contains "linkage line" "attach via MCP server 'chrome-devtools-9222'"
+    assert_stdout_contains "CDP endpoint in linkage" "connect a CDP client to 127.0.0.1:9222"
+    assert_stdout_contains "names agent-browser as an example client" "agent-browser"
+    assert_stdout_contains "mapped MCP entry noted" "MCP entry 'chrome-devtools-9222' maps to this port"
     # PID + port line: the caller uses these to kill the browser / attach a CDP client.
     # The launched PID is the fake browser's ($!) so it varies run to run; a glob match
     # asserts a real number is reported (not "unknown"/empty) alongside the port
@@ -458,7 +472,8 @@ SHIM
     CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -p 9222 "$TEST_DIR/recorder"
     assert_rc "already-serving exits 0" 0
     assert_stdout_contains "confirmation w/ port" "already serving on :9222"
-    assert_stdout_contains "linkage line" "attach via MCP server 'chrome-devtools-9222'"
+    assert_stdout_contains "CDP endpoint in linkage" "connect a CDP client to 127.0.0.1:9222"
+    assert_stdout_contains "mapped MCP entry noted" "MCP entry 'chrome-devtools-9222' maps to this port"
     if [ -f "$TEST_DIR/launched" ]; then
         echo "[FAIL] already-serving must not relaunch: browser was launched" >&2
         return 1
@@ -877,6 +892,158 @@ SHIM
     CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -p 9222 --devtools-pref foo=bar "$TEST_DIR/recorder"
     assert_rc "already-serving exits 0" 0
     assert_stderr_contains "warns prefs not seeded" "DevTools prefs not seeded"
+}
+
+# --- detached ---
+
+# Detached must return WITHOUT holding the foreground. Proven with a slow fake
+# browser (sleeps, then touches a marker): if detached wrongly waited, the marker
+# would exist by the time run_script returns. It must be absent -> we returned first.
+test_detached_returns_without_waiting_for_browser() {
+    write_mcp_fixture
+    : > "$TEST_DIR/busy_ports"
+    write_serving_curl
+    # fake browser stays alive past our return, then records completion
+    printf '#!/bin/bash\nsleep 3\ntouch "%s/browser_done"\n' "$TEST_DIR" > "$TEST_DIR/slowexit"
+    chmod +x "$TEST_DIR/slowexit"
+
+    CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script --detached -d "$TEST_DIR/prof" -p 9222 "$TEST_DIR/slowexit"
+    assert_rc "detached launch exits 0" 0
+    assert_stdout_contains "still prints the launch confirmation" "launched Chrome/151, listening on :9222"
+    assert_stdout_contains "notes it detached" "detached -- not holding the terminal"
+    if [ -f "$TEST_DIR/browser_done" ]; then
+        echo "[FAIL] --detached must not wait: browser finished before the script returned" >&2
+        return 1
+    fi
+    _ok "detached returned before the browser finished (did not wait)"
+}
+
+# The default (no --detached) holds the foreground until the browser exits, so a
+# fake browser that touches a marker on exit has done so by the time we return.
+test_default_holds_foreground_until_browser_exits() {
+    write_mcp_fixture
+    : > "$TEST_DIR/busy_ports"
+    write_serving_curl
+    printf '#!/bin/bash\nsleep 1\ntouch "%s/browser_done"\n' "$TEST_DIR" > "$TEST_DIR/slowexit"
+    chmod +x "$TEST_DIR/slowexit"
+
+    CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -d "$TEST_DIR/prof" -p 9222 "$TEST_DIR/slowexit"
+    assert_rc "foreground launch exits 0" 0
+    assert_file_exists "waited for the browser to exit" "$TEST_DIR/browser_done"
+    assert_stdout_not_contains "no detached note in foreground mode" "detached --"
+}
+
+test_detached_dry_run_notes_detached() {
+    write_mcp_fixture
+    : > "$TEST_DIR/busy_ports"
+    CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n --detached "$(_any_browser)"
+    assert_rc "detached dry-run exits 0" 0
+    assert_stdout_contains "dry-run plan notes detached" "detached: yes"
+}
+
+test_dry_run_omits_detached_by_default() {
+    write_mcp_fixture
+    : > "$TEST_DIR/busy_ports"
+    CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -n "$(_any_browser)"
+    assert_rc "default dry-run exits 0" 0
+    assert_stdout_not_contains "no detached line without the flag" "detached: yes"
+}
+
+# --- list ---
+
+test_list_shows_debug_browsers_with_pool_mapping() {
+    write_mcp_fixture
+    write_ps_shim
+    write_serving_curl
+    # A pool-mapped debug browser (9222), an off-pool debug browser (9299), a
+    # --type= helper child (must be excluded), and a non-debug process (no port).
+    cat > "$TEST_DIR/ps_table" <<'PS'
+  12345 /Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-debug-9222 --no-first-run
+  12360 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome --type=renderer --remote-debugging-port=9222
+  12400 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome --remote-debugging-port=9299 --user-data-dir=/tmp/chrome-debug-9299
+  99999 /usr/sbin/some-daemon --foo
+PS
+    CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script --list
+    assert_rc "list exits 0" 0
+    assert_stdout_contains "header row" "PORT"
+    assert_stdout_contains "header names MCP ENTRY column" "MCP ENTRY"
+    assert_stdout_contains "9222 debug browser port" "9222"
+    assert_stdout_contains "9222 pid" "12345"
+    assert_stdout_contains "9222 browser version from /json/version" "Chrome/151"
+    assert_stdout_contains "9222 maps to pool entry" "chrome-devtools-9222"
+    assert_stdout_contains "9222 profile" "/tmp/chrome-debug-9222"
+    assert_stdout_contains "off-pool 9299 port" "9299"
+    assert_stdout_contains "off-pool has no mapped entry" "(none)"
+    assert_stdout_not_contains "excludes --type= helper child" "12360"
+    assert_stdout_not_contains "excludes non-debug process" "99999"
+}
+
+test_list_short_flag_matches_long() {
+    write_mcp_fixture
+    write_ps_shim
+    write_serving_curl
+    cat > "$TEST_DIR/ps_table" <<'PS'
+  12345 /Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-debug-9222
+PS
+    CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -l
+    assert_rc "-l exits 0" 0
+    assert_stdout_contains "-l lists the debug browser" "9222"
+}
+
+test_list_empty_when_no_debug_browsers() {
+    write_mcp_fixture
+    write_ps_shim
+    # Processes present, but none launched with --remote-debugging-port
+    cat > "$TEST_DIR/ps_table" <<'PS'
+  12345 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome --user-data-dir=/x
+  12360 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome --type=renderer
+PS
+    CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script --list
+    assert_rc "empty list exits 0 (not an error)" 0
+    assert_stdout_contains "friendly empty note" "No debug browsers running"
+}
+
+test_list_falls_back_to_binary_basename_without_serving_endpoint() {
+    write_mcp_fixture
+    write_ps_shim
+    # curl present but the port isn't serving -> .Browser empty -> basename fallback
+    cat > "$SHIM_DIR/curl" <<'SHIM'
+#!/bin/bash
+exit 7
+SHIM
+    chmod +x "$SHIM_DIR/curl"
+    cat > "$TEST_DIR/ps_table" <<'PS'
+  12345 /Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-debug-9222
+PS
+    CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script --list
+    assert_rc "list exits 0" 0
+    assert_stdout_contains "browser column falls back to executable basename" "Microsoft Edge"
+}
+
+test_list_does_not_require_nc() {
+    # --list short-circuits before the nc dependency check, so a missing nc must
+    # not block it (nc is only needed for port-liveness on the launch path).
+    write_mcp_fixture
+    cat > "$TEST_DIR/ps_table" <<'PS'
+  12345 /Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-debug-9222
+PS
+    # Restrict PATH to a shim dir with the tools --list needs, but NO nc. Link only
+    # the host coreutils/jq; ps and curl are the controlled fixture shims written
+    # after (linking them here would leave symlinks the shim-writers can't overwrite)
+    for t in bash basename dirname cat printf grep sed find sort tail awk jq; do
+        src="$(command -v "$t" 2>/dev/null)"
+        [ -n "$src" ] && ln -sf "$src" "$SHIM_DIR/$t"
+    done
+    rm -f "$SHIM_DIR/nc"
+    write_ps_shim
+    write_serving_curl
+    env TEST_DIR="$TEST_DIR" PATH="$SHIM_DIR" CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" \
+        /bin/bash "$UNDER_TEST" --list >"$TEST_DIR/stdout" 2>"$TEST_DIR/stderr"
+    printf '%s\n' "$?" > "$TEST_DIR/rc"
+    assert_rc "list without nc exits 0" 0
+    assert_stdout_contains "list still works without nc (fixture pid)" "12345"
+    assert_stdout_contains "list still works without nc (fixture profile)" "/tmp/chrome-debug-9222"
+    assert_stderr_not_contains "does not complain about nc" "nc is required"
 }
 
 # --- run ---
