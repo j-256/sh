@@ -502,6 +502,18 @@ LIST
         printf '%s' "${CHROME_DEBUG_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/chrome-debug}"
     }
 
+    # Cached CfT version directory names (basenames of <root>/cft/*/), unsorted. Uses
+    # a glob rather than ls so odd names are handled and shellcheck stays quiet;
+    # callers pipe through sort -V (or -Vr) for version order. $1 is the cft root
+    _cft_version_names() {
+        local root="$1"
+        [ -d "$root" ] || return 0
+        local d
+        for d in "$root"/*/; do
+            [ -d "$d" ] && basename "$d"
+        done
+    }
+
     # List cached CfT builds on stdout (program output): one row per version+platform
     # with on-disk size and path, sorted by version. Empty cache prints "(empty)".
     # Filesystem-only; rc 0 always
@@ -527,7 +539,7 @@ LIST
                 found=1
             done
         done <<EOF
-$(ls -1 "$root" 2>/dev/null | sort -V)
+$(_cft_version_names "$root" | sort -V)
 EOF
         [ -n "$found" ] || echo "(empty)"
         return 0
@@ -606,7 +618,7 @@ EOF
                 return 0
             fi
         done <<EOF
-$(ls -1 "$root" 2>/dev/null | sort -Vr)
+$(_cft_version_names "$root" | sort -Vr)
 EOF
         return 1
     }
@@ -667,7 +679,7 @@ EOF
                 fi
             fi
         done <<EOF
-$(ls -1 "$root" 2>/dev/null | sort -Vr)
+$(_cft_version_names "$root" | sort -Vr)
 EOF
         return 0
     }

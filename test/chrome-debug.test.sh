@@ -521,7 +521,11 @@ SHIM
     chmod +x "$SHIM_DIR/curl"
     # Fake browser that records if it is ever launched (it must NOT be)
     rm -f "$TEST_DIR/launched"
-    printf '#!/bin/bash\ntouch "$TEST_DIR/launched"\nexit 0\n' > "$TEST_DIR/recorder"
+    cat > "$TEST_DIR/recorder" <<'REC'
+#!/bin/bash
+touch "$TEST_DIR/launched"
+exit 0
+REC
     chmod +x "$TEST_DIR/recorder"
 
     CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -p 9222 "$TEST_DIR/recorder"
@@ -594,7 +598,11 @@ fi
 exit 7
 SHIM
     chmod +x "$SHIM_DIR/curl"
-    printf '#!/bin/bash\ntouch "$TEST_DIR/launched"\nexit 0\n' > "$TEST_DIR/recorder"
+    cat > "$TEST_DIR/recorder" <<'REC'
+#!/bin/bash
+touch "$TEST_DIR/launched"
+exit 0
+REC
     chmod +x "$TEST_DIR/recorder"
     rm -f "$TEST_DIR/launched"
 
@@ -653,7 +661,11 @@ fi
 exit 7
 SHIM
     chmod +x "$SHIM_DIR/curl"
-    printf '#!/bin/bash\ntouch "$TEST_DIR/launched"\nexit 0\n' > "$TEST_DIR/recorder"
+    cat > "$TEST_DIR/recorder" <<'REC'
+#!/bin/bash
+touch "$TEST_DIR/launched"
+exit 0
+REC
     chmod +x "$TEST_DIR/recorder"
     CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" run_script -p 9222 "$TEST_DIR/recorder"
     assert_rc "already-serving exits 0" 0
@@ -1220,7 +1232,16 @@ test_run_and_go_reuses_after_download() {
     CHROME_DEBUG_CACHE="$TEST_DIR/cache" CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" CHROME_DEBUG_PROBE_SLEEP=0 \
         run_script -p 9222 >/dev/null 2>&1   # first run downloads
     # second run: break the download URL so any re-download would fail; must reuse
-    printf '#!/bin/bash\nfor a in "$@"; do case "$a" in *json/version*) echo '\''{"Browser":"Chrome/153"}'\''; exit 0;; *last-known-good*) cat "$TEST_DIR/cft-lkg.json"; exit 0;; esac; done\nexit 0\n' > "$SHIM_DIR/curl"
+    cat > "$SHIM_DIR/curl" <<'SHIM'
+#!/bin/bash
+for a in "$@"; do
+    case "$a" in
+        *json/version*) echo '{"Browser":"Chrome/153"}'; exit 0 ;;
+        *last-known-good*) cat "$TEST_DIR/cft-lkg.json"; exit 0 ;;
+    esac
+done
+exit 0
+SHIM
     chmod +x "$SHIM_DIR/curl"
     CHROME_DEBUG_CACHE="$TEST_DIR/cache" CHROME_DEBUG_MCP_JSON="$TEST_DIR/mcp.json" CHROME_DEBUG_PROBE_SLEEP=0 \
         run_script -p 9222
