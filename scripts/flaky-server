@@ -10,6 +10,7 @@
 #
 # Paths:
 #   /delay/<ms>, /drop/<ms>, /status/<code>, /reset, /trickle/<ms>, /<ms>
+#   /rate/<bytes-per-second>; stream queries: bytes, chunk, type=text|xml|json
 #
 # Dependencies:
 #   socat, sleep with fractional-second support
@@ -48,10 +49,19 @@ PATHS
   /drop/<ms>      Wait, send XML with Content-Length: 100000, then close early
   /status/<code>  Immediately return a final HTTP status, 200-599
   /reset         Close after the request line without sending a response
-  /trickle/<ms>   Send headers, then ten body bytes spread over the duration
+  /trickle/<ms>   Send headers, then a body spread over the duration
+  /rate/<bps>     Send headers, then a body at about bps bytes per second
   /<ms>          Legacy delay; other paths ending in a number also work
   ms             Decimal integer, 0-2147483647; leading zeroes are decimal
-  Queries and trailing slashes are ignored. Invalid behavior values return 400; unknown paths return 404. Explicit behavior names take precedence over legacy numeric paths.
+  bps            Decimal integer, 1-1048576; bytes per second, not bits
+  Trailing slashes and unrelated query keys are ignored. Invalid behavior values return 400; unknown paths return 404. Explicit behavior names take precedence over legacy numeric paths.
+STREAM QUERIES
+  /trickle and /rate accept these optional query parameters; quote the URL
+  bytes=<n>      Total body bytes including XML/JSON wrappers (1-1048576)
+  chunk=<n>      Bytes per write; smaller writes are steadier, larger ones burst
+  type=<format>  text (dots), xml (<data>...</data>), json ({"data":"..."})
+  Defaults: /trickle sends 10 text bytes, or 1024 for XML/JSON; /rate sends 10240 bytes. Both default to text and about ten writes, with chunk=ceil(bytes/10).
+  Explicit chunk values are 1-1048576, with at most 1024 writes per response. XML needs at least 13 bytes, JSON 11. Invalid or duplicate controls return 400. Other behaviors ignore query parameters.
 EXAMPLES
   $SCRIPT_NAME 9000
   curl -i http://localhost:9000/delay/2500
@@ -59,6 +69,9 @@ EXAMPLES
   curl -i http://localhost:9000/status/503
   curl -i http://localhost:9000/reset
   curl -Ni http://localhost:9000/trickle/5000
+  curl -Ni http://localhost:9000/rate/1024
+  curl -N 'http://localhost:9000/trickle/5000?bytes=1024&chunk=128&type=json'
+  curl -N 'http://localhost:9000/rate/1024?bytes=4096&chunk=2048&type=xml'
   curl http://localhost:9000/2500
   curl -fsS https://toolio.sh/$SCRIPT_NAME | bash -s -- 9000
   curl -H 'Content-Type: text/xml' --data '<Envelope/>' http://localhost:9000/drop/2000
@@ -71,6 +84,7 @@ EXIT STATUS
   3  Missing dependency
 CAVEATS
   Plain HTTP only; terminate HTTPS at your tunnel. A proxy may buffer trickles or replace failures, so verify the observed result through the actual tunnel. /reset closes without a response; a TCP RST is not guaranteed.
+  Streaming waits before each write, with a shorter final write when needed. Timing uses millisecond scheduling plus process overhead; rates are approximate. Writes are not TCP packet boundaries. Smaller chunks cost more overhead, and zero-length intervals do not sleep.
   This tests HTTP transport, not valid SOAP replies. POST bodies with Content-Length and Expect: 100-continue are accepted and discarded. Chunked request bodies return 501. HEAD sends headers only, so it cannot demonstrate a truncated or trickled body. Status 204, 205 and 304 have no body.
   Request lines and headers have an 8192-byte line limit, headers are limited to 100 lines, and request bodies to 1 MiB. Each request read has a 10-second timeout. Failed reads close the connection and log a diagnostic.
   Request logs go to stderr with a request ID, behavior, configured delay, result and elapsed seconds. Response headers include X-Request-ID. Request bodies, headers and query strings are not logged.
@@ -137,6 +151,77 @@ EOF
         printf '\r\n'
     }
 
+    # Set the caller's stream settings and body after validating query controls
+    # shellcheck disable=SC2329 # "This function is never invoked. Check usage (or ignored if invoked indirectly)." -- called by the exported socat handler
+    _configure_stream() {
+        local MAX_RESPONSE_BYTES=1048576
+        local MAX_STREAM_WRITES=1024
+        local DEFAULT_STREAM_WRITES=10
+        local DEFAULT_TRICKLE_BYTES=10
+        local DEFAULT_STRUCTURED_BYTES=1024
+        local DEFAULT_RATE_BYTES=10240
+        local bytes_seen=""
+        local chunk_seen=""
+        local type_seen=""
+        local rest="$query"
+        local pair
+        local key
+        local setting
+        stream_type=text
+        while [ -n "$rest" ]; do
+            pair="${rest%%&*}"
+            if [ "$rest" = "$pair" ]; then rest=""; else rest="${rest#*&}"; fi
+            key="${pair%%=*}"
+            setting="${pair#*=}"
+            case "$key" in
+                bytes|chunk)
+                    if [ "$pair" = "$key" ] || ! _parse_number "$setting" "$MAX_RESPONSE_BYTES" || [ "$_number" -eq 0 ]; then
+                        stream_error="invalid_$key"; return 1
+                    fi
+                    if [ "$key" = bytes ]; then
+                        if [ -n "$bytes_seen" ]; then stream_error=duplicate_bytes; return 1; fi
+                        stream_bytes="$_number"; bytes_seen=1
+                    else
+                        if [ -n "$chunk_seen" ]; then stream_error=duplicate_chunk; return 1; fi
+                        stream_chunk="$_number"; chunk_seen=1
+                    fi ;;
+                type)
+                    if [ -n "$type_seen" ]; then stream_error=duplicate_type; return 1; fi
+                    case "$setting" in
+                        text|xml|json) stream_type="$setting"; type_seen=1 ;;
+                        *) stream_error=invalid_type; return 1 ;;
+                    esac ;;
+            esac
+        done
+        if [ -z "$bytes_seen" ]; then
+            if [ "$mode" = rate ]; then stream_bytes="$DEFAULT_RATE_BYTES"
+            elif [ "$stream_type" = text ]; then stream_bytes="$DEFAULT_TRICKLE_BYTES"
+            else stream_bytes="$DEFAULT_STRUCTURED_BYTES"
+            fi
+        fi
+        if [ -z "$chunk_seen" ]; then
+            stream_chunk=$(((stream_bytes + DEFAULT_STREAM_WRITES - 1) / DEFAULT_STREAM_WRITES))
+        fi
+        if [ "$(((stream_bytes + stream_chunk - 1) / stream_chunk))" -gt "$MAX_STREAM_WRITES" ]; then
+            stream_error=too_many_chunks; return 1
+        fi
+        local prefix=""
+        local suffix=""
+        case "$stream_type" in
+            xml) prefix='<data>'; suffix='</data>'; content_type='application/xml; charset=utf-8' ;;
+            json) prefix='{"data":"'; suffix='"}'; content_type='application/json' ;;
+        esac
+        local padding=$((stream_bytes - ${#prefix} - ${#suffix}))
+        if [ "$padding" -lt 0 ]; then stream_error=body_too_small; return 1; fi
+        local filler="."
+        while [ "${#filler}" -lt "$padding" ]; do filler="$filler$filler"; done
+        body="$prefix${filler:0:padding}$suffix"
+        stream_duration_ms="$delay_ms"
+        if [ "$mode" = rate ]; then
+            stream_duration_ms=$(((stream_bytes * 1000 + rate_bytes_s - 1) / rate_bytes_s))
+        fi
+    }
+
     # socat executes this exported function in an explicit Bash child
     # shellcheck disable=SC2329 # "This function is never invoked. Check usage (or ignored if invoked indirectly)." -- invoked by socat EXEC in a Bash child
     _flaky_response() {
@@ -147,12 +232,13 @@ EOF
         local READ_TIMEOUT_SECONDS=10
         local READ_CHUNK_BYTES=4096
         local DROP_LENGTH=100000
-        local TRICKLE_CHUNKS=10
+        local MAX_RATE_BYTES_S=1048576
         local request_id="$$"
         local SECONDS=0
         local request
         local method
         local path
+        local query=""
         local version
         local mode="delay"
         local value=""
@@ -162,6 +248,12 @@ EOF
         local content_type="text/plain; charset=utf-8"
         local body=""
         local body_length=0
+        local stream_bytes=0
+        local stream_chunk=0
+        local stream_type=""
+        local stream_duration_ms=0
+        local stream_error=""
+        local rate_bytes_s=0
         local _number
 
         if ! IFS= read -r -n "$MAX_LINE_BYTES" -t "$READ_TIMEOUT_SECONDS" request; then
@@ -174,17 +266,17 @@ EOF
             status=400
             method=INVALID
         fi
-        path="${path%%\?*}"
+        case "$path" in *\?*) query="${path#*\?}"; path="${path%%\?*}" ;; esac
         while [ "$path" != "/" ] && [ "${path%/}" != "$path" ]; do path="${path%/}"; done
         if [ "$status" -eq 200 ]; then
             case "$path" in
                 /reset)
                     _info "event=close id=$request_id method=$method mode=reset response_bytes=0 elapsed_s=$SECONDS"
                     return 0 ;;
-                /delay/*|/drop/*|/trickle/*|/status/*)
+                /delay/*|/drop/*|/trickle/*|/rate/*|/status/*)
                     mode="${path#/}"; mode="${mode%%/*}"
                     value="${path#/*/}" ;;
-                /delay|/drop|/trickle|/status|/reset/*) status=400 ;;
+                /delay|/drop|/trickle|/rate|/status|/reset/*) status=400 ;;
                 *)
                     value="${path##*/}"
                     case "$value" in ''|*[!0-9]*) status=404 ;; esac ;;
@@ -197,11 +289,25 @@ EOF
                     else
                         status=400
                     fi
+                elif [ "$mode" = rate ]; then
+                    if _parse_number "$value" "$MAX_RATE_BYTES_S" && [ "$_number" -gt 0 ]; then
+                        rate_bytes_s="$_number"
+                    else
+                        status=400
+                    fi
                 elif _parse_number "$value" "$MAX_DELAY_MS"; then
                     delay_ms="$_number"
                 else
                     status=400
                 fi
+            fi
+        fi
+
+        if [ "$status" -eq 200 ] && { [ "$mode" = trickle ] || [ "$mode" = rate ]; }; then
+            if ! _configure_stream; then
+                _error "event=invalid_stream id=$request_id reason=$stream_error elapsed_s=$SECONDS"
+                status=400
+                content_type="text/plain; charset=utf-8"
             fi
         fi
 
@@ -273,6 +379,7 @@ EOF
         if [ "$status" -ne 200 ] || [ "$mode" = status ]; then
             mode=status
             delay_ms=0
+            content_type="text/plain; charset=utf-8"
             body="$status"$'\n'
             case "$status" in
                 204|205|304) body="" ;;
@@ -284,17 +391,17 @@ EOF
         elif [ "$mode" = drop ]; then
             content_type="text/xml; charset=utf-8"
             body='<?xml version="1.0"?><soapenv:Envelope><partial'
-        elif [ "$mode" = trickle ]; then
-            body=""
-        else
+        elif [ "$mode" != trickle ] && [ "$mode" != rate ]; then
             body="$value"$'\n'
         fi
         body_length="${#body}"
         case "$mode" in
             drop) body_length="$DROP_LENGTH" ;;
-            trickle) body_length="$TRICKLE_CHUNKS" ;;
         esac
         _info "event=request id=$request_id method=$method mode=$mode delay_ms=$delay_ms status=$status"
+        if [ "$mode" = trickle ] || [ "$mode" = rate ]; then
+            _info "event=stream id=$request_id bytes=$stream_bytes chunk_bytes=$stream_chunk type=$stream_type duration_ms=$stream_duration_ms rate_bytes_s=$rate_bytes_s"
+        fi
         if [ "$mode" = delay ] || [ "$mode" = drop ]; then
             if ! _sleep_ms "$delay_ms"; then
                 _error "event=sleep_failed id=$request_id delay_ms=$delay_ms elapsed_s=$SECONDS"
@@ -305,18 +412,19 @@ EOF
         _headers || return 0
         local sent_bytes=0
         if [ "$method" != HEAD ]; then
-            if [ "$mode" = trickle ]; then
-                local i=1
+            if [ "$mode" = trickle ] || [ "$mode" = rate ]; then
+                local next
                 local interval
-                while [ "$i" -le "$TRICKLE_CHUNKS" ]; do
-                    interval=$((delay_ms * i / TRICKLE_CHUNKS - delay_ms * (i - 1) / TRICKLE_CHUNKS))
-                    if ! _sleep_ms "$interval"; then
-                        _error "event=sleep_failed id=$request_id chunk=$i elapsed_s=$SECONDS"
+                while [ "$sent_bytes" -lt "$body_length" ]; do
+                    next=$((sent_bytes + stream_chunk))
+                    [ "$next" -le "$body_length" ] || next="$body_length"
+                    interval=$((stream_duration_ms * next / body_length - stream_duration_ms * sent_bytes / body_length))
+                    if [ "$interval" -gt 0 ] && ! _sleep_ms "$interval"; then
+                        _error "event=sleep_failed id=$request_id sent_bytes=$sent_bytes elapsed_s=$SECONDS"
                         return 0
                     fi
-                    printf '.' || return 0
-                    sent_bytes=$((sent_bytes + 1))
-                    i=$((i + 1))
+                    printf '%s' "${body:sent_bytes:next-sent_bytes}" || return 0
+                    sent_bytes="$next"
                 done
             else
                 printf '%s' "$body" || return 0
@@ -359,7 +467,7 @@ EOF
     done
     export LC_ALL=C
     export SCRIPT_NAME
-    export -f _error _info _parse_number _sleep_ms _headers _flaky_response
+    export -f _error _info _parse_number _sleep_ms _headers _configure_stream _flaky_response
     _info "Starting server at http://localhost:$port (all IPv4 interfaces)"
     # nofork attaches the Bash handler directly to the accepted socket
     if ! socat "TCP4-LISTEN:$port,fork,reuseaddr" "EXEC:/bin/bash -c _flaky_response,nofork"; then

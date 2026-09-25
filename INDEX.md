@@ -41,7 +41,7 @@ Each tool row's primary link opens the doc; the `script` link opens the raw scri
 | [`chrome-debug`](docs/chrome-debug.md) · [script](scripts/chrome-debug) | Launch a Chromium browser in remote-debugging mode for MCP/CDP attach; run-and-go auto-installs Chrome for Testing when given no browser, with an auto-picked port from your .mcp.json pool |
 | [`httpcode`](docs/httpcode.md) · [script](scripts/httpcode) | Quick HTTP status code lookup — standard codes plus Cloudflare, nginx, and IIS non-standard codes, all offline |
 | [`curl-timing`](docs/curl-timing.md) · [script](scripts/curl-timing) | Time HTTP requests and compare URLs head-to-head with IQR-aware outlier detection |
-| [`flaky-server`](docs/flaky-server.md) · [script](scripts/flaky-server) | HTTP origin with request-selected delays, partial responses, status codes, empty closes, and trickles |
+| [`flaky-server`](docs/flaky-server.md) · [script](scripts/flaky-server) | HTTP origin with delays, partial responses, errors, and streams with rate, size, and content controls |
 | [`slow-server`](docs/slow-server.md) · [script](scripts/slow-server) | Compatibility launcher for flaky-server; preserves numeric-path delay tests |
 
 ## DNS & networking
