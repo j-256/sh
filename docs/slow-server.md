@@ -2,80 +2,58 @@
 
 [View script](../scripts/slow-server)
 
-Test how your code handles slow responses -- without waiting for an actual slow server to come back online, or fighting with production timeouts. `slow-server` starts a local HTTP server that responds after whatever delay you ask for, letting you verify timeout logic, retry behavior, loading states, and health check thresholds.
-
-Built on `socat`, it's lightweight and easy to kill when you're done testing. You control the delay by hitting a URL with the millisecond value as the last path segment. Hit it with a non-numeric path and you get a 404, so you can test error handling too.
+Keep existing numeric-path delay tests working through [flaky-server](flaky-server.md), the unified HTTP origin for delays, partial responses, status errors, empty closes, and trickles. `slow-server` is a compatibility launcher with no separate HTTP implementation. Use `flaky-server` for new tests.
 
 ## Quick start
 
-```
-$ slow-server
-Starting server at http://localhost:8080
+```sh
+$ slow-server 9000
+[INF][flaky-server] Starting server at http://localhost:9000 (all IPv4 interfaces)
 
-# In another terminal:
-$ curl http://localhost:8080/2500
+# In another terminal
+$ curl http://localhost:9000/2500
 2500
 ```
 
-The server responds after 2.5 seconds (2500 milliseconds). It echoes the delay value in the response body.
+The reply arrives after approximately 2.5 seconds. Omitting the port still selects 8080. Numeric final segments such as `/service/2500` also work, and unknown non-numeric paths return 404.
 
 ## Common examples
 
-**Run on a different port:**
+**Run without installing:**
 
-```
-$ slow-server 3000
-Starting server at http://localhost:3000
-```
-
-**Test a timeout by requesting a delay longer than your client allows:**
-
-```
-$ curl --max-time 1 http://localhost:8080/3000
-curl: (28) Operation timed out after 1001 milliseconds with 0 bytes received
+```sh
+$ curl -fsS https://toolio.sh/slow-server | bash -s -- 9000
 ```
 
-Your timeout fired before the 3-second delay completed.
+The launcher uses a sibling `flaky-server` first, then an executable on PATH. If neither exists, it downloads `https://toolio.sh/flaky-server` with curl and runs the complete successful download. Install both scripts together or put `flaky-server` on PATH for offline startup. Help works offline.
 
-**Verify fast responses still work (0ms delay):**
+**Test a client timeout:**
 
-```
-$ curl http://localhost:8080/0
-0
-```
-
-**Trigger a 404 to test error handling:**
-
-```
-$ curl -i http://localhost:8080/notanumber
-HTTP/1.1 404 Not Found
+```sh
+$ curl --max-time 1 http://localhost:9000/3000
+curl: (28) Operation timed out ...
 ```
 
-**Test health checks with a known-good delay:**
+**Move a connection-close test to the unified command:**
 
-```
-$ curl http://localhost:8080/500
-500
-```
+```sh
+$ flaky-server 9000
 
-If your load balancer expects a response within 1 second, a 500ms delay verifies it stays healthy.
-
-## Server behavior
-
-The server runs until you kill it (Ctrl-C or `kill`). Each request is logged to stderr showing the method, path, and delay:
-
-```
-GET /2500 (2500)
-Done: GET /2500 (2500)
+# In another terminal
+$ curl -i http://localhost:9000/drop/2000
 ```
 
-Non-numeric paths log `[ignored]` and return 404 immediately:
+The behavior is selected by the request URL. There is no `drop` startup subcommand.
 
-```
-GET /notanumber (notanumber) [ignored]
-```
+## Compatibility
 
-The server uses `socat` with `fork` to handle concurrent requests -- each request gets its own process, so multiple clients can test different delays at the same time without blocking each other.
+Durations are decimal integers from 0 through 2147483647 milliseconds. Leading zeroes are decimal. Fractional-second conversion preserves milliseconds, including values below 100. Query strings and trailing slashes do not change a legacy delay. Explicit behavior paths take precedence over the legacy numeric-segment rule; invalid values return 400.
+
+See [flaky-server](flaky-server.md) or run `flaky-server -h` for the complete request interface, including error fixtures and stream controls.
+
+The server speaks plain HTTP on all IPv4 interfaces. Use a tunnel for HTTPS and verify its actual buffering and error handling. It tests transport failures, not valid SOAP replies. POST bodies with `Content-Length` and `Expect: 100-continue` are accepted; chunked requests return 501. HEAD and statuses 204, 205, and 304 have no body.
+
+Request bodies are limited to 1 MiB, request/header lines to 8192 bytes, and headers to 100 lines. Reads have a ten-second timeout. Invalid framing, incomplete reads, and exceeded read limits close the connection with a diagnostic. Startup and request diagnostics go to stderr; stdout stays clean. Stop with Ctrl-C; active connections can finish after the listener stops. See [flaky-server](flaky-server.md) for worked examples and request diagnostics.
 
 ---
 
@@ -85,18 +63,20 @@ The server uses `socat` with `fork` to handle concurrent requests -- each reques
 
 | Flag | Description |
 |---|---|
-| `port` | Port to listen on (default: 8080). First positional argument. |
-| `-h, --help` | Display help message |
+| `port` | Optional decimal TCP port from 1 through 65535; default 8080 |
+| `-h, --help` | Display help without starting or downloading a server |
+| `--` | End option parsing |
 
 ### Exit codes
 
 | Code | Meaning |
 |---|---|
-| 0 | Clean shutdown (e.g., via Ctrl-C) |
-| 3 | Dependency error (socat missing) |
-| * | socat exit code on other failures |
+| 0 | Help or clean listener exit |
+| 1 | Download, listener, or runtime failure |
+| 2 | Invalid arguments |
+| 3 | Missing dependency |
 
 ### Dependencies
 
-- **socat** -- used to run the HTTP server. Install via `brew install socat` on macOS or your package manager.
-- **sleep** -- must support fractional seconds (standard on macOS and modern Linux).
+- `flaky-server` beside the launcher or on PATH, or `curl` and network access to download it
+- `socat` and `sleep` with fractional-second support, required by `flaky-server`

@@ -1,24 +1,24 @@
 #!/bin/bash
-# slow-server - start a web server that responds after a configurable delay
+# slow-server - compatibility launcher for flaky-server's HTTP delay tests
 #
 # Usage:
 #   slow-server [port]
 #   slow-server -h
 #
 # Options:
-#   port         Port to listen on (default: 8080)
 #   -h, --help   Show help message
 #
-# Starts a socat-based HTTP server where the last path segment of each request
-# is the delay in milliseconds. Requests without a numeric path return 404
-# e.g. `curl http://localhost:8080/2500` responds after ~2.5 seconds
+# Dependencies:
+#   flaky-server (sibling or PATH), or curl to fetch it; socat, fractional sleep
 
 _slow_server() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="slow-server" ;; esac
+    local MAX_PORT=65535
+    local MAX_DECIMAL_DIGITS=10
 
-    _error() { echo "[ERR][$SCRIPT_NAME] $*" >&2; }
+    _error() { printf '[ERR][%s] %s\n' "$SCRIPT_NAME" "$*" >&2; }
 
     _show_help() {
         local s=""
@@ -29,82 +29,120 @@ _slow_server() (
         fi
         cat <<EOF
 NAME
-  $SCRIPT_NAME - start a web server that responds after a configurable delay
+  $SCRIPT_NAME - compatibility launcher for flaky-server's HTTP delay tests
 SYNOPSIS
   $SCRIPT_NAME [${s}port${r}]
   $SCRIPT_NAME -h
 DESCRIPTION
-  Starts a socat-based HTTP server on the given port (default 8080).
-  The last path segment of each request is the delay in milliseconds.
-  Requests without a numeric path return 404.
-EXAMPLES
-  $SCRIPT_NAME 3000
-  curl http://localhost:3000/2500   # responds after ~2.5 seconds
+  Starts flaky-server with the same port (default 8080). Requests to /<ms> or any otherwise unrecognized path ending in a number return 200 after that many milliseconds, echoing the value and a newline. Non-numeric unknown paths return 404.
+  Uses a sibling flaky-server first, then an executable on PATH, otherwise fetches https://toolio.sh/flaky-server with curl. Help is available offline. Install flaky-server beside this file or on PATH for offline server startup.
+ARGUMENTS
+  ${s}port${r}   Decimal TCP port, 1-65535 (default: 8080)
 OPTIONS
-  ${s}port${r}   Port to listen on (default: 8080)
   -h, --help   Show this help message
-EXIT STATUS
-  0  Success (server exited cleanly)
-  3  Dependency error (socat missing)
-  *  socat exit code on other failures
+EXAMPLES
+  $SCRIPT_NAME 9000
+  curl http://localhost:9000/2500
+  curl -fsS https://toolio.sh/$SCRIPT_NAME | bash -s -- 9000
+  flaky-server 9000
+  curl -i http://localhost:9000/drop/2000
+  curl -fsS https://toolio.sh/flaky-server | bash -s -- -h
+COMPATIBILITY
+  Numeric delay values are decimal milliseconds, 0-2147483647. Leading zeroes are decimal; query strings and trailing slashes do not change a legacy delay.
+  Explicit flaky-server behavior paths take precedence over the legacy numeric-segment rule. Run flaky-server -h for the unified tool's complete interface.
 DEPENDENCIES
-  socat, sleep (must support fractional seconds)
+  socat, sleep (fractional seconds), via flaky-server
+  curl (only when flaky-server is unavailable locally)
+EXIT STATUS
+  0  Help or clean listener exit
+  1  Download, listener or runtime failure
+  2  Invalid arguments
+  3  Missing dependency
+CAVEATS
+  Plain HTTP on all IPv4 interfaces. Use the tunnel for HTTPS and verify its buffering and error behavior. This tests HTTP transport, not valid SOAP replies. Use flaky-server for new tests.
+  POST accepts Content-Length bodies up to 1 MiB and Expect: 100-continue; chunked requests return 501. HEAD and status 204/205/304 have no body. Reads have a 10-second timeout; request/header lines are limited to 8192 bytes and headers to 100 lines. Invalid framing closes the connection with a diagnostic.
+  Startup and request diagnostics go to stderr. Stop with Ctrl-C; active connections can finish after the listener stops.
 EOF
     }
 
-    # Function invoked by socat below on each request. Exported for socat's
-    # SYSTEM: subshell to see it
-    # shellcheck disable=SC2317,SC2329 # "Command appears to be unreachable. Check usage (or ignore if invoked indirectly)." / "This function is never invoked. Check usage (or ignored if invoked indirectly)." -- invoked indirectly via socat SYSTEM:_slow_response
-    _slow_response() {
-        _is_number() {
-            case "$1" in
-                ''|*[!0-9]*)
-                    return 1 ;; # not a number
-                *)
-                    return 0 ;; # is a number
+    _expand_short_opts() {
+        # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
+        # $2..$N = "$@"
+        # Populates _EXPANDED; caller does: set -- "${_EXPANDED[@]}"; unset _EXPANDED
+        local value_opts="$1"; shift
+        _EXPANDED=()
+        local passthru=""
+        local arg
+        local rest
+        local c
+        for arg in "$@"; do
+            if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
+            case "$arg" in
+                --)       passthru=1; _EXPANDED+=("$arg") ;;
+                --*|-|"") _EXPANDED+=("$arg") ;;
+                -[a-zA-Z]?*)
+                    rest="${arg#-}"
+                    while [ -n "$rest" ]; do
+                        c="${rest%"${rest#?}"}"; rest="${rest#?}"
+                        _EXPANDED+=("-$c")
+                        case "$value_opts" in *"$c"*)
+                            [ -n "$rest" ] && _EXPANDED+=("$rest")
+                            rest="" ;;
+                        esac
+                    done ;;
+                *)        _EXPANDED+=("$arg") ;;
             esac
-        }
-        local method
-        local path
-        local _version
-        read -r method path _version
-        local last; last="$(basename "$path")"
-        printf %s "$method $path ($last)" >&2
-        # Ignore other paths, return not found
-        if ! _is_number "$last"; then
-            echo " [ignored]" >&2 # append to previous line
-            printf 'HTTP/1.1 404 Not Found\r\n\r\n'
-            return 0
-        else
-            local delay_ms="$last"
-            printf '\n' >&2 # move to next line
-        fi
-        local seconds="$((delay_ms / 1000)).$((delay_ms % 1000))"
-        sleep "$seconds"
-        printf 'HTTP/1.1 200 OK\r\n\r\n%s\n' "$last"
-        echo "Done: $method $path ($delay_ms)" >&2
-        unset -f _is_number
+        done
     }
 
-    case "$1" in
-        -h|--help) _show_help; return 0 ;;
+    local args=()
+    _expand_short_opts "" "$@"
+    set -- "${_EXPANDED[@]}"; unset _EXPANDED
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -h|--help) _show_help; return 0 ;;
+            --) shift; while [ $# -gt 0 ]; do args+=("$1"); shift; done ;;
+            -*) _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+            *) args+=("$1"); shift ;;
+        esac
+    done
+    if [ "${#args[@]}" -gt 1 ]; then
+        _error "Expected at most one port. Run \`$SCRIPT_NAME -h\` for usage"
+        return 2
+    fi
+    if [ "${#args[@]}" -eq 1 ]; then
+        local port="${args[0]}"
+        port="${port#"${port%%[!0]*}"}"
+        port="${port:-0}"
+        if ! [[ "${args[0]}" =~ ^[0-9]+$ ]] || [ "${#port}" -gt "$MAX_DECIMAL_DIGITS" ] || [ "$((10#$port))" -lt 1 ] || [ "$((10#$port))" -gt "$MAX_PORT" ]; then
+            _error "Invalid port '${args[0]}' (valid: 1-$MAX_PORT). Run \`$SCRIPT_NAME -h\` for usage"
+            return 2
+        fi
+    fi
+    local implementation=""
+    local source_path="${BASH_SOURCE[0]}"
+    case "$source_path" in
+        /dev/*|/proc/*|""|bash|sh|zsh|dash) ;;
+        *)
+            implementation="$(dirname "$source_path")/flaky-server"
+            [ -f "$implementation" ] || implementation="" ;;
     esac
-
-    # Function arguments
-    local port="${1:-8080}"
-
-    # Check for socat dependency
-    if ! command -v socat >/dev/null 2>&1; then
-        _error "socat is required"
+    if [ -z "$implementation" ]; then implementation="$(type -P flaky-server)"; fi
+    if [ -n "$implementation" ]; then
+        /bin/bash "$implementation" -- "${args[@]}"
+        return $?
+    fi
+    if ! command -v curl >/dev/null 2>&1; then
+        _error "curl is required"
         return 3
     fi
-
-    export -f _slow_response # exported for socat
-
-    # Start simple server
-    echo "Starting server at http://localhost:$port"
-    socat "TCP-LISTEN:$port,fork,reuseaddr" "SYSTEM:_slow_response"
-    # _slow_response and any exports die with the wrapper subshell on return
+    local payload
+    if ! payload="$(curl -fsS https://toolio.sh/flaky-server)" || [ -z "$payload" ]; then
+        _error "Failed to download flaky-server"
+        return 1
+    fi
+    # Run only a complete successful download; preserve arguments without eval
+    /bin/bash -c "$payload" flaky-server -- "${args[@]}"
 )
 
 _slow_server "$@"
