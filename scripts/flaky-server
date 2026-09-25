@@ -1,0 +1,377 @@
+#!/bin/bash
+# flaky-server - run an HTTP origin with request-selected delays and failures
+#
+# Usage:
+#   flaky-server [port]
+#   flaky-server -h
+#
+# Options:
+#   -h, --help   Show help message
+#
+# Paths:
+#   /delay/<ms>, /drop/<ms>, /status/<code>, /reset, /trickle/<ms>, /<ms>
+#
+# Dependencies:
+#   socat, sleep with fractional-second support
+
+_flaky_server() (
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="flaky-server" ;; esac
+    local DEFAULT_PORT=8080
+    local MAX_PORT=65535
+
+    _error() { printf '[ERR][%s] %s\n' "$SCRIPT_NAME" "$*" >&2; }
+    _info() { printf '[INF][%s] %s\n' "$SCRIPT_NAME" "$*" >&2; }
+
+    _show_help() {
+        local s=""
+        local r=""
+        if { [ -t 1 ] || [ -n "${CLICOLOR_FORCE:-}" ]; } && [ -z "${NO_COLOR:-}" ]; then
+            s=$'\033[4m'
+            r=$'\033[24m'
+        fi
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - run an HTTP origin with request-selected delays and failures
+SYNOPSIS
+  $SCRIPT_NAME [${s}port${r}]
+  $SCRIPT_NAME -h
+DESCRIPTION
+  Starts a concurrent socat HTTP/1.x server on all IPv4 interfaces. Each request path selects its behavior, so one port and tunnel hostname can serve every test. Timing starts after the request has been read.
+ARGUMENTS
+  ${s}port${r}   Decimal TCP port, 1-$MAX_PORT (default: $DEFAULT_PORT)
+OPTIONS
+  -h, --help   Show this help message
+PATHS
+  /delay/<ms>     Wait, then return 200 with the millisecond value and a newline
+  /drop/<ms>      Wait, send XML with Content-Length: 100000, then close early
+  /status/<code>  Immediately return a final HTTP status, 200-599
+  /reset         Close after the request line without sending a response
+  /trickle/<ms>   Send headers, then ten body bytes spread over the duration
+  /<ms>          Legacy delay; other paths ending in a number also work
+  ms             Decimal integer, 0-2147483647; leading zeroes are decimal
+  Queries and trailing slashes are ignored. Invalid behavior values return 400; unknown paths return 404. Explicit behavior names take precedence over legacy numeric paths.
+EXAMPLES
+  $SCRIPT_NAME 9000
+  curl -i http://localhost:9000/delay/2500
+  curl -i http://localhost:9000/drop/2000
+  curl -i http://localhost:9000/status/503
+  curl -i http://localhost:9000/reset
+  curl -Ni http://localhost:9000/trickle/5000
+  curl http://localhost:9000/2500
+  curl -fsS https://toolio.sh/$SCRIPT_NAME | bash -s -- 9000
+  curl -H 'Content-Type: text/xml' --data '<Envelope/>' http://localhost:9000/drop/2000
+DEPENDENCIES
+  socat, sleep (fractional seconds)
+EXIT STATUS
+  0  Help or clean listener exit
+  1  Listener or runtime failure
+  2  Invalid arguments
+  3  Missing dependency
+CAVEATS
+  Plain HTTP only; terminate HTTPS at your tunnel. A proxy may buffer trickles or replace failures, so verify the observed result through the actual tunnel. /reset closes without a response; a TCP RST is not guaranteed.
+  This tests HTTP transport, not valid SOAP replies. POST bodies with Content-Length and Expect: 100-continue are accepted and discarded. Chunked request bodies return 501. HEAD sends headers only, so it cannot demonstrate a truncated or trickled body. Status 204, 205 and 304 have no body.
+  Request lines and headers have an 8192-byte line limit, headers are limited to 100 lines, and request bodies to 1 MiB. Each request read has a 10-second timeout. Failed reads close the connection and log a diagnostic.
+  Request logs go to stderr with a request ID, behavior, configured delay, result and elapsed seconds. Response headers include X-Request-ID. Request bodies, headers and query strings are not logged.
+  Stop with Ctrl-C. Deliberate request failures do not stop the listener; active connections can finish after the listener stops.
+EOF
+    }
+
+    _expand_short_opts() {
+        # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
+        # $2..$N = "$@"
+        # Populates _EXPANDED; caller does: set -- "${_EXPANDED[@]}"; unset _EXPANDED
+        local value_opts="$1"; shift
+        _EXPANDED=()
+        local passthru=""
+        local arg
+        local rest
+        local c
+        for arg in "$@"; do
+            if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
+            case "$arg" in
+                --)       passthru=1; _EXPANDED+=("$arg") ;;
+                --*|-|"") _EXPANDED+=("$arg") ;;
+                -[a-zA-Z]?*)
+                    rest="${arg#-}"
+                    while [ -n "$rest" ]; do
+                        c="${rest%"${rest#?}"}"; rest="${rest#?}"
+                        _EXPANDED+=("-$c")
+                        case "$value_opts" in *"$c"*)
+                            [ -n "$rest" ] && _EXPANDED+=("$rest")
+                            rest="" ;;
+                        esac
+                    done ;;
+                *)        _EXPANDED+=("$arg") ;;
+            esac
+        done
+    }
+
+    _parse_number() {
+        local value="$1"
+        local maximum="$2"
+        local MAX_DECIMAL_DIGITS=10
+        case "$value" in ''|*[!0-9]*) return 1 ;; esac
+        value="${value#"${value%%[!0]*}"}"
+        value="${value:-0}"
+        [ "${#value}" -le "$MAX_DECIMAL_DIGITS" ] || return 1
+        _number=$((10#$value))
+        [ "$_number" -le "$maximum" ]
+    }
+
+    # shellcheck disable=SC2329 # "This function is never invoked. Check usage (or ignored if invoked indirectly)." -- called by the exported socat handler
+    _sleep_ms() {
+        local seconds
+        printf -v seconds '%d.%03d' "$(($1 / 1000))" "$(($1 % 1000))"
+        sleep "$seconds"
+    }
+
+    # shellcheck disable=SC2329 # "This function is never invoked. Check usage (or ignored if invoked indirectly)." -- called by the exported socat handler
+    _headers() {
+        printf 'HTTP/1.1 %s %s\r\nContent-Type: %s\r\nConnection: close\r\nCache-Control: no-store\r\nX-Request-ID: %s\r\n' "$status" "$reason" "$content_type" "$request_id"
+        case "$status" in
+            204|304) ;;
+            *) printf 'Content-Length: %s\r\n' "$body_length" ;;
+        esac
+        printf '\r\n'
+    }
+
+    # socat executes this exported function in an explicit Bash child
+    # shellcheck disable=SC2329 # "This function is never invoked. Check usage (or ignored if invoked indirectly)." -- invoked by socat EXEC in a Bash child
+    _flaky_response() {
+        local MAX_DELAY_MS=2147483647
+        local MAX_LINE_BYTES=8192
+        local MAX_HEADERS=100
+        local MAX_BODY_BYTES=1048576
+        local READ_TIMEOUT_SECONDS=10
+        local READ_CHUNK_BYTES=4096
+        local DROP_LENGTH=100000
+        local TRICKLE_CHUNKS=10
+        local request_id="$$"
+        local SECONDS=0
+        local request
+        local method
+        local path
+        local version
+        local mode="delay"
+        local value=""
+        local delay_ms=0
+        local status=200
+        local reason="OK"
+        local content_type="text/plain; charset=utf-8"
+        local body=""
+        local body_length=0
+        local _number
+
+        if ! IFS= read -r -n "$MAX_LINE_BYTES" -t "$READ_TIMEOUT_SECONDS" request; then
+            _error "event=read_failed id=$request_id phase=request_line elapsed_s=$SECONDS"
+            return 0
+        fi
+        request="${request%$'\r'}"
+        IFS=' ' read -r method path version <<< "$request"
+        if [ "${#request}" -ge "$MAX_LINE_BYTES" ] || ! [[ "$method" =~ ^[A-Z]+$ ]] || ! [[ "$version" =~ ^HTTP/1\.[01]$ ]] || [ "${path#/}" = "$path" ]; then
+            status=400
+            method=INVALID
+        fi
+        path="${path%%\?*}"
+        while [ "$path" != "/" ] && [ "${path%/}" != "$path" ]; do path="${path%/}"; done
+        if [ "$status" -eq 200 ]; then
+            case "$path" in
+                /reset)
+                    _info "event=close id=$request_id method=$method mode=reset response_bytes=0 elapsed_s=$SECONDS"
+                    return 0 ;;
+                /delay/*|/drop/*|/trickle/*|/status/*)
+                    mode="${path#/}"; mode="${mode%%/*}"
+                    value="${path#/*/}" ;;
+                /delay|/drop|/trickle|/status|/reset/*) status=400 ;;
+                *)
+                    value="${path##*/}"
+                    case "$value" in ''|*[!0-9]*) status=404 ;; esac ;;
+            esac
+            if [ "$status" -eq 200 ]; then
+                if [ "$mode" = status ]; then
+                    if _parse_number "$value" 599 && [ "$_number" -ge 200 ]; then
+                        status="$_number"
+                        reason="Test status"
+                    else
+                        status=400
+                    fi
+                elif _parse_number "$value" "$MAX_DELAY_MS"; then
+                    delay_ms="$_number"
+                else
+                    status=400
+                fi
+            fi
+        fi
+
+        local line
+        local header_name
+        local header_value
+        local header_count=0
+        local content_length=0
+        local length_seen=""
+        local expect_continue=""
+        local reject_body=""
+        local headers_done=""
+        while IFS= read -r -n "$MAX_LINE_BYTES" -t "$READ_TIMEOUT_SECONDS" line; do
+            if [ "$line" = $'\r' ] || [ -z "$line" ]; then headers_done=1; break; fi
+            header_count=$((header_count + 1))
+            if [ "${#line}" -ge "$MAX_LINE_BYTES" ] || [ "$header_count" -gt "$MAX_HEADERS" ]; then
+                _error "event=limit id=$request_id phase=headers elapsed_s=$SECONDS"
+                return 0
+            fi
+            line="${line%$'\r'}"
+            header_name="$(printf '%s' "${line%%:*}" | tr '[:upper:]' '[:lower:]')"
+            header_value="${line#*:}"
+            header_value="${header_value#"${header_value%%[![:space:]]*}"}"
+            header_value="${header_value%"${header_value##*[![:space:]]}"}"
+            case "$header_name" in
+                content-length)
+                    if [ -n "$length_seen" ] || ! _parse_number "$header_value" "$MAX_BODY_BYTES"; then
+                        _error "event=invalid_length id=$request_id max_bytes=$MAX_BODY_BYTES elapsed_s=$SECONDS"
+                        return 0
+                    fi
+                    content_length="$_number"; length_seen=1 ;;
+                transfer-encoding) status=501; reject_body=1 ;;
+                expect)
+                    case "$header_value" in
+                        100-continue) expect_continue=1 ;;
+                        *) status=417; reject_body=1 ;;
+                    esac ;;
+            esac
+        done
+        if [ -z "$headers_done" ]; then
+            _error "event=read_failed id=$request_id phase=headers elapsed_s=$SECONDS"
+            return 0
+        fi
+
+        # Discard framed uploads before closing so normal replies do not reset
+        # a SOAP client's connection because unread request bytes remain
+        local remaining="$content_length"
+        local chunk_size
+        local chunk
+        local consumed
+        if [ -z "$reject_body" ]; then
+            if [ -n "$expect_continue" ] && [ "$remaining" -gt 0 ]; then
+                printf 'HTTP/1.1 100 Continue\r\n\r\n'
+            fi
+            while [ "$remaining" -gt 0 ]; do
+                chunk_size="$remaining"
+                [ "$chunk_size" -le "$READ_CHUNK_BYTES" ] || chunk_size="$READ_CHUNK_BYTES"
+                if ! IFS= read -r -d '' -n "$chunk_size" -t "$READ_TIMEOUT_SECONDS" chunk; then
+                    _error "event=read_failed id=$request_id phase=body remaining_bytes=$remaining elapsed_s=$SECONDS"
+                    return 0
+                fi
+                consumed="${#chunk}"
+                # read stops at NUL even with -n; count the discarded delimiter
+                [ "$consumed" -eq "$chunk_size" ] || consumed=$((consumed + 1))
+                remaining=$((remaining - consumed))
+            done
+        fi
+
+        if [ "$status" -ne 200 ] || [ "$mode" = status ]; then
+            mode=status
+            delay_ms=0
+            body="$status"$'\n'
+            case "$status" in
+                204|205|304) body="" ;;
+                400) reason="Bad Request" ;;
+                404) reason="Not Found" ;;
+                417) reason="Expectation Failed" ;;
+                501) reason="Not Implemented" ;;
+            esac
+        elif [ "$mode" = drop ]; then
+            content_type="text/xml; charset=utf-8"
+            body='<?xml version="1.0"?><soapenv:Envelope><partial'
+        elif [ "$mode" = trickle ]; then
+            body=""
+        else
+            body="$value"$'\n'
+        fi
+        body_length="${#body}"
+        case "$mode" in
+            drop) body_length="$DROP_LENGTH" ;;
+            trickle) body_length="$TRICKLE_CHUNKS" ;;
+        esac
+        _info "event=request id=$request_id method=$method mode=$mode delay_ms=$delay_ms status=$status"
+        if [ "$mode" = delay ] || [ "$mode" = drop ]; then
+            if ! _sleep_ms "$delay_ms"; then
+                _error "event=sleep_failed id=$request_id delay_ms=$delay_ms elapsed_s=$SECONDS"
+                return 0
+            fi
+        fi
+        trap '_error "event=write_failed id=$request_id mode=$mode elapsed_s=$SECONDS"; exit 0' PIPE
+        _headers || return 0
+        local sent_bytes=0
+        if [ "$method" != HEAD ]; then
+            if [ "$mode" = trickle ]; then
+                local i=1
+                local interval
+                while [ "$i" -le "$TRICKLE_CHUNKS" ]; do
+                    interval=$((delay_ms * i / TRICKLE_CHUNKS - delay_ms * (i - 1) / TRICKLE_CHUNKS))
+                    if ! _sleep_ms "$interval"; then
+                        _error "event=sleep_failed id=$request_id chunk=$i elapsed_s=$SECONDS"
+                        return 0
+                    fi
+                    printf '.' || return 0
+                    sent_bytes=$((sent_bytes + 1))
+                    i=$((i + 1))
+                done
+            else
+                printf '%s' "$body" || return 0
+                sent_bytes="${#body}"
+            fi
+        fi
+        _info "event=complete id=$request_id mode=$mode sent_bytes=$sent_bytes advertised_bytes=$body_length elapsed_s=$SECONDS"
+    }
+
+    local args=()
+    _expand_short_opts "" "$@"
+    set -- "${_EXPANDED[@]}"; unset _EXPANDED
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -h|--help) _show_help; return 0 ;;
+            --) shift; while [ $# -gt 0 ]; do args+=("$1"); shift; done ;;
+            -*) _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+            *) args+=("$1"); shift ;;
+        esac
+    done
+    if [ "${#args[@]}" -gt 1 ]; then
+        _error "Expected at most one port. Run \`$SCRIPT_NAME -h\` for usage"
+        return 2
+    fi
+    local port="$DEFAULT_PORT"
+    local _number
+    if [ "${#args[@]}" -eq 1 ]; then
+        if ! _parse_number "${args[0]}" "$MAX_PORT" || [ "$_number" -eq 0 ]; then
+            _error "Invalid port '${args[0]}' (valid: 1-$MAX_PORT). Run \`$SCRIPT_NAME -h\` for usage"
+            return 2
+        fi
+        port="$_number"
+    fi
+    local dependency
+    for dependency in socat sleep; do
+        if ! command -v "$dependency" >/dev/null 2>&1; then
+            _error "$dependency is required"
+            return 3
+        fi
+    done
+    export LC_ALL=C
+    export SCRIPT_NAME
+    export -f _error _info _parse_number _sleep_ms _headers _flaky_response
+    _info "Starting server at http://localhost:$port (all IPv4 interfaces)"
+    # nofork attaches the Bash handler directly to the accepted socket
+    if ! socat "TCP4-LISTEN:$port,fork,reuseaddr" "EXEC:/bin/bash -c _flaky_response,nofork"; then
+        _error "Failed to run listener on port $port"
+        return 1
+    fi
+)
+
+_flaky_server "$@"
+__flaky_server_rc=$?
+unset -f _flaky_server
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __flaky_server_rc; return $__flaky_server_rc"
+fi
+eval "unset __flaky_server_rc; exit $__flaky_server_rc"
