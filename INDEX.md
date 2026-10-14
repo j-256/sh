@@ -10,7 +10,7 @@ Each tool row's primary link opens the doc; the `script` link opens the raw scri
 
 | Guide | Description |
 |------|-------------|
-| [Fast shell startup and hot paths](docs/shell-hot-paths.md) | Decide which shell work must block readiness, run asynchronously, load lazily, or leave startup entirely |
+| [Fast shell startup and hot paths](guides/shell-hot-paths.md) | Decide which shell work must block readiness, run asynchronously, load lazily, or leave startup entirely |
 
 ## Shell scripting
 

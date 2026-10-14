@@ -14,10 +14,12 @@
 # these files are named meta-* rather than masquerading as tests for scripts
 # called "coverage", "cleanup-on-source", or "curl-pipe".
 #
-# Also checks the script<->INDEX.md bijection in both directions, so the
-# toolio.sh catalog can't drift from the repo:
-#   3. Every bash script has an INDEX.md entry (no script ships undocumented)
-#   4. Every INDEX.md entry has a script in the repo (no stale catalog rows)
+# Also checks the script<->doc and script<->INDEX.md pairings in both directions:
+#   3. Every script has docs/<name>.md and every direct doc has a script
+#   4. Every script has an INDEX.md row linking both script and doc
+#   5. Every INDEX.md script entry has a script in the repo
+# render-md is a bundled Node script without a per-script shell test, but it
+# still needs a doc and catalog entry
 #
 # Also checks the executable-bit convention: test files are execute-only and
 # carry +x; test-runner.sh (the entry point) is +x; test-helpers.sh (sourced,
@@ -61,13 +63,31 @@ test_every_test_has_a_script() {
     done
 }
 
+test_every_script_has_a_doc() {
+    local script
+    for script in "$FLEET_DIR"/*; do
+        [ -f "$script" ] || continue
+        local name; name="$(basename "$script")"
+        assert_file_exists "$name: has a doc" "$REPO_DIR/docs/$name.md"
+    done
+}
+
+test_every_doc_has_a_script() {
+    local doc
+    for doc in "$REPO_DIR"/docs/*.md; do
+        [ -f "$doc" ] || continue
+        local name; name="$(basename "$doc" .md)"
+        if [ -f "$FLEET_DIR/$name" ]; then
+            _ok "$name.md: has a script"
+        else
+            _fail "$name.md: no matching script ($name) -- move standalone guides outside docs/"
+        fi
+    done
+}
+
 test_every_script_is_in_index() {
-    # Walk every bash script; each must be catalogued in INDEX.md. Detection
-    # keys on the raw-script link, whose target is repo-relative (`](scripts/tsd)`)
-    # so the link resolves when INDEX.md is browsed on GitHub -- the proxy flattens
-    # it to the public `/tsd` when rendering. The trailing `)` anchors the match so
-    # `](scripts/s)` can't match `](scripts/stats)`, and the leading `](` with the
-    # fleet prefix keeps it from matching the doc link `](docs/<name>.md...)`
+    # Walk every script and require a catalog row linking its script and doc
+    # The exact link targets avoid prefix collisions such as s and stats
     local index="$REPO_DIR/INDEX.md"
     if [ ! -f "$index" ]; then
         _fail "INDEX.md: not found at $index"
@@ -76,12 +96,12 @@ test_every_script_is_in_index() {
     local prefix; prefix="$(_fleet_link_prefix "$REPO_DIR")"
     local script
     for script in "$FLEET_DIR"/*; do
-        _is_bash_script "$script" || continue
+        [ -f "$script" ] || continue
         local name; name="$(basename "$script")"
-        if grep -qF "]($prefix$name)" "$index"; then
-            _ok "$name: in INDEX.md"
+        if grep -F "]($prefix$name)" "$index" | grep -qF "](docs/$name.md)"; then
+            _ok "$name: script and doc in INDEX.md"
         else
-            _fail "$name: missing from INDEX.md -- add a catalog row linking [script]($prefix$name)"
+            _fail "$name: missing INDEX.md row linking docs/$name.md and $prefix$name"
         fi
     done
 }

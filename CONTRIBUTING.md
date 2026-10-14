@@ -16,13 +16,15 @@ There are no runtime dependencies – the scripts target Bash 3.2 and stock POSI
 
 ## Conventions
 
-Every script is paired with a doc and a test, and follows a shared set of standards. Read the relevant file before adding or changing one:
+Every script is paired with a doc and catalog entry. Every Bash script also has a test. Read the relevant file before adding or changing one:
 
 - **Script standards** – [`CONVENTIONS.md`](CONVENTIONS.md): header shape, `$SCRIPT_NAME`, `--help`, exit codes, error messages, argument parsing, the source/execute wrapper, and the commit style.
 - **Docs** – [`DOCS.md`](DOCS.md): how to write a `<script>.md` doc.
 - **Tests** – [`TESTING.md`](TESTING.md): how to write a `<script>.test.sh`, plus the cross-cutting [meta-tests](TESTING.md#meta-tests) and the [pre-commit hook](TESTING.md#pre-commit-hook).
 
-A new script needs all four to land together: the script at `scripts/<name>`, its `docs/<name>.md`, its `test/<name>.test.sh`, and an entry in [`INDEX.md`](INDEX.md). The `meta-coverage` test enforces that this set stays complete.
+A new Bash script needs all four to land together: the script at `scripts/<name>`, its `docs/<name>.md`, its `test/<name>.test.sh`, and an entry in [`INDEX.md`](INDEX.md) linking both script and doc. The bundled Node script `render-md` is the per-script test exception. The `meta-coverage` test enforces these pairings and keeps standalone guides out of `docs/`.
+
+Standalone shell guidance belongs in `guides/<name>.md` and the Guides section of [`INDEX.md`](INDEX.md). See [DOCS.md](DOCS.md#standalone-guides) for its naming and public URL.
 
 Links in tracked markdown point at real repo paths (`scripts/tsd`, `docs/tsd.md`) so they resolve when browsed on GitHub. The site rewrites them to the canonical public URLs when rendering – `https://toolio.sh/tsd` for a script, `https://toolio.sh/tsd.md.html` for a doc – so don't hand-write those public forms into a relative link.
 

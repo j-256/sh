@@ -8,7 +8,7 @@ The doc is an elaboration layer, not a prerequisite. A reader must be able to us
 
 ## Standalone guides
 
-Cross-cutting shell guidance that does not document one script may also live in `docs/`. Give it a lowercase hyphenated filename, list it in the Guides section of [INDEX.md](INDEX.md), and link it from [README.md](README.md) when it is a primary repository resource. A guide at `docs/topic.md` is available as raw Markdown at `https://toolio.sh/topic.md` and rendered HTML at `https://toolio.sh/topic.md.html`.
+Cross-cutting shell guidance that does not document one script belongs in `guides/`. Give it a lowercase hyphenated filename, list it in the Guides section of [INDEX.md](INDEX.md), and link it from [README.md](README.md) when it is a primary repository resource. A guide at `guides/topic.md` renders at `https://toolio.sh/guides/topic`.
 
 Standalone guides do not need a matching script or test and must not add a fake `View script` link. The Toolio renderer uses that link to decide whether a page should show the script installation widget. The script-doc structure below is optional for a standalone guide, but the same tone, self-contained examples, and copy-pasteable shell apply.
 
