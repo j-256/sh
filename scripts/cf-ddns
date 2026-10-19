@@ -2,18 +2,19 @@
 # cf-ddns - update Cloudflare DNS to this machine's outbound IP
 #
 # Usage:
-#   cf-ddns <api_token> <domain>
+#   cf-ddns <api_token> <hostname>
 #   cf-ddns -h
 #
 # Options:
 #   -h, --help   Show help message
 #
 # Updates Cloudflare DNS to use the current machine's outbound IP address;
-# deletes all existing A records for the domain and creates a new one
+# deletes existing A records for the hostname and creates a new one
 # Run periodically from host to achieve basic Dynamic DNS capabilities
 # Required API token permissions: Zone.Zone, Zone.DNS
 
 _cf_ddns() (
+    set -o pipefail
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="cf-ddns" ;; esac
@@ -34,12 +35,13 @@ _cf_ddns() (
 NAME
   $SCRIPT_NAME - update Cloudflare DNS to this machine's outbound IP
 SYNOPSIS
-  $SCRIPT_NAME ${s}api_token${r} ${s}domain${r}
+  $SCRIPT_NAME ${s}api_token${r} ${s}hostname${r}
   $SCRIPT_NAME -h
 DESCRIPTION
   Detects the machine's outbound IP via api.ipify.org, compares it to the
-  domain's current A record (via Google DNS), and updates Cloudflare if they
-  differ. All existing A records for the domain are deleted first.
+  hostname's current A record (via Google DNS), and updates Cloudflare if they
+  differ. It finds the Cloudflare zone for that hostname and deletes only its
+  A records before creating a new one.
   Run periodically from the host to achieve basic Dynamic DNS.
 OPTIONS
   -h, --help   Show this help message
@@ -48,14 +50,14 @@ ENVIRONMENT
 EXIT STATUS
   0  Success (DNS already correct or successfully updated)
   1  Runtime failure (IP detection failed, API request failed, unexpected
-     API response, or no zone for domain)
-  2  Usage error (missing API token or domain)
+     API response, or no zone for hostname)
+  2  Usage error (missing API token or hostname)
   3  Dependency error (curl, jq, or dig missing)
 DEPENDENCIES
   curl, jq, dig
 EXTERNAL SERVICES
   api.ipify.org   used to detect this machine's public IP
-  8.8.8.8         Google DNS (TCP), used to resolve the domain's current A record
+  8.8.8.8         Google DNS (TCP), used to resolve the hostname's current A record
   If either endpoint is unreachable (firewall, restricted network), the
   script will fail -- make sure outbound access to both is permitted.
 API TOKEN PERMISSIONS
@@ -102,10 +104,10 @@ EOF
     fi
     local api_token="$1"; shift
     if [ -z "${1:-}" ]; then
-        _error "Must provide a domain name. Run \`$SCRIPT_NAME -h\` for usage"
+        _error "Must provide a hostname. Run \`$SCRIPT_NAME -h\` for usage"
         return 2
     fi
-    local domain="$1"; shift
+    local hostname="$1"; shift
     #local ip_addresses=("$@")
     #\# #/#
 
@@ -134,14 +136,40 @@ EOF
     }
 
     #/# API calls #\#
+    _get_pages() {
+        local path="${1:?"API path is required"}"
+        local page=1
+        local page_path
+        local response
+        local total_pages
+        while :; do
+            page_path="$path"
+            if [ "$page" -gt 1 ]; then
+                page_path="$path?page=$page"
+            fi
+            _debug "GET $page_path"
+            if ! response="$(_curl GET "$page_path")"; then
+                _error "Cloudflare API GET failed for $page_path"
+                return 1
+            fi
+            if ! _api_success "$response"; then
+                _error "Cloudflare API rejected GET $page_path"
+                return 1
+            fi
+            printf '%s\n' "$response"
+            total_pages="$(printf '%s\n' "$response" | jq -r '.result_info.total_pages // 1')" || return 1
+            if [ "$page" -ge "$total_pages" ]; then
+                break
+            fi
+            page=$((page + 1))
+        done
+    }
     _get_zones() {
-        _debug "GET /zones"
-        _curl GET "/zones"
+        _get_pages "/zones"
     }
     _get_dns_records() {
         local zone_id="${1:?"zone ID is required"}"
-        _debug "GET /zones/$zone_id/dns_records"
-        _curl GET "/zones/$zone_id/dns_records"
+        _get_pages "/zones/$zone_id/dns_records"
     }
     _delete_dns_record() {
         local zone_id="${1:?"zone ID is required"}"
@@ -151,14 +179,14 @@ EOF
     }
     _create_dns_record() {
         local zone_id="${1:?"zone ID is required"}"
-        local domain="${2:?"domain name is required"}"
+        local hostname="${2:?"hostname is required"}"
         local type="${3:?"DNS record type is required"}"
         local content="${4:?"DNS record content is required"}"
         _debug "POST /zones/$zone_id/dns_records"
         _curl POST "/zones/$zone_id/dns_records" \
             -H "Content-Type: application/json" \
             --data '{
-                "name": "'"$domain"'",
+                "name": "'"$hostname"'",
                 "type": "'"$type"'",
                 "content": "'"$content"'",
                 "ttl": '$A_RECORD_TTL'
@@ -189,9 +217,9 @@ EOF
     fi
     _info "Device's IP: $outgoing_ip"
 
-    # Get current domain IP from Google DNS (primary) - adding TCP flag because some networks block UDP traffic
-    local current_ip; current_ip="$(dig @8.8.8.8 +tcp +short "$domain")"
-    _info "Domain's IP: ${current_ip:-"NONE"} ($domain)"
+    # Get current hostname IP from Google DNS (primary) - add TCP flag because some networks block UDP traffic
+    local current_ip; current_ip="$(dig @8.8.8.8 +tcp +short "$hostname")"
+    _info "Hostname's IP: ${current_ip:-"NONE"} ($hostname)"
 
     # Check whether DNS needs to be updated
     if [ "$outgoing_ip" = "$current_ip" ]; then
@@ -201,25 +229,25 @@ EOF
         _info "IP addresses do not match, updating DNS"
     fi
 
-    # Get zone ID from domain name
+    # Use the most specific accessible zone containing the target hostname
     local zone_id
-    if ! zone_id="$(_get_zones | jq -r '.result[] | select(.name=="'"$domain"'") | .id' 2>"/tmp/get_zones.$$.err")"; then
-        _exception "Unexpected error while retrieving zone ID for domain '$domain'" "/tmp/get_zones.$$.err"
+    if ! zone_id="$(_get_zones | jq -s -r --arg hostname "$hostname" '[.[].result[] | select(.name as $name | $hostname == $name or ($hostname | endswith("." + $name)))] | max_by(.name | length) | .id // empty' 2>"/tmp/get_zones.$$.err")"; then
+        _exception "Unexpected error while retrieving zone ID for hostname '$hostname'" "/tmp/get_zones.$$.err"
         return 1
     fi
     if [ -z "$zone_id" ]; then
-        _error "No zone found for domain '$domain'"
+        _error "No zone found for hostname '$hostname'"
         return 1
     fi
 
-    # Get all A records for zone
+    # Get A records for the exact target hostname
     local a_records
-    if ! a_records="$(_get_dns_records "$zone_id" | jq -r '.result[] | select(.type=="A") | "\(.content)=\(.id)"' 2>"/tmp/get_dns_records.$$.err")"; then
-        _exception "Unexpected error while retrieving DNS records from zone '$zone_id' ($domain)" "/tmp/get_dns_records.$$.err"
+    if ! a_records="$(_get_dns_records "$zone_id" | jq -r --arg hostname "$hostname" '.result[] | select(.type=="A" and .name==$hostname) | "\(.content)=\(.id)"' 2>"/tmp/get_dns_records.$$.err")"; then
+        _exception "Unexpected error while retrieving DNS records from zone '$zone_id' ($hostname)" "/tmp/get_dns_records.$$.err"
         return 1
     fi
     if [ -z "$a_records" ]; then
-        _info "No existing A records in zone '$zone_id' ($domain)"
+        _info "No existing A records for '$hostname' in zone '$zone_id'"
     fi
 
     # Delete all found A records - this is why we are not using PUT
@@ -241,7 +269,7 @@ EOF
 
     # Create a new A record with the system's current outbound IP
     _info "Creating A record for $outgoing_ip"
-    local create_response; create_response="$(_create_dns_record "$zone_id" "$domain" "A" "$outgoing_ip")"
+    local create_response; create_response="$(_create_dns_record "$zone_id" "$hostname" "A" "$outgoing_ip")"
     if _api_success "$create_response"; then
         : #_info "Successfully created A record for $outgoing_ip"
     else

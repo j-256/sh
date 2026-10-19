@@ -2,22 +2,22 @@
 
 [View script](../scripts/cf-ddns)
 
-Update a Cloudflare DNS A record to match this machine's current outbound IP address -- a lightweight dynamic DNS solution for home servers, dev machines, or any host behind a changing IP.
+Update a Cloudflare DNS A record to match this machine's current outbound IP address – a lightweight dynamic DNS solution for home servers, dev machines, or any host behind a changing IP.
 
-Designed to run periodically from the target host (via cron or systemd timer). Fetches the machine's public IP from ipify.org, compares it to the domain's current DNS resolution via Google DNS, and updates Cloudflare only when they differ.
+Designed to run periodically from the target host (via cron or systemd timer). Fetches the machine's public IP from ipify.org, compares it to the hostname's current DNS resolution via Google DNS, and updates Cloudflare only when they differ. The hostname can be a zone apex such as `example.com` or a name within that zone such as `home.example.com`.
 
 ## Quick start
 
 ```bash
 $ cf-ddns YOUR_API_TOKEN home.example.com
 [INF][cf-ddns] Device's IP: 203.0.113.42
-[INF][cf-ddns] Domain's IP: 198.51.100.8 (home.example.com)
+[INF][cf-ddns] Hostname's IP: 198.51.100.8 (home.example.com)
 [INF][cf-ddns] IP addresses do not match, updating DNS
 [INF][cf-ddns] Deleting A record for 198.51.100.8 (abc123...)
 [INF][cf-ddns] Creating A record for 203.0.113.42
 ```
 
-The script deletes all existing A records for the domain before creating a new one pointing to the current IP. TTL is hardcoded to 60 seconds for fast propagation.
+For `home.example.com`, the script selects the `example.com` zone and replaces only A records named `home.example.com`. A records for the zone apex and other hostnames are left alone. TTL is hardcoded to 60 seconds for fast propagation.
 
 **Create a Cloudflare API token:**
 
@@ -53,15 +53,15 @@ curl -s https://toolio.sh/cf-ddns | bash -s -- YOUR_API_TOKEN home.example.com
 ## How it works
 
 1. Fetch the machine's outbound IP via `curl https://api.ipify.org`
-2. Query the domain's current A record via `dig @8.8.8.8 +tcp +short $domain` (Google DNS, TCP mode to avoid UDP blocks)
-3. Compare IPs -- if they match, exit early with success
+2. Query the hostname's current A record via `dig @8.8.8.8 +tcp +short $hostname` (Google DNS, TCP mode to avoid UDP blocks)
+3. Compare IPs – if they match, exit early with success
 4. If they differ:
-   - Call Cloudflare API to find the zone ID for the domain
-   - List all A records in that zone
-   - **Delete every A record** (this is why the script uses DELETE + POST instead of PUT)
-   - Create a new A record with the current IP and 60-second TTL
+   - Page through Cloudflare zones to find the zone containing the hostname
+   - Page through DNS records in that zone and select A records whose name exactly matches the hostname
+   - Delete the matching A records (this is why the script uses DELETE + POST instead of PUT)
+   - Create a new A record for the full hostname with the current IP and 60-second TTL
 
-The delete-all-then-create approach ensures a clean state even if multiple A records exist (leftover from manual edits, migrations, etc.).
+Replacing all A records for the requested hostname ensures a clean state even if multiple records exist from manual edits or migrations.
 
 ---
 
@@ -78,7 +78,7 @@ The delete-all-then-create approach ensures a clean state even if multiple A rec
 | Argument | Description |
 |---|---|
 | `api_token` | Cloudflare API token (required permissions: Zone.Zone, Zone.DNS) |
-| `domain` | Fully qualified domain name to update (e.g. `home.example.com`) |
+| `hostname` | Fully qualified DNS hostname to update (e.g. `home.example.com`) |
 
 ### Environment variables
 
@@ -92,7 +92,7 @@ The delete-all-then-create approach ensures a clean state even if multiple A rec
 |---|---|
 | 0 | Success (IP already matched or DNS updated successfully) |
 | 1 | Runtime failure (IP fetch failed, zone not found, API error) |
-| 2 | Usage error (missing API token or domain) |
+| 2 | Usage error (missing API token or hostname) |
 | 3 | Dependency error (`curl`, `jq`, or `dig` missing) |
 
 ### Dependencies
@@ -103,10 +103,10 @@ The delete-all-then-create approach ensures a clean state even if multiple A rec
 
 ### Warnings
 
-- **Deletes all A records** for the domain before creating the new one. If you have multiple A records for load balancing or failover, this script will remove them.
-- **No retry logic** -- if the API call fails, the script exits with an error. Suitable for cron where the next run will retry.
-- **Assumes IPv4** -- only updates A records, not AAAA (IPv6). The ipify.org endpoint returns IPv4 by default.
-- **Requires Zone.Zone and Zone.DNS permissions** -- the token must be scoped to at least read zones and edit DNS records.
+- **Deletes all A records** for the requested hostname before creating the new one. If that hostname has multiple A records for load balancing or failover, this script will remove them.
+- **No retry logic** – if the API call fails, the script exits with an error. Suitable for cron where the next run will retry.
+- **Assumes IPv4** – only updates A records, not AAAA (IPv6). The ipify.org endpoint returns IPv4 by default.
+- **Requires Zone.Zone and Zone.DNS permissions** – the token must be scoped to at least read zones and edit DNS records.
 
 ### Behavior
 

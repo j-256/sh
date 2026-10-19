@@ -44,11 +44,25 @@ done
 
 # Match URL pattern
 if [[ "$url_path" == "/zones" ]]; then
-    printf '%s\n' '{"success":true,"result":[{"id":"zone123","name":"example.com"}]}'
+    if [[ -f "$TEST_DIR/paged-zones" ]]; then
+        printf '%s\n' '{"success":true,"result":[{"id":"otherzone","name":"notexample.com"}],"result_info":{"total_pages":2}}'
+    else
+        printf '%s\n' '{"success":true,"result":[{"id":"zone123","name":"example.com"},{"id":"deepzone","name":"deep.example.com"},{"id":"otherzone","name":"notexample.com"}]}'
+    fi
+    exit 0
+elif [[ "$url_path" == "/zones?page=2" ]]; then
+    printf '%s\n' '{"success":true,"result":[{"id":"zone123","name":"example.com"}],"result_info":{"total_pages":2}}'
     exit 0
 elif [[ "$url_path" =~ ^/zones/[^/]+/dns_records/[^/]+ ]]; then
     # DELETE specific record
     printf '%s\n' '{"success":true,"result":{"id":"deleted"}}'
+    exit 0
+elif [[ "$url_path" == "/zones/zone123/dns_records?page=2" ]]; then
+    if [[ -f "$TEST_DIR/fail-second-record-page" ]]; then
+        printf '%s\n' '{"success":false,"result":[],"result_info":{"total_pages":2}}'
+        exit 22
+    fi
+    printf '%s\n' '{"success":true,"result":[{"type":"A","name":"home.example.com","content":"192.0.2.11","id":"home456"}],"result_info":{"total_pages":2}}'
     exit 0
 elif [[ "$url_path" =~ ^/zones/[^/]+/dns_records$ ]]; then
     if [[ "$method" == "POST" ]]; then
@@ -56,7 +70,13 @@ elif [[ "$url_path" =~ ^/zones/[^/]+/dns_records$ ]]; then
         exit 0
     else
         # GET records
-        printf '%s\n' '{"success":true,"result":[{"type":"A","content":"192.0.2.10","id":"record456"}]}'
+        if [[ -f "$TEST_DIR/fail-record-api" ]]; then
+            printf '%s\n' '{"success":false,"errors":[{"message":"records unavailable"}],"result":[]}'
+        elif [[ -f "$TEST_DIR/paged-records" ]]; then
+            printf '%s\n' '{"success":true,"result":[{"type":"A","name":"other.example.com","content":"192.0.2.12","id":"other456"}],"result_info":{"total_pages":2}}'
+        else
+            printf '%s\n' '{"success":true,"result":[{"type":"A","name":"example.com","content":"192.0.2.10","id":"record456"},{"type":"A","name":"home.example.com","content":"192.0.2.11","id":"home456"},{"type":"A","name":"other.example.com","content":"192.0.2.12","id":"other456"}]}'
+        fi
         exit 0
     fi
 fi
@@ -150,10 +170,10 @@ test_missing_api_token() {
     assert_stderr_contains "token error" "Must provide an API bearer token"
 }
 
-test_missing_domain() {
+test_missing_hostname() {
     run_script "token123"
-    assert_rc "missing domain" 2
-    assert_stderr_contains "domain error" "Must provide a domain name"
+    assert_rc "missing hostname" 2
+    assert_stderr_contains "hostname error" "Must provide a hostname"
 }
 
 test_ip_detection_failure() {
@@ -194,13 +214,62 @@ test_dns_update_needed() {
     run_script "token123" "example.com"
     assert_rc "dns update" 0
     assert_stderr_contains "device ip" "Device's IP: 203.0.113.42"
-    assert_stderr_contains "domain ip" "Domain's IP: 192.0.2.10"
+    assert_stderr_contains "hostname ip" "Hostname's IP: 192.0.2.10"
     assert_stderr_contains "updating" "IP addresses do not match, updating DNS"
     assert_stderr_contains "deleting" "Deleting A record for 192.0.2.10"
     assert_stderr_contains "creating" "Creating A record for 203.0.113.42"
 }
 
-test_domain_no_ip() {
+test_subdomain_uses_parent_zone_and_preserves_other_records() {
+    run_script "token123" "home.example.com"
+    assert_rc "subdomain update" 0
+    assert_contains "uses parent zone" "$(get_curl_log)" "/zones/zone123/dns_records"
+    assert_contains "deletes target record" "$(get_curl_log)" "/dns_records/home456"
+    assert_not_contains "preserves apex record" "$(get_curl_log)" "/dns_records/record456"
+    assert_not_contains "preserves sibling record" "$(get_curl_log)" "/dns_records/other456"
+    assert_contains "creates full hostname" "$(get_curl_log)" '"name": "home.example.com"'
+    assert_contains "queries full hostname" "$(get_dig_log)" "home.example.com"
+}
+
+test_nested_hostname_uses_most_specific_zone() {
+    run_script "token123" "home.deep.example.com"
+    assert_rc "nested hostname update" 0
+    assert_contains "uses delegated zone" "$(get_curl_log)" "/zones/deepzone/dns_records"
+    assert_not_contains "does not use parent zone" "$(get_curl_log)" "/zones/zone123/dns_records"
+}
+
+test_parent_zone_on_later_page() {
+    touch "$TEST_DIR/paged-zones"
+    run_script "token123" "home.example.com"
+    assert_rc "later page zone update" 0
+    assert_contains "reads later zone page" "$(get_curl_log)" "/zones?page=2"
+    assert_contains "uses parent zone from later page" "$(get_curl_log)" "/zones/zone123/dns_records"
+}
+
+test_target_record_on_later_page() {
+    touch "$TEST_DIR/paged-records"
+    run_script "token123" "home.example.com"
+    assert_rc "later page record update" 0
+    assert_contains "reads later record page" "$(get_curl_log)" "/zones/zone123/dns_records?page=2"
+    assert_contains "deletes target record from later page" "$(get_curl_log)" "/dns_records/home456"
+    assert_not_contains "preserves sibling on first page" "$(get_curl_log)" "/dns_records/other456"
+}
+
+test_failed_record_page_does_not_create_duplicate() {
+    touch "$TEST_DIR/paged-records" "$TEST_DIR/fail-second-record-page"
+    run_script "token123" "home.example.com"
+    assert_rc "record page failure" 1
+    assert_not_contains "no create after incomplete records" "$(get_curl_log)" "-X POST"
+}
+
+test_rejected_record_list_does_not_create_duplicate() {
+    touch "$TEST_DIR/fail-record-api"
+    run_script "token123" "home.example.com"
+    assert_rc "record list API failure" 1
+    assert_not_contains "no create after rejected record list" "$(get_curl_log)" "-X POST"
+}
+
+test_hostname_no_ip() {
     # dig returns empty
     cat > "$SHIM_DIR/dig" <<'SHIM'
 #!/bin/bash
@@ -210,7 +279,7 @@ SHIM
 
     run_script "token123" "example.com"
     assert_rc "no current ip" 0
-    assert_stderr_contains "none message" "Domain's IP: NONE"
+    assert_stderr_contains "none message" "Hostname's IP: NONE"
 }
 
 test_zone_not_found() {
@@ -234,7 +303,7 @@ SHIM
 
     run_script "token123" "notfound.com"
     assert_rc "zone not found" 1
-    assert_stderr_contains "zone error" "No zone found for domain 'notfound.com'"
+    assert_stderr_contains "zone error" "No zone found for hostname 'notfound.com'"
 }
 
 test_zone_retrieval_jq_error() {
@@ -352,7 +421,7 @@ elif [[ "$url_path" =~ ^/zones/[^/]+/dns_records$ ]]; then
         printf '%s\n' '{"success":true,"result":{"id":"record789"}}'
         exit 0
     else
-        printf '%s\n' '{"success":true,"result":[{"type":"A","content":"192.0.2.10","id":"record1"},{"type":"A","content":"192.0.2.11","id":"record2"}]}'
+        printf '%s\n' '{"success":true,"result":[{"type":"A","name":"example.com","content":"192.0.2.10","id":"record1"},{"type":"A","name":"example.com","content":"192.0.2.11","id":"record2"}]}'
         exit 0
     fi
 fi
@@ -409,7 +478,7 @@ elif [[ "$url_path" =~ ^/zones/[^/]+/dns_records$ ]]; then
         printf '%s\n' '{"success":true,"result":{"id":"record789"}}'
         exit 0
     else
-        printf '%s\n' '{"success":true,"result":[{"type":"A","content":"192.0.2.10","id":"record456"},{"type":"A","content":"192.0.2.11","id":"record457"}]}'
+        printf '%s\n' '{"success":true,"result":[{"type":"A","name":"example.com","content":"192.0.2.10","id":"record456"},{"type":"A","name":"example.com","content":"192.0.2.11","id":"record457"}]}'
         exit 0
     fi
 fi
@@ -467,7 +536,7 @@ elif [[ "$url_path" =~ ^/zones/[^/]+/dns_records$ ]]; then
         printf '%s\n' '{"success":false,"errors":[{"message":"create failed"}]}'
         exit 0
     else
-        printf '%s\n' '{"success":true,"result":[{"type":"A","content":"192.0.2.10","id":"record456"}]}'
+        printf '%s\n' '{"success":true,"result":[{"type":"A","name":"example.com","content":"192.0.2.10","id":"record456"}]}'
         exit 0
     fi
 fi
