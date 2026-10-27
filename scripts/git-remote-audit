@@ -1,0 +1,755 @@
+#!/bin/bash
+# git-remote-audit - Compare live Git remote branches and tags with local refs
+#
+# Usage:
+#   git-remote-audit [-r] [-v] [directory]
+#
+# Options:
+#   -r, --recursive  Discover repositories at every depth
+#   -v, --verbose    Show the complete per-ref report, including matches
+#   -h, --help       Show help
+#
+# Dependencies:
+#   Git with --no-lazy-fetch support
+
+_git_remote_audit() (
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="git-remote-audit" ;; esac
+    local OID_WIDTH=12
+    local RANK_ERROR=0
+    local RANK_REVIEW=1
+    local RANK_REFS=2
+    local RANK_OK=3
+
+    _show_help() {
+        local s=""
+        local r=""
+        if { [ -t 1 ] || [ -n "${CLICOLOR_FORCE:-}" ]; } && [ -z "${NO_COLOR:-}" ]; then
+            s=$'\033[4m'
+            r=$'\033[24m'
+        fi
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - compare branches and tags across Git remotes and local repositories
+SYNOPSIS
+  $SCRIPT_NAME [${s}options${r}] [${s}directory${r}]
+DESCRIPTION
+  Queries live branch and tag refs from every named remote's fetch endpoint.
+  Reports whether remotes match and compares each with same-named local refs.
+  Branch counts are local ahead/behind; tags compare exact object IDs,
+  including annotation objects. Uncommitted changes are reported separately.
+
+  The default report has one row per repository, ordered by incomplete
+  checks, changes to review, ref-name gaps alone, then matching repositories.
+  It shows remote parity and the checked-out branch independently. Other
+  differences are counted by unique ref within each category. Use -v on
+  one repository to inspect its complete ref inventory, including matches.
+
+  Checks the directory itself and its immediate child repository roots.
+  The directory defaults to the current directory. Recursive mode also
+  finds nested repositories, initialized submodules, and linked worktrees.
+  Bare repositories are supported. Descendant directory symlinks, .git
+  administration directories, and bare repository internals are not entered.
+
+  Repository refs, objects, index, configuration, and working files are
+  preserved. Missing history is fetched into private temporary storage,
+  removed on exit. Tracking refs and FETCH_HEAD are not updated.
+OPTIONS
+  -r, --recursive  Discover repositories at every depth
+  -v, --verbose    Show the complete per-ref report, including matches
+  -h, --help       Show this help
+  --              Treat remaining arguments as positional
+ENVIRONMENT
+  TMPDIR          Temporary storage parent (default: /tmp)
+  NO_COLOR        Disable help styling, including when CLICOLOR_FORCE is set
+  CLICOLOR_FORCE  Enable help styling even when stdout is redirected
+DEPENDENCIES
+  Git with --no-lazy-fetch support
+EXAMPLES
+  $SCRIPT_NAME
+  $SCRIPT_NAME ~/projects
+  $SCRIPT_NAME -rv ~/projects
+EXIT STATUS
+  0  Audit completed without findings
+  1  Incomplete audit, runtime failure, or interruption
+  2  Invalid arguments, inaccessible directory, or no repositories found
+  3  Git missing or lacking required --no-lazy-fetch support
+  4  Differences, dirty working trees, detached HEAD, or no remotes
+CAVEATS
+  REFS means only names differ; shared ref values match. REVIEW includes
+  differing commits or tags, a missing checked-out branch, dirty worktrees,
+  detached HEAD, or no remotes. Differences may be intentional.
+
+  Failures take precedence over findings; other repositories and reachable
+  remotes are still checked. Unknown results never imply equality.
+  Differing shallow-history tips have unknown ahead/behind counts (exit 1).
+  Detached HEAD is reported but is not matched to an arbitrary remote branch.
+  An unborn HEAD has no local branch ref until its first commit.
+
+  Only advertised refs/heads/* and refs/tags/* are compared. Remote HEAD,
+  hosting settings, hidden refs, and separate push URLs are outside scope.
+  Git uses the first fetch URL for each remote. Upstream mappings do not
+  rename branches for comparison. Remote snapshots are sequential, so this
+  is not an atomic comparison across servers. Interrupted network operations
+  may require retrying the audit.
+
+  Git authentication and transport configuration are honored. HTTP terminal
+  credential prompts are disabled; SSH follows its normal configuration.
+  Raw Git error text is withheld because it can contain credential URLs.
+  Inherited Git repository-location variables are cleared so each discovered
+  on-disk repository is inspected independently.
+EOF
+    }
+
+    _error() { printf '[ERR][%s] %s\n' "$SCRIPT_NAME" "$*" >&2; }
+    _info() { printf '[INF][%s] %s\n' "$SCRIPT_NAME" "$*" >&2; }
+    _display() { printf '%q' "$1"; }
+
+    _expand_short_opts() {
+        # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
+        # $2..$N = "$@"
+        # Populates _EXPANDED; caller does: set -- "${_EXPANDED[@]}"; unset _EXPANDED
+        local value_opts="$1"; shift
+        _EXPANDED=()
+        local passthru=""
+        local arg
+        local rest
+        local c
+        for arg in "$@"; do
+            if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
+            case "$arg" in
+                --)       passthru=1; _EXPANDED+=("$arg") ;;
+                --*|-|"") _EXPANDED+=("$arg") ;;
+                -[a-zA-Z]?*)
+                    rest="${arg#-}"
+                    while [ -n "$rest" ]; do
+                        c="${rest%"${rest#?}"}"; rest="${rest#?}"
+                        _EXPANDED+=("-$c")
+                        case "$value_opts" in *"$c"*)
+                            [ -n "$rest" ] && _EXPANDED+=("$rest")
+                            rest="" ;;
+                        esac
+                    done ;;
+                *)        _EXPANDED+=("$arg") ;;
+            esac
+        done
+    }
+
+    # Keep optional writes and repository hooks out of all inspection commands
+    _git() {
+        local directory="$1"; shift
+        git --no-lazy-fetch --no-replace-objects -C "$directory" \
+            -c core.hooksPath=/dev/null -c core.fsmonitor=false \
+            -c gc.auto=0 -c maintenance.auto=false -c fetch.writeCommitGraph=false \
+            -c fetch.bundleURI= "$@"
+    }
+
+    # Git accepts C-quoted alternate paths, including colons and newlines
+    _quote_alternate() {
+        local path="$1"
+        path="${path//\\/\\\\}"
+        path="${path//\"/\\\"}"
+        path="${path//$'\n'/\\n}"
+        path="${path//$'\r'/\\r}"
+        path="${path//$'\t'/\\t}"
+        printf '"%s"' "$path"
+    }
+
+    # Emit the union as ref, left object, right object; '-' means absent
+    _ref_pairs() {
+        awk -F '\t' '
+            FILENAME == ARGV[1] { left[$1] = $2; names[$1] = 1; next }
+            { right[$1] = $2; names[$1] = 1 }
+            END {
+                for (name in names)
+                    printf "%s\t%s\t%s\n", name,
+                        (name in left ? left[name] : "-"),
+                        (name in right ? right[name] : "-")
+            }
+        ' "$1" "$2" | sort
+    }
+
+    _ref_label() {
+        case "$1" in
+            refs/heads/*) printf 'branch %s' "${1#refs/heads/}" ;;
+            refs/tags/*) printf 'tag %s' "${1#refs/tags/}" ;;
+        esac
+    }
+
+    # The repository context is local to _audit_repository and shared by its helpers
+    _object_git() {
+        GIT_OBJECT_DIRECTORY="$repo_scratch/objects" \
+            GIT_ALTERNATE_OBJECT_DIRECTORIES="$alternate" _git "$repo" "$@"
+    }
+
+    _repo_error() {
+        repo_error=1
+        if [ -z "$repo_problem" ]; then repo_problem="${1%%;*}"; fi
+        _error "Repository $(_display "$repo"): $*"
+    }
+
+    _remote_unavailable() {
+        if [ -n "$failed_remotes" ]; then failed_remotes="$failed_remotes, "; fi
+        failed_remotes="$failed_remotes$1"
+        remote_query_failures=$((remote_query_failures + 1))
+    }
+
+    _record_difference() {
+        local ref="$1"
+        local left="$2"
+        local right="$3"
+        local kind=gap
+        if [ "$left" != - ] && [ "$right" != - ]; then
+            kind=value
+            repo_review=1
+        fi
+        if [ "$ref" = "refs/heads/$repo_head" ]; then repo_review=1; fi
+        printf '%s\t%s\t%s\t%s\n' "$ref" "$kind" "$left" "$right" >> "$repo_scratch/ref-findings"
+    }
+
+    _head_summary() {
+        if [ "$repo_head_state" = detached ]; then printf 'detached HEAD'; return; fi
+        if [ -z "$repo_head" ]; then printf 'repository unavailable'; return; fi
+        if [ ! -s "$repo_scratch/head-states" ]; then
+            if [ "$repo_head_state" = unborn ]; then printf '%s (unborn)' "$repo_head"
+            else printf '%s not checked' "$repo_head"; fi
+            return
+        fi
+        awk -F '\t' -v head="$repo_head" -v head_state="$repo_head_state" -v partial="$failed_remotes" '
+            $2 == "match" { matches = matches (length(matches) ? ", " : "") $1; next }
+            {
+                if (!($2 in groups)) order[++n] = $2
+                groups[$2] = groups[$2] (length(groups[$2]) ? ", " : "") $1
+            }
+            END {
+                if (head_state == "unborn") head = head " (unborn)"
+                if (!n) {
+                    printf "%s matches%s", head, (length(partial) ? " reachable remotes" : "")
+                } else {
+                    printf "%s: ", head
+                    for (i = 1; i <= n; i++) {
+                        printf "%s", (i > 1 ? "; " : "")
+                        if (order[i] == "missing on remote") printf "absent on %s", groups[order[i]]
+                        else if (order[i] == "missing locally") printf "absent locally (%s)", groups[order[i]]
+                        else printf "%s vs %s", order[i], groups[order[i]]
+                    }
+                    if (length(matches)) printf "; matches %s", matches
+                }
+            }
+        ' "$repo_scratch/head-states"
+    }
+
+    _other_ref_summary() {
+        [ -f "$repo_scratch/ref-findings" ] || { printf '0\t'; return; }
+        awk -F '\t' -v head="refs/heads/$repo_head" '
+            $1 == head { next }
+            {
+                if ($2 == "gap") gaps[$1] = 1
+                for (i = 3; i <= 4; i++) {
+                    if ($i == "-") continue
+                    value = "oid:" $i
+                    if (($1 in values) && values[$1] != value) changed[$1] = 1
+                    values[$1] = value
+                }
+            }
+            function add(n, singular, plural) {
+                if (n) { printf "%s%d %s", separator, n, (n == 1 ? singular : plural); separator = "; " }
+            }
+            END {
+                for (ref in changed) {
+                    if (ref ~ /^refs\/heads\//) branch_values++; else tag_values++
+                }
+                for (ref in gaps) {
+                    if (ref ~ /^refs\/heads\//) branch_gaps++; else tag_gaps++
+                }
+                printf "%d\t", branch_values + tag_values
+                add(branch_values, "other branch differs", "other branches differ")
+                add(tag_values, "tag differs", "tags differ")
+                add(branch_gaps, "branch-name gap", "branch-name gaps")
+                add(tag_gaps, "tag-name gap", "tag-name gaps")
+            }
+        ' "$repo_scratch/ref-findings"
+    }
+
+    _compact_row() {
+        local summary
+        local other_refs
+        local other_values=0
+        local rank="$RANK_OK"
+        local state=OK
+        if ! summary="$(_head_summary)" || ! other_refs="$(_other_ref_summary)"; then
+            _repo_error 'Failed to summarize repository results'
+            summary='summary unavailable'
+            other_refs=''
+        else
+            other_values="${other_refs%%$'\t'*}"
+            other_refs="${other_refs#*$'\t'}"
+        fi
+        if [ "$other_values" -gt 0 ]; then repo_review=1; fi
+        case "$repo_working_state" in
+            dirty) summary="$summary; dirty worktree" ;;
+            bare) summary="$summary; bare repository" ;;
+            unknown) summary="$summary; working-tree state unknown" ;;
+        esac
+        if [ -n "$failed_remotes" ]; then
+            summary="$summary; unavailable: $failed_remotes"
+        elif [ "$repo_error" -eq 1 ]; then
+            summary="$summary; $repo_problem"
+        elif [ "$repo_remote_state" = none ]; then
+            summary="$summary; no remotes"
+        fi
+        if [ -n "$other_refs" ]; then summary="$summary; $other_refs"; fi
+        if [ "$repo_error" -eq 1 ]; then rank="$RANK_ERROR"; state=ERROR
+        elif [ "$repo_review" -eq 1 ]; then rank="$RANK_REVIEW"; state=REVIEW
+        elif [ "$repo_finding" -eq 1 ]; then rank="$RANK_REFS"; state=REFS; fi
+        printf '%s\t%s\t%s\t%s\t%s\n' "$rank" "$state" "$(_display "$repo")" \
+            "$repo_remote_state" "$summary" >> "$scratch_root/summary"
+    }
+
+    _query_failure_summary() {
+        if [ "$remote_query_failures" -eq 1 ]; then printf '1 remote query failed\n'
+        elif [ "$remote_query_failures" -gt 1 ]; then printf '%s remote queries failed\n' "$remote_query_failures"; fi
+    }
+
+    _render_summary() {
+        local rows="$scratch_root/summary-sorted"
+        if ! sort -t $'\t' -k1,1n -k3,3 "$scratch_root/summary" > "$rows"; then
+            _error 'Failed to order summary rows; showing discovery order'
+            errors=$((errors + 1))
+            rows="$scratch_root/summary"
+        fi
+        if ! awk -F '\t' -v repositories="$repositories" \
+            -v error_rank="$RANK_ERROR" -v review_rank="$RANK_REVIEW" \
+            -v refs_rank="$RANK_REFS" -v ok_rank="$RANK_OK" '
+            BEGIN { state_width = length("STATE"); repo_width = length("REPOSITORY"); remote_width = length("REMOTES") }
+            {
+                counts[$1]++
+                state[NR] = $2; repo[NR] = $3; remote[NR] = $4; detail[NR] = $5
+                if (length($2) > state_width) state_width = length($2)
+                if (length($3) > repo_width) repo_width = length($3)
+                if (length($4) > remote_width) remote_width = length($4)
+            }
+            END {
+                if (NR) {
+                    printf "%-*s  %-*s  %-*s  %s\n", state_width, "STATE", repo_width, "REPOSITORY", remote_width, "REMOTES", "LOCAL / OTHER REFS"
+                    for (i = 1; i <= NR; i++)
+                        printf "%-*s  %-*s  %-*s  %s\n", state_width, state[i], repo_width, repo[i], remote_width, remote[i], detail[i]
+                    printf "\n"
+                }
+                printf "Summary: %d repositor%s, %d matching, %d review, %d refs-only, %d incomplete\n", repositories,
+                    (repositories == 1 ? "y" : "ies"),
+                    counts[ok_rank], counts[review_rank], counts[refs_rank], counts[error_rank]
+            }
+        ' "$rows"; then
+            _error 'Failed to render summary'
+            errors=$((errors + 1))
+        fi
+        if [ "$scan_errors" -gt 0 ]; then printf '%s directory scan errors\n' "$scan_errors"; fi
+        _query_failure_summary
+        printf 'REFS = names differ only; shared refs match\n'
+        printf 'Details for one repo: %s -v <repository>\n' "$SCRIPT_NAME"
+    }
+
+    _prepare_history() {
+        local remote="$1"
+        local pairs="$2"
+        local ref
+        local left
+        local right
+        : > "$repo_scratch/wants"
+        [ "$shallow" = false ] || return 0
+        while IFS=$'\t' read -r ref left right; do
+            case "$ref" in refs/heads/*) ;; *) continue ;; esac
+            [ "$left" != - ] && [ "$right" != - ] && [ "$left" != "$right" ] || continue
+            if ! _object_git rev-list --left-right --count "$left...$right" -- \
+                > /dev/null 2>"$repo_scratch/error"; then
+                printf '%s\n' "$ref" >> "$repo_scratch/wants"
+            fi
+        done < "$pairs"
+        [ -s "$repo_scratch/wants" ] || return 0
+        _info "Reading missing history from remote '$remote' in $(_display "$repo")"
+        # Concrete source-only refspecs and an empty refmap prevent any ref update
+        _object_git fetch --quiet --no-tags --no-prune --no-prune-tags \
+            --no-write-fetch-head --no-auto-maintenance --no-recurse-submodules \
+            --refmap= --stdin -- "$remote" < "$repo_scratch/wants" \
+            > /dev/null 2>"$repo_scratch/error"
+        local result=$?
+        if [ "$result" -ne 0 ]; then
+            _repo_error "Failed to read history from remote '$remote' (Git exit $result); check transport access and retry"
+        fi
+    }
+
+    _compare_local() {
+        local remote="$1"
+        local snapshot="$2"
+        local ref
+        local left
+        local right
+        local label
+        local counts
+        local ahead
+        local behind
+        local state
+        local differs=0
+        local unknown=0
+        local ref_count=0
+        local ref_unit=refs
+        local details="$repo_scratch/local-details"
+        local pairs="$repo_scratch/pairs"
+        if ! _ref_pairs "$repo_scratch/local" "$snapshot" > "$pairs"; then
+            printf '%s\tnot checked\n' "$remote" >> "$repo_scratch/head-states"
+            _repo_error "Failed to compare local refs with remote '$remote'"
+            return
+        fi
+        _prepare_history "$remote" "$pairs"
+        : > "$details"
+        while IFS=$'\t' read -r ref left right; do
+            ref_count=$((ref_count + 1))
+            if [ "$left" = "$right" ]; then
+                if [ "$ref" = "refs/heads/$repo_head" ]; then
+                    printf '%s\tmatch\n' "$remote" >> "$repo_scratch/head-states"
+                fi
+                if [ "$verbose" -eq 1 ]; then printf '    %s: match\n' "$(_ref_label "$ref")" >> "$details"; fi
+                continue
+            fi
+            label="$(_ref_label "$ref")"
+            differs=1
+            repo_finding=1
+            _record_difference "$ref" "$left" "$right"
+            if [ "$left" = - ]; then
+                state='missing locally'
+            elif [ "$right" = - ]; then
+                state='missing on remote'
+            elif [ "${ref#refs/tags/}" != "$ref" ]; then
+                state="differs (local=${left:0:OID_WIDTH}, remote=${right:0:OID_WIDTH})"
+            elif [ "$shallow" = true ]; then
+                state='differs (ahead/behind unknown: shallow history)'
+                unknown=1
+            elif counts="$(_object_git rev-list --left-right --count "$left...$right" -- 2>"$repo_scratch/error")"; then
+                read -r ahead behind <<< "$counts"
+                if [ "$ahead" -gt 0 ] && [ "$behind" -gt 0 ]; then
+                    state="diverged (ahead $ahead, behind $behind)"
+                else
+                    state="ahead $ahead, behind $behind"
+                fi
+            else
+                state='differs (ahead/behind unknown: history unavailable)'
+                unknown=1
+            fi
+            if [ "$ref" = "refs/heads/$repo_head" ]; then
+                local head_state="$state"
+                if [ "$left" != - ] && [ "$right" != - ]; then
+                    if [ "$shallow" = true ] || [ "$state" = 'differs (ahead/behind unknown: history unavailable)' ]; then
+                        head_state='history unknown'
+                    elif [ "$ahead" -eq 0 ]; then head_state="behind $behind"
+                    elif [ "$behind" -eq 0 ]; then head_state="ahead $ahead"; fi
+                fi
+                printf '%s\t%s\n' "$remote" "$head_state" >> "$repo_scratch/head-states"
+            fi
+            printf '    %s: %s\n' "$label" "$state" >> "$details"
+        done < "$pairs"
+        if [ "$unknown" -eq 1 ]; then
+            printf '  Local vs %s: incomplete\n' "$remote"
+            _repo_error "Ahead/behind counts unavailable for remote '$remote'; inspect shallow history or retry after remote changes"
+        elif [ "$differs" -eq 1 ]; then
+            printf '  Local vs %s: differ\n' "$remote"
+        else
+            if [ "$ref_count" -eq 1 ]; then ref_unit=ref; fi
+            printf '  Local vs %s: match (%s %s)\n' "$remote" "$ref_count" "$ref_unit"
+        fi
+        cat "$details"
+    }
+
+    _compare_remotes() {
+        local baseline=-1
+        local index=0
+        local differ=0
+        local comparison_failed=0
+        local ref
+        local left
+        local right
+        local pair_file="$repo_scratch/remote-pairs"
+        local details="$repo_scratch/remote-details"
+        : > "$details"
+        while [ "$index" -lt "${#remotes[@]}" ]; do
+            if [ "${remote_ok[$index]}" -eq 1 ]; then
+                if [ "$baseline" -lt 0 ]; then
+                    baseline=$index
+                elif _ref_pairs "$repo_scratch/remote-$baseline" "$repo_scratch/remote-$index" > "$pair_file"; then
+                    while IFS=$'\t' read -r ref left right; do
+                        if [ "$left" = "$right" ]; then
+                            [ "$verbose" -eq 1 ] || continue
+                        else
+                            differ=1
+                            repo_finding=1
+                            _record_difference "$ref" "$left" "$right"
+                        fi
+                        if [ "$left" = - ]; then left=missing; else left="${left:0:OID_WIDTH}"; fi
+                        if [ "$right" = - ]; then right=missing; else right="${right:0:OID_WIDTH}"; fi
+                        printf '    %s: %s=%s %s=%s\n' "$(_ref_label "$ref")" \
+                            "${remotes[$baseline]}" "$left" "${remotes[$index]}" "$right" >> "$details"
+                    done < "$pair_file"
+                else
+                    comparison_failed=1
+                    _repo_error 'Failed to compare remote snapshots'
+                fi
+            fi
+            index=$((index + 1))
+        done
+        if [ "$comparison_failed" -eq 1 ]; then
+            repo_remote_state=unknown
+            printf '  Remotes: unknown (snapshot comparison failed)\n'
+        elif [ "$reachable" -ne "${#remotes[@]}" ]; then
+            repo_remote_state=unknown
+            printf '  Remotes: unknown (%s/%s reachable)\n' "$reachable" "${#remotes[@]}"
+        elif [ "${#remotes[@]}" -eq 1 ]; then
+            repo_remote_state=single
+            printf '  Remotes: not comparable (1 remote)\n'
+        elif [ "$differ" -eq 1 ]; then
+            repo_remote_state="differ (${#remotes[@]})"
+            printf '  Remotes: differ\n'
+        else
+            repo_remote_state="match (${#remotes[@]})"
+            printf '  Remotes: match (%s remotes)\n' "${#remotes[@]}"
+        fi
+        cat "$details"
+    }
+
+    _inspect_repository() {
+        local bare
+        local head
+        local objects_path
+        local remote
+        local index=0
+        local result
+        local metadata=.
+        if [ -e "$repo/.git" ] || [ -L "$repo/.git" ]; then metadata=.git; fi
+        # Validate the candidate itself before Git can search a parent repository
+        if ! _git "$repo" rev-parse --resolve-git-dir "$metadata" > /dev/null 2>"$repo_scratch/error" \
+            || ! bare="$(_git "$repo" rev-parse --is-bare-repository 2>"$repo_scratch/error")"; then
+            _repo_error 'Cannot read Git repository metadata'
+            return
+        fi
+        if [ "$bare" = true ]; then
+            repo_working_state=bare
+            printf '  Working tree: bare\n'
+        elif _git "$repo" status --porcelain=v1 -z --untracked-files=normal > "$repo_scratch/status" 2>"$repo_scratch/error"; then
+            if [ -s "$repo_scratch/status" ]; then
+                repo_working_state=dirty
+                repo_review=1
+                printf '  Working tree: dirty (staged, unstaged or untracked changes)\n'
+                repo_finding=1
+            else
+                repo_working_state=clean
+                printf '  Working tree: clean\n'
+            fi
+        else
+            printf '  Working tree: unknown\n'
+            _repo_error 'Failed to read working-tree status'
+        fi
+        head="$(_git "$repo" symbolic-ref -q HEAD 2>"$repo_scratch/error")"
+        head="${head#refs/heads/}"
+        repo_head="$head"
+        if [ -z "$head" ]; then
+            repo_head_state=detached
+            repo_review=1
+            printf '  HEAD: detached (compared named refs only)\n'
+            repo_finding=1
+        elif _git "$repo" rev-parse --verify -q HEAD > /dev/null 2>"$repo_scratch/error"; then
+            repo_head_state=branch
+            printf '  HEAD: %s\n' "$head"
+        else
+            repo_head_state=unborn
+            printf '  HEAD: unborn %s\n' "$head"
+        fi
+        if ! _git "$repo" for-each-ref --format='%(refname)%09%(objectname)' refs/heads/ refs/tags/ \
+            > "$repo_scratch/local" 2>"$repo_scratch/error"; then
+            _repo_error 'Failed to read local branch and tag refs'
+            return
+        fi
+        if ! _git "$repo" remote > "$repo_scratch/remotes" 2>"$repo_scratch/error"; then
+            _repo_error 'Failed to enumerate remotes'
+            return
+        fi
+        while IFS= read -r remote; do
+            [ -n "$remote" ] || continue
+            remotes+=("$remote")
+        done < "$repo_scratch/remotes"
+        if [ "${#remotes[@]}" -eq 0 ]; then
+            repo_remote_state=none
+            repo_review=1
+            printf '  Remotes: none\n'
+            repo_finding=1
+            return
+        fi
+        if ! objects_path="$(_git "$repo" rev-parse --path-format=absolute --git-path objects 2>"$repo_scratch/error")" \
+            || ! shallow="$(_git "$repo" rev-parse --is-shallow-repository 2>"$repo_scratch/error")"; then
+            _repo_error 'Failed to locate repository history'
+            return
+        fi
+        alternate="$(_quote_alternate "$objects_path")"
+        for remote in "${remotes[@]}"; do
+            _git "$repo" ls-remote --refs -- "$remote" 'refs/heads/*' 'refs/tags/*' \
+                > "$repo_scratch/advertisement" 2>"$repo_scratch/error"
+            result=$?
+            remote_ok+=(0)
+            if [ "$result" -ne 0 ]; then
+                _remote_unavailable "$remote"
+                _repo_error "Failed to query remote '$remote' (Git exit $result); check connectivity and authentication"
+            elif awk '
+                NF != 2 || $1 !~ /^[0-9a-f]+$/ || (length($1) != 40 && length($1) != 64) { exit 1 }
+                $2 !~ /^refs\/(heads|tags)\// { exit 1 }
+                { printf "%s\t%s\n", $2, $1 }
+            ' "$repo_scratch/advertisement" > "$repo_scratch/remote-$index"; then
+                remote_ok[index]=1
+                reachable=$((reachable + 1))
+            else
+                _remote_unavailable "$remote"
+                _repo_error "Invalid ref advertisement from remote '$remote'"
+            fi
+            index=$((index + 1))
+        done
+        _compare_remotes
+        index=0
+        for remote in "${remotes[@]}"; do
+            if [ "${remote_ok[$index]}" -eq 1 ]; then
+                _compare_local "$remote" "$repo_scratch/remote-$index"
+            else
+                printf '  Local vs %s: unknown (remote unavailable)\n' "$remote"
+            fi
+            index=$((index + 1))
+        done
+    }
+
+    _audit_repository() {
+        local repo="$1"
+        local repo_error=0
+        local repo_finding=0
+        local repo_review=0
+        local repo_problem=''
+        local repo_head=''
+        local repo_head_state=unknown
+        local repo_working_state=unknown
+        local repo_remote_state=unknown
+        local failed_remotes=''
+        local repo_scratch="$scratch_root/$repositories"
+        local alternate
+        local shallow
+        local remotes=()
+        local remote_ok=()
+        local reachable=0
+        repositories=$((repositories + 1))
+        if [ "$verbose" -eq 1 ]; then printf 'Repository: %s\n' "$(_display "$repo")"; fi
+        if mkdir -p "$repo_scratch/objects"; then
+            : > "$repo_scratch/ref-findings"
+            : > "$repo_scratch/head-states"
+            if [ "$verbose" -eq 1 ]; then _inspect_repository
+            else _inspect_repository > /dev/null; fi
+        else
+            _repo_error 'Failed to create temporary object storage'
+        fi
+        if [ "$verbose" -eq 1 ]; then printf '\n'
+        elif ! _compact_row; then _repo_error 'Failed to write summary row'; fi
+        findings=$((findings + repo_finding))
+        errors=$((errors + repo_error))
+    }
+
+    _scan() {
+        local directory="$1"
+        local depth="$2"
+        local child
+        if [ ! -r "$directory" ] || [ ! -x "$directory" ]; then
+            _error "Cannot scan directory $(_display "$directory")"
+            errors=$((errors + 1))
+            scan_errors=$((scan_errors + 1))
+            return
+        fi
+        if [ -e "$directory/.git" ] || [ -L "$directory/.git" ]; then
+            _audit_repository "$directory"
+        elif [ -f "$directory/HEAD" ] && [ -d "$directory/objects" ] \
+            && [ "$(_git "$directory" rev-parse --is-bare-repository 2>/dev/null)" = true ]; then
+            _audit_repository "$directory"
+            return
+        fi
+        if [ "$recursive" -eq 0 ] && [ "$depth" -ge 1 ]; then return; fi
+        for child in "$directory"/*; do
+            [ -d "$child" ] && [ ! -L "$child" ] || continue
+            [ "${child##*/}" != .git ] || continue
+            _scan "$child" "$((depth + 1))"
+        done
+    }
+
+    local recursive=0
+    local verbose=0
+    local positional=()
+    _expand_short_opts "" "$@"
+    set -- "${_EXPANDED[@]}"; unset _EXPANDED
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -h|--help) _show_help; return 0 ;;
+            -r|--recursive) recursive=1; shift ;;
+            -v|--verbose) verbose=1; shift ;;
+            --) shift; while [ $# -gt 0 ]; do positional+=("$1"); shift; done ;;
+            -*) _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+            *) positional+=("$1"); shift ;;
+        esac
+    done
+    if [ "${#positional[@]}" -gt 1 ]; then
+        _error "Multiple directories not allowed. Run \`$SCRIPT_NAME -h\` for usage"
+        return 2
+    fi
+    if ! command -v git >/dev/null 2>&1; then _error 'git is required'; return 3; fi
+    if ! git --no-lazy-fetch --version >/dev/null 2>&1; then
+        _error 'git with --no-lazy-fetch support is required'
+        return 3
+    fi
+    local directory="${positional[0]-.}"
+    if [ ! -d "$directory" ] || ! cd -- "$directory" 2>/dev/null; then
+        _error "Cannot access directory $(_display "$directory"). Run \`$SCRIPT_NAME -h\` for usage"
+        return 2
+    fi
+
+    unset GIT_DIR GIT_COMMON_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY
+    unset GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_NAMESPACE GIT_PREFIX GIT_SHALLOW_FILE
+    export LC_ALL=C GIT_OPTIONAL_LOCKS=0 GIT_TERMINAL_PROMPT=0 GIT_NO_LAZY_FETCH=1
+    set -o pipefail
+    shopt -s dotglob nullglob
+    umask 077
+    local scratch_root
+    if ! scratch_root="$(mktemp -d "${TMPDIR:-/tmp}/git-remote-audit.XXXXXX")"; then
+        _error 'Failed to create temporary storage'
+        return 1
+    fi
+    trap 'rm -rf -- "$scratch_root"' EXIT
+    trap 'exit 1' HUP INT TERM
+    local repositories=0
+    local findings=0
+    local errors=0
+    local scan_errors=0
+    local remote_query_failures=0
+    : > "$scratch_root/summary"
+    _scan . 0
+    local repository_unit=repositories
+    local error_unit=errors
+    if [ "$repositories" -eq 1 ]; then repository_unit=repository; fi
+    if [ "$errors" -eq 1 ]; then error_unit=error; fi
+    if [ "$verbose" -eq 1 ]; then
+        printf 'Summary: %s %s, %s with findings, %s %s\n' "$repositories" "$repository_unit" "$findings" "$errors" "$error_unit"
+        _query_failure_summary
+    else
+        _render_summary
+    fi
+    if [ "$errors" -gt 0 ]; then return 1; fi
+    if [ "$repositories" -eq 0 ]; then _error 'No Git repositories found'; return 2; fi
+    if [ "$findings" -gt 0 ]; then return 4; fi
+    return 0
+)
+
+_git_remote_audit "$@"
+__git_remote_audit_rc=$?
+unset -f _git_remote_audit
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __git_remote_audit_rc; return $__git_remote_audit_rc"
+fi
+eval "unset __git_remote_audit_rc; exit $__git_remote_audit_rc"

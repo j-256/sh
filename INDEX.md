@@ -77,6 +77,7 @@ Each tool row's primary link opens the doc; the `script` link opens the raw scri
 |------|-------------|
 | [`git-backup`](docs/git-backup.md) · [script](scripts/git-backup) | Push tracked + untracked changes to a timestamped remote tag, then restore local state |
 | [`git-add-nonsub`](docs/git-add-nonsub.md) · [script](scripts/git-add-nonsub) | Stage a git repository inside another git repository without treating it as a submodule |
+| [`git-remote-audit`](docs/git-remote-audit.md) · [script](scripts/git-remote-audit) | Compare live branches and tags across every Git remote and local repository, with recursive discovery and ahead/behind counts |
 | [`find-cc-tool-output`](docs/find-cc-tool-output.md) · [script](scripts/find-cc-tool-output) | Recover full, untruncated tool output from Claude Code session transcripts |
 | [`scdef`](docs/scdef.md) · [script](scripts/scdef) | Look up a ShellCheck warning or error by code or message – brief fix examples, full page, or raw markdown |
 
