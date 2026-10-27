@@ -75,6 +75,7 @@ Each tool row's primary link opens the doc; the `script` link opens the raw scri
 
 | Tool | Description |
 |------|-------------|
+| [`wt`](docs/wt.md) · [script](scripts/wt) | Manage task worktrees with guarded synchronization, local integration, and cleanup |
 | [`git-backup`](docs/git-backup.md) · [script](scripts/git-backup) | Push tracked + untracked changes to a timestamped remote tag, then restore local state |
 | [`git-add-nonsub`](docs/git-add-nonsub.md) · [script](scripts/git-add-nonsub) | Stage a git repository inside another git repository without treating it as a submodule |
 | [`git-remote-audit`](docs/git-remote-audit.md) · [script](scripts/git-remote-audit) | Compare live branches and tags across every Git remote and local repository, with recursive discovery and ahead/behind counts |

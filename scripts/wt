@@ -1,0 +1,1394 @@
+#!/bin/bash
+# wt - Manage the guarded lifecycle of task worktrees
+#
+# Usage:
+#   wt [options] <branch>
+#   wt start [options] <branch>
+#   wt status [branch]
+#   wt sync [branch]
+#   wt land [branch]
+#   wt close [--equivalent-tree | --equivalent-tree-at COMMIT] [branch]
+#
+# Options:
+#   -r, --root PATH    Override the worktree storage root for start
+#   -s, --scope PATH   Select a sparse-checkout scope (repeatable)
+#   -e, --equivalent-tree  Close a replay with an identical integration tree
+#   -a, --equivalent-tree-at COMMIT  Compare with a full ancestor commit ID
+#   -h, --help         Show help
+#
+# Environment:
+#   WT_PROGRAM_NAME  Override the displayed command name for a caller wrapper
+#   HOME             Supplies the default XDG state base
+#   XDG_STATE_HOME   Worktree storage base when wt.root is unset
+
+_wt() (
+    local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
+    case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="wt" ;; esac
+    SCRIPT_NAME="${WT_PROGRAM_NAME:-$SCRIPT_NAME}"
+
+    _error() { printf '[ERR][%s] %s\n' "$SCRIPT_NAME" "$*" >&2; }
+    _warn() { printf '[WRN][%s] %s\n' "$SCRIPT_NAME" "$*" >&2; }
+    _info() { printf '[INF][%s] %s\n' "$SCRIPT_NAME" "$*" >&2; }
+
+    _show_help() {
+        local s=""
+        local r=""
+        if { [ -t 1 ] || [ -n "${CLICOLOR_FORCE:-}" ]; } && [ -z "${NO_COLOR:-}" ]; then
+            s=$'\033[4m'
+            r=$'\033[24m'
+        fi
+        cat <<EOF
+NAME
+  $SCRIPT_NAME - manage the guarded lifecycle of task worktrees
+SYNOPSIS
+  $SCRIPT_NAME [${s}options${r}] <${s}branch${r}>
+  $SCRIPT_NAME start [${s}options${r}] <${s}branch${r}>
+  $SCRIPT_NAME status [${s}branch${r}]
+  $SCRIPT_NAME sync [${s}branch${r}]
+  $SCRIPT_NAME land [${s}branch${r}]
+  $SCRIPT_NAME close [--equivalent-tree | --equivalent-tree-at ${s}COMMIT${r}] [${s}branch${r}]
+DESCRIPTION
+  Creates or resumes a task worktree by default. The remaining commands
+  inspect, rebase, fast-forward into the primary checkout, and remove an
+  integrated worktree without force. All decisions use local Git state.
+
+  Successful mutating commands print the directory the caller should use
+  next. Diagnostics and progress are written to stderr. The command never
+  fetches, pushes, stashes, resets, prunes, or force-removes work.
+COMMANDS
+  start   Create, attach, or resume a task worktree (default)
+  status  Report lifecycle state and blockers
+  sync    Rebase a clean local-only task branch onto the integration branch
+  land    Fast-forward a clean task without new merge commits by default
+  close   Remove a clean integrated worktree or an exact replay with the flag
+OPTIONS
+  -r, --root ${s}PATH${r}                  Absolute worktree storage directory for start
+  -s, --scope ${s}PATH${r}                 Sparse directory relative to repository root; repeatable
+  -e, --equivalent-tree            Close a replay matching the integration tree
+  -a, --equivalent-tree-at ${s}COMMIT${r}  Compare with a full ancestor commit ID
+  -h, --help                       Show help
+ENVIRONMENT
+  WT_PROGRAM_NAME  Displayed command name when invoked through a wrapper
+  HOME             Supplies the default ~/.local/state base
+  XDG_STATE_HOME   Absolute worktree state base when wt.root is unset
+FILES
+  Reads Git configuration from the primary checkout. Use git config to set:
+    wt.root             Absolute preferred storage directory; repeatable in order
+    wt.sparseWorktrees  Boolean, default false; --scope also enables sparse mode
+    wt.projectRoot      Relative directory whose children are projects; repeatable
+    wt.includeScope     Additional sparse directory to include; repeatable
+    wt.protectedPath    Directory requiring explicit --scope selection; repeatable
+    wt.linearHistory    Boolean, default true; false enables task merge commits
+    wt.landGuard        Trusted Bash command to run before land; repeatable
+  Relative directories must name existing trees at the task's checkout commit.
+  Without projectRoot, infer the caller's top-level directory. Within a project
+  root, infer its immediate child. At the repository or project root pass --scope.
+  includeScope and protectedPath also enable sparse mode. Protected paths cannot
+  be selected through inference or includes without an explicit scope covering
+  the selected protected content.
+
+  --root is a strict override. Otherwise try each wt.root in configured order,
+  then \${XDG_STATE_HOME:-\$HOME/.local/state}/wt/worktrees.
+  New worktrees use <root>/<repository>-<branch-name>.XXXXXX. Unsafe name
+  characters become hyphens. Returned paths are those registered by Git.
+
+  landGuard runs with /bin/bash -c from the primary checkout, with arguments:
+    \$1 Git common directory, \$2 primary path, \$3 integration branch, \$4 task branch
+  Guard output goes to stderr; any nonzero status refuses land and is propagated.
+  Configure only commands you trust. No companion program is discovered implicitly.
+PRECONDITIONS
+  Run inside a non-bare repository whose primary checkout owns a .git directory
+  and stays on its integration branch. New tasks start from its local HEAD.
+  sync requires a clean task without upstream or matching remote-tracking refs.
+  land requires clean task and primary checkouts and a fast-forward relationship.
+  close requires a clean task contained in integration, or an exact-tree recovery.
+
+  Before start, committed attributes are checked for default and named git-crypt
+  filters in the checkout selection, including cone-mode root and ancestor files.
+  Each needs its matching <common-dir>/git-crypt/keys/<key> file (default for the
+  unnamed key), filter.<filter>.required=true, and clean/smudge drivers. Key
+  contents are never read. Linked worktrees share key state through a Git-admin
+  directory symlink. Locking removes shared key availability but does not remove
+  plaintext already checked out in other worktrees; manage their contents too.
+  Excluded encrypted files need no key. Filters are never disabled. A failed
+  deferred checkout preserves its registered worktree for inspection; ordinary
+  full checkouts use Git's native failure cleanup.
+EXAMPLES
+  $SCRIPT_NAME start feature-search
+  $SCRIPT_NAME start --scope packages/search --scope tools feature-search
+  $SCRIPT_NAME status feature-search
+  $SCRIPT_NAME sync
+  $SCRIPT_NAME land
+  $SCRIPT_NAME close feature-search
+EXIT STATUS
+  0  Success
+  1  Runtime failure or safety refusal
+  2  Invalid usage, configuration, or unsupported repository state
+  3  Missing dependency or unsupported Git version
+  Other nonzero statuses are propagated from a configured landGuard
+DEPENDENCIES
+  Git 2.43+; Bash 3.2+
+  Configured Git filter drivers (when their files are selected)
+  Programs referenced by landGuard (only when land invokes that guard)
+CAVEATS
+  All decisions use local refs; no remote state is refreshed. The primary's
+  checked-out branch is the integration target, not the remote default branch.
+  sync uses --fork-point; primary reflog history can exclude discarded commits.
+  With wt.linearHistory=false, sync uses --rebase-merges. Resolve and inspect any
+  conflicts before continuing. close lets Git delete ignored worktree files and
+  deletes the local task branch. Exact-tree recovery may delete an uncontained
+  branch; --equivalent-tree-at needs a full SHA-1 or SHA-256 ancestor commit ID.
+  Workflow approval belongs to the caller; land does not ask for confirmation.
+
+EOF
+    }
+
+    _expand_short_opts() {
+        # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
+        # $2..$N = "$@"
+        # Populates _EXPANDED; caller does: set -- "${_EXPANDED[@]}"; unset _EXPANDED
+        local value_opts="$1"; shift
+        _EXPANDED=()
+        local passthru=""
+        local arg
+        local rest
+        local c
+        for arg in "$@"; do
+            if [ -n "$passthru" ]; then _EXPANDED+=("$arg"); continue; fi
+            case "$arg" in
+                --)       passthru=1; _EXPANDED+=("$arg") ;;
+                --*|-|"") _EXPANDED+=("$arg") ;;
+                -[a-zA-Z]?*)
+                    rest="${arg#-}"
+                    while [ -n "$rest" ]; do
+                        c="${rest%"${rest#?}"}"; rest="${rest#?}"
+                        _EXPANDED+=("-$c")
+                        case "$value_opts" in *"$c"*)
+                            [ -n "$rest" ] && _EXPANDED+=("$rest")
+                            rest="" ;;
+                        esac
+                    done ;;
+                *)        _EXPANDED+=("$arg") ;;
+            esac
+        done
+    }
+
+    _require_command() {
+        command -v "$1" >/dev/null 2>&1 && return 0
+        _error "$1 is required"
+        return 3
+    }
+
+    _canonical_output_path() {
+        printf '%s\n' "$1"
+    }
+
+    _require_git_version() {
+        local version
+        local major
+        local minor
+        version="$(git --version)" || return 3
+        version="${version#git version }"
+        major="${version%%.*}"
+        version="${version#*.}"
+        minor="${version%%.*}"
+        case "$major:$minor" in *[!0-9:]*|:|*:|:*) _error "Cannot identify Git version"; return 3 ;; esac
+        if [ "$major" -gt 2 ] || { [ "$major" -eq 2 ] && [ "$minor" -ge 43 ]; }; then
+            return 0
+        fi
+        _error "Git 2.43 or newer is required"
+        return 3
+    }
+
+    _config_bool() {
+        local value
+        local rc
+        value="$(git -C "$WT_PRIMARY_PATH" config --bool --get "$1" 2>/dev/null)"
+        rc=$?
+        case "$rc" in
+            0) printf '%s\n' "$value" ;;
+            1) printf '%s\n' "$2" ;;
+            *) _error "$1 must be true or false"; return 2 ;;
+        esac
+    }
+
+    _config_list() {
+        local key="$1"
+        local file
+        local value
+        local rc
+        WT_CONFIG_VALUES=()
+        file="$(mktemp "${TMPDIR:-/tmp}/wt-config.XXXXXX")" || return 1
+        git -C "$WT_PRIMARY_PATH" config -z --get-all "$key" > "$file"
+        rc=$?
+        if [ "$rc" -gt 1 ]; then
+            rm -f -- "$file"
+            _error "Cannot read $key"
+            return 2
+        fi
+        while IFS= read -r -d '' value; do
+            WT_CONFIG_VALUES+=("$value")
+        done < "$file"
+        rm -f -- "$file"
+    }
+
+    _scan_worktrees() {
+        local target_ref="$1"
+        local record_index=0
+        local record_path=""
+        local record_head=""
+        local record_branch=""
+        local record_locked=0
+        local record_prunable=0
+        local record_bare=0
+        local record_detached=0
+        local field
+        local scan_complete=0
+
+        WT_PRIMARY_PATH=""
+        WT_PRIMARY_HEAD=""
+        WT_PRIMARY_BRANCH=""
+        WT_PRIMARY_BARE=0
+        WT_PRIMARY_DETACHED=0
+        WT_TARGET_PATH=""
+        WT_TARGET_LOCKED=0
+        WT_TARGET_PRUNABLE=0
+        WT_TARGET_DETACHED=0
+
+        _capture_worktree_record() {
+            [ -n "$record_path" ] || return 0
+            if [ "$record_index" -eq 0 ]; then
+                WT_PRIMARY_PATH="$record_path"
+                WT_PRIMARY_HEAD="$record_head"
+                WT_PRIMARY_BRANCH="${record_branch#refs/heads/}"
+                WT_PRIMARY_BARE="$record_bare"
+                WT_PRIMARY_DETACHED="$record_detached"
+            fi
+            if [ -n "$target_ref" ] && [ "$record_branch" = "$target_ref" ]; then
+                WT_TARGET_PATH="$record_path"
+                WT_TARGET_LOCKED="$record_locked"
+                WT_TARGET_PRUNABLE="$record_prunable"
+                WT_TARGET_DETACHED="$record_detached"
+            fi
+            record_index=$((record_index + 1))
+            record_path=""
+            record_head=""
+            record_branch=""
+            record_locked=0
+            record_prunable=0
+            record_bare=0
+            record_detached=0
+        }
+
+        while IFS= read -r -d '' field; do
+            case "$field" in
+                __wt_scan_complete__) scan_complete=1 ;;
+                "") _capture_worktree_record ;;
+                "worktree "*) record_path="${field#worktree }" ;;
+                "HEAD "*) record_head="${field#HEAD }" ;;
+                "branch "*) record_branch="${field#branch }" ;;
+                locked|"locked "*) record_locked=1 ;;
+                prunable|"prunable "*) record_prunable=1 ;;
+                bare) record_bare=1 ;;
+                detached) record_detached=1 ;;
+            esac
+        done < <(git -C "$WT_CALLER_TOP" worktree list --porcelain -z && printf '__wt_scan_complete__\0')
+        [ -z "$record_path" ] || _capture_worktree_record
+        unset -f _capture_worktree_record
+        [ "$scan_complete" -eq 1 ] || { _error "Cannot inspect worktree registrations"; return 1; }
+    }
+
+    _load_context() {
+        local inside
+        local repo_base
+        local sanitized
+        local primary_git_dir
+        local common_git_dir
+
+        inside="$(git rev-parse --is-inside-work-tree 2>/dev/null)" || {
+            _error "Run $SCRIPT_NAME inside a Git worktree"
+            return 2
+        }
+        [ "$inside" = true ] || {
+            _error "Bare repositories are not supported"
+            return 2
+        }
+        WT_CALLER_TOP="$(git rev-parse --show-toplevel 2>/dev/null)" || return 2
+        WT_CALLER_TOP_PHYSICAL="$(cd "$WT_CALLER_TOP" && pwd -P)" || return 1
+        WT_CALLER_DIR="$(pwd -P)" || return 1
+        WT_COMMON_DIR="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 2
+        _scan_worktrees "" || return $?
+        [ -n "$WT_PRIMARY_PATH" ] || {
+            _error "Git did not report a primary worktree"
+            return 2
+        }
+        [ "$WT_PRIMARY_BARE" -eq 0 ] || {
+            _error "Bare repositories are not supported"
+            return 2
+        }
+        [ "$WT_PRIMARY_DETACHED" -eq 0 ] && [ -n "$WT_PRIMARY_BRANCH" ] || {
+            _error "The primary worktree must have an integration branch checked out"
+            return 2
+        }
+        [ -d "$WT_PRIMARY_PATH" ] || {
+            _error "The primary worktree is unavailable: $WT_PRIMARY_PATH"
+            return 1
+        }
+        [ -d "$WT_PRIMARY_PATH/.git" ] && [ ! -L "$WT_PRIMARY_PATH/.git" ] || {
+            _error "Primary checkout must own a real .git directory"
+            return 2
+        }
+        primary_git_dir="$(cd "$WT_PRIMARY_PATH/.git" && pwd -P)" || return 1
+        common_git_dir="$(cd "$WT_COMMON_DIR" && pwd -P)" || return 1
+        [ "$primary_git_dir" = "$common_git_dir" ] || {
+            _error "Primary checkout does not own the Git common directory"
+            return 2
+        }
+        WT_INTEGRATION_REF="refs/heads/$WT_PRIMARY_BRANCH"
+        repo_base="${WT_PRIMARY_PATH%/}"
+        repo_base="${repo_base##*/}"
+        repo_base="${repo_base#.}"
+        sanitized="$(printf '%s' "$repo_base" | LC_ALL=C tr -cs 'A-Za-z0-9._-' '-')"
+        sanitized="${sanitized#-}"
+        sanitized="${sanitized%-}"
+        WT_REPO_NAME="${sanitized:-repository}"
+    }
+
+    _validate_branch() {
+        local branch="$1"
+        [ -n "$branch" ] || {
+            _error "A task branch is required"
+            return 2
+        }
+        git check-ref-format --branch "$branch" >/dev/null 2>&1 || {
+            _error "Invalid branch name: $branch"
+            return 2
+        }
+        [ "$branch" != "$WT_PRIMARY_BRANCH" ] || {
+            _error "The integration branch is not a task branch: $branch"
+            return 2
+        }
+    }
+
+    _resolve_branch() {
+        local supplied="${1:-}"
+        local branch
+        if [ -n "$supplied" ]; then
+            branch="$supplied"
+        else
+            branch="$(git -C "$WT_CALLER_TOP" symbolic-ref --quiet --short HEAD 2>/dev/null)" || {
+                _error "A branch is required when the current worktree is detached"
+                return 2
+            }
+            [ "$branch" != "$WT_PRIMARY_BRANCH" ] || {
+                _error "A task branch is required from the primary worktree"
+                return 2
+            }
+        fi
+        _validate_branch "$branch" || return $?
+        WT_TASK_BRANCH="$branch"
+        WT_TASK_REF="refs/heads/$branch"
+    }
+
+    _branch_exists() {
+        local rc
+        git -C "$WT_PRIMARY_PATH" show-ref --verify --quiet "$1"
+        rc=$?
+        case "$rc" in
+            0|1) return "$rc" ;;
+            *) _error "Cannot inspect local branch: $1"; return 2 ;;
+        esac
+    }
+
+    _select_root() {
+        local explicit="$1"
+        local candidate
+        local state_base
+
+        if [ -n "$explicit" ]; then
+            case "$explicit" in
+                /*) ;;
+                *) _error "--root must be an absolute path"; return 2 ;;
+            esac
+            mkdir -p "$explicit" 2>/dev/null || {
+                _error "Cannot create worktree root: $explicit"
+                return 1
+            }
+            [ -d "$explicit" ] && [ -w "$explicit" ] || {
+                _error "Worktree root is not a writable directory: $explicit"
+                return 1
+            }
+            WT_ROOT="$explicit"
+            return 0
+        fi
+
+        _config_list wt.root || return $?
+        for candidate in "${WT_CONFIG_VALUES[@]}"; do
+            case "$candidate" in
+                /*) ;;
+                *) _error "wt.root requires absolute candidate paths"; return 2 ;;
+            esac
+        done
+        for candidate in "${WT_CONFIG_VALUES[@]}"; do
+            if mkdir -p "$candidate" 2>/dev/null && [ -d "$candidate" ] && [ -w "$candidate" ]; then
+                WT_ROOT="$candidate"
+                return 0
+            fi
+        done
+
+        if [ -n "${XDG_STATE_HOME:-}" ]; then
+            case "$XDG_STATE_HOME" in
+                /*) state_base="$XDG_STATE_HOME" ;;
+                *) _error "XDG_STATE_HOME must be an absolute path"; return 2 ;;
+            esac
+        elif [ -n "${HOME:-}" ]; then
+            state_base="$HOME/.local/state"
+        else
+            _error "No usable worktree root and HOME is unset"
+            return 1
+        fi
+        candidate="$state_base/wt/worktrees"
+        mkdir -p "$candidate" 2>/dev/null || {
+            _error "Cannot create XDG worktree root: $candidate"
+            return 1
+        }
+        [ -d "$candidate" ] && [ -w "$candidate" ] || {
+            _error "XDG worktree root is not writable: $candidate"
+            return 1
+        }
+        WT_ROOT="$candidate"
+    }
+
+    _uses_sparse_worktrees() {
+        [ "$WT_SPARSE" = true ]
+    }
+
+    _load_start_policy() {
+        local value
+        local key
+        WT_SPARSE="$(_config_bool wt.sparseWorktrees false)" || return $?
+        [ "${#WT_REQUESTED_SCOPES[@]}" -eq 0 ] || WT_SPARSE=true
+        for key in wt.projectRoot wt.includeScope wt.protectedPath; do
+            _config_list "$key" || return $?
+            for value in "${WT_CONFIG_VALUES[@]}"; do
+                value="$(_normalize_scope "$value")" || return $?
+                _require_scope_tree "$value" || return $?
+                case "$key" in
+                    wt.projectRoot) WT_PROJECT_ROOTS+=("$value") ;;
+                    wt.includeScope) WT_INCLUDED_SCOPES+=("$value"); WT_SPARSE=true ;;
+                    wt.protectedPath) WT_PROTECTED_PATHS+=("$value"); WT_SPARSE=true ;;
+                esac
+            done
+        done
+    }
+
+    _append_scope() {
+        local candidate="$1"
+        local existing
+        for existing in "${WT_SCOPES[@]}"; do
+            [ "$existing" = "$candidate" ] && return 0
+        done
+        WT_SCOPES+=("$candidate")
+    }
+
+    _normalize_scope() {
+        local scope="$1"
+        while [ "${scope#./}" != "$scope" ]; do scope="${scope#./}"; done
+        while [ "${scope%/}" != "$scope" ]; do scope="${scope%/}"; done
+        [ -n "$scope" ] && [ "$scope" != . ] || {
+            _error "Sparse scope must name a subtree"
+            return 2
+        }
+        case "$scope" in
+            /*|-*|..|../*|*/../*|*/..|*//*|*/./*|*/.|*$'\n'*|*$'\r'*) _error "Unsafe sparse scope: $scope"; return 2 ;;
+        esac
+        printf '%s\n' "$scope"
+    }
+
+    _worktree_name() {
+        local name; name="$(printf '%s' "$1" | LC_ALL=C tr -cs 'A-Za-z0-9._-' '-')"
+        name="${name#-}"
+        name="${name%-}"
+        printf '%s\n' "${name:-task}"
+    }
+
+    _infer_scope() {
+        local relative
+        local project_root
+        local selected_root=""
+        local remainder
+        case "$WT_CALLER_DIR/" in
+            "$WT_CALLER_TOP_PHYSICAL/") return 1 ;;
+            "$WT_CALLER_TOP_PHYSICAL/"*) relative="${WT_CALLER_DIR#"$WT_CALLER_TOP_PHYSICAL/"}" ;;
+            *) return 1 ;;
+        esac
+        for project_root in "${WT_PROJECT_ROOTS[@]}"; do
+            case "$relative/" in
+                "$project_root/"*)
+                    if [ "${#project_root}" -gt "${#selected_root}" ]; then
+                        selected_root="$project_root"
+                    fi
+                    ;;
+            esac
+        done
+        if [ -n "$selected_root" ]; then
+            [ "$relative" != "$selected_root" ] || return 1
+            remainder="${relative#"$selected_root/"}"
+            printf '%s/%s\n' "$selected_root" "${remainder%%/*}"
+        else
+            printf '%s\n' "${relative%%/*}"
+        fi
+    }
+
+    _paths_overlap() {
+        case "$1/" in "$2/"*) return 0 ;; esac
+        case "$2/" in "$1/"*) return 0 ;; esac
+        return 1
+    }
+
+    _require_explicit_protected_scopes() {
+        local protected
+        local scope
+        local requested
+        local explicit
+        local selected_protected
+        for protected in "${WT_PROTECTED_PATHS[@]}"; do
+            for scope in "${WT_SCOPES[@]}"; do
+                _paths_overlap "$protected" "$scope" || continue
+                explicit=0
+                selected_protected="$protected"
+                case "$scope/" in "$protected/"*) selected_protected="$scope" ;; esac
+                for requested in "${WT_REQUESTED_SCOPES[@]}"; do
+                    requested="$(_normalize_scope "$requested")" || return $?
+                    case "$selected_protected/" in "$requested/"*) explicit=1 ;; esac
+                done
+                [ "$explicit" -eq 1 ] || {
+                    _error "Protected path '$protected' requires an explicit --scope"
+                    return 1
+                }
+            done
+        done
+    }
+
+    _checkout_path_selected() {
+        local path="$1"
+        local scope
+        local parent
+        _uses_sparse_worktrees || return 0
+        case "$path" in */*) parent="${path%/*}" ;; *) return 0 ;; esac
+        for scope in "${WT_SCOPES[@]}"; do
+            case "$path" in "$scope/"*) return 0 ;; esac
+            case "$scope/" in "$parent/"*) return 0 ;; esac
+        done
+        return 1
+    }
+
+    _require_checkout_filters() (
+        local inspection
+        local path
+        local attribute
+        local filter
+        local key
+        local required
+        local driver
+        local value
+        local encrypted=false
+        inspection="$(mktemp -d "${TMPDIR:-/tmp}/wt-filters.XXXXXX")" || return 1
+        trap 'rm -f -- "$inspection/all" "$inspection/paths" "$inspection/attributes"; rmdir "$inspection"' EXIT
+        git -C "$WT_PRIMARY_PATH" ls-tree -rz --name-only "$WT_START_HEAD" > "$inspection/all" || return 1
+        : > "$inspection/paths"
+        while IFS= read -r -d '' path; do
+            if _checkout_path_selected "$path"; then
+                printf '%s\0' "$path" >> "$inspection/paths"
+            fi
+        done < "$inspection/all"
+        git -C "$WT_PRIMARY_PATH" check-attr --source="$WT_START_HEAD" --stdin -z filter < "$inspection/paths" > "$inspection/attributes" || {
+            _error "Cannot inspect committed checkout filters"
+            return 1
+        }
+        while IFS= read -r -d '' path && IFS= read -r -d '' attribute && IFS= read -r -d '' filter; do
+            [ "$attribute" = filter ] || { _error "Cannot parse checkout filter attributes"; return 1; }
+            case "$filter" in
+                git-crypt) key=default ;;
+                git-crypt-*) key="${filter#git-crypt-}" ;;
+                *) continue ;;
+            esac
+            encrypted=true
+            case "$key" in ''|.|..|*[!A-Za-z0-9._-]*) _error "Unsafe git-crypt key name for '$path'"; return 1 ;; esac
+            required="$(git -C "$WT_PRIMARY_PATH" config --bool --get "filter.$filter.required" 2>/dev/null)" || required=false
+            if [ ! -f "$WT_COMMON_DIR/git-crypt/keys/$key" ] || [ "$required" != true ]; then
+                _error "Checkout path '$path' requires an unlocked $filter key and required filter"
+                return 1
+            fi
+            for driver in clean smudge; do
+                value="$(git -C "$WT_PRIMARY_PATH" config --get "filter.$filter.$driver")" || value=""
+                [ -n "$value" ] || {
+                    _error "Checkout path '$path' requires filter.$filter.$driver"
+                    return 1
+                }
+            done
+        done < "$inspection/attributes"
+        printf '%s\n' "$encrypted"
+    )
+
+    _require_scope_tree() {
+        local object_type; object_type="$(git -C "$WT_PRIMARY_PATH" cat-file -t "$WT_START_HEAD:$1" 2>/dev/null)" || {
+            _error "Sparse directory is not present at the checkout commit: $1"
+            return 2
+        }
+        [ "$object_type" = tree ] || {
+            _error "Sparse scope is not a directory: $1"
+            return 2
+        }
+    }
+
+    _prepare_sparse_scopes() {
+        local requested
+        local scope
+        local inferred
+        WT_SCOPES=()
+
+        if [ "${#WT_REQUESTED_SCOPES[@]}" -eq 0 ]; then
+            inferred="$(_infer_scope)" || {
+                _error "Cannot infer a sparse scope from the repository root; pass --scope"
+                return 2
+            }
+            _append_scope "$inferred"
+        fi
+
+        for requested in "${WT_SCOPES[@]}" "${WT_REQUESTED_SCOPES[@]}" "${WT_INCLUDED_SCOPES[@]}"; do
+            scope="$(_normalize_scope "$requested")" || return $?
+            _require_scope_tree "$scope" || return $?
+            _append_scope "$scope"
+        done
+
+        _require_explicit_protected_scopes
+    }
+
+    _remove_empty_start_path() {
+        local worktree="$1"
+        [ ! -d "$worktree" ] || rmdir "$worktree" 2>/dev/null || :
+    }
+
+    _link_git_crypt_state() {
+        local worktree="$1"
+        local target_git_dir
+        local common_state="$WT_COMMON_DIR/git-crypt"
+        local existing_state
+        [ -d "$common_state" ] || return 0
+        target_git_dir="$(git -C "$worktree" rev-parse --path-format=absolute --git-dir)" || return 1
+        if [ -e "$target_git_dir/git-crypt" ] || [ -L "$target_git_dir/git-crypt" ]; then
+            existing_state="$(cd "$target_git_dir/git-crypt" && pwd -P)" || return 1
+            [ "$existing_state" = "$(cd "$common_state" && pwd -P)" ] || {
+                _error "Worktree already has separate git-crypt state; preserved for inspection"
+                return 1
+            }
+        else
+            ln -s "$common_state" "$target_git_dir/git-crypt" || {
+                _error "Cannot link shared git-crypt state; worktree preserved for inspection"
+                return 1
+            }
+        fi
+    }
+
+    _start() {
+        local branch="$1"
+        local root_override="$2"
+        local worktree
+        local requested_worktree
+        local requested_physical
+        local registered_physical
+        local worktree_name
+        local created_branch=0
+        local encrypted
+        local branch_state
+        local -a checkout_options=()
+
+        _validate_branch "$branch" || return $?
+        WT_TASK_BRANCH="$branch"
+        WT_TASK_REF="refs/heads/$branch"
+        _scan_worktrees "$WT_TASK_REF" || return $?
+
+        if [ -n "$WT_TARGET_PATH" ]; then
+            [ "$WT_TARGET_PRUNABLE" -eq 0 ] && [ -d "$WT_TARGET_PATH" ] || {
+                _error "The branch has a missing or prunable worktree registration: $WT_TARGET_PATH"
+                return 1
+            }
+            [ "$WT_TARGET_LOCKED" -eq 0 ] || {
+                _error "The branch is checked out in a locked worktree: $WT_TARGET_PATH"
+                return 1
+            }
+            _info "Resuming $branch"
+            _canonical_output_path "$WT_TARGET_PATH"
+            return 0
+        fi
+
+        WT_START_HEAD="$WT_PRIMARY_HEAD"
+        _branch_exists "$WT_TASK_REF"
+        branch_state=$?
+        [ "$branch_state" -le 1 ] || return 1
+        if [ "$branch_state" -eq 0 ]; then
+            WT_START_HEAD="$(git -C "$WT_PRIMARY_PATH" rev-parse "$WT_TASK_REF")" || return 1
+        fi
+        _load_start_policy || return $?
+        if _uses_sparse_worktrees; then
+            _prepare_sparse_scopes || return $?
+        fi
+        encrypted="$(_require_checkout_filters)" || return $?
+        if _uses_sparse_worktrees || [ "$encrypted" = true ]; then
+            checkout_options+=(--no-checkout)
+        fi
+        _select_root "$root_override" || return $?
+        worktree_name="$(_worktree_name "$branch")" || return 1
+        worktree="$(mktemp -d "$WT_ROOT/$WT_REPO_NAME-$worktree_name.XXXXXX")" || {
+            _error "Cannot reserve a worktree path under $WT_ROOT"
+            return 1
+        }
+        requested_worktree="$worktree"
+
+        if [ "$branch_state" -eq 0 ]; then
+            _info "Attaching existing branch $branch"
+            git -C "$WT_PRIMARY_PATH" worktree add "${checkout_options[@]}" "$worktree" "$branch" >&2 || {
+                _remove_empty_start_path "$worktree"
+                return 1
+            }
+        else
+            created_branch=1
+            _info "Creating $branch from $WT_PRIMARY_BRANCH at $WT_PRIMARY_HEAD"
+            git -C "$WT_PRIMARY_PATH" worktree add "${checkout_options[@]}" -b "$branch" "$worktree" "$WT_PRIMARY_HEAD" >&2 || {
+                _remove_empty_start_path "$worktree"
+                return 1
+            }
+        fi
+        _link_git_crypt_state "$worktree" || return $?
+
+        if _uses_sparse_worktrees; then
+            if ! git -C "$worktree" sparse-checkout init --cone >&2 ||
+                ! git -C "$worktree" sparse-checkout set "${WT_SCOPES[@]}" >&2; then
+                _error "Sparse checkout failed; the registered worktree and branch were preserved for inspection"
+                return 1
+            fi
+        fi
+        if [ "${#checkout_options[@]}" -gt 0 ] && ! git -C "$worktree" checkout "$branch" >&2; then
+            _error "Checkout failed; the registered worktree and branch were preserved for inspection"
+            return 1
+        fi
+
+        _scan_worktrees "$WT_TASK_REF" || return $?
+        [ -n "$WT_TARGET_PATH" ] && [ -d "$WT_TARGET_PATH" ] || {
+            _error "Git did not report the new worktree at the expected path"
+            return 1
+        }
+        requested_physical="$(cd "$requested_worktree" && pwd -P)" || return 1
+        registered_physical="$(cd "$WT_TARGET_PATH" && pwd -P)" || return 1
+        [ "$requested_physical" = "$registered_physical" ] || {
+            _error "Git registered the new worktree at an unexpected path: $WT_TARGET_PATH"
+            return 1
+        }
+        worktree="$WT_TARGET_PATH"
+        if [ "$created_branch" -eq 1 ]; then
+            _info "Created worktree for $branch"
+        else
+            _info "Attached worktree for $branch"
+        fi
+        _canonical_output_path "$worktree"
+    }
+
+    _operation_name() {
+        local worktree="$1"
+        local name
+        local path
+        for name in MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD BISECT_LOG rebase-merge rebase-apply sequencer; do
+            path="$(git -C "$worktree" rev-parse --path-format=absolute --git-path "$name" 2>/dev/null)" || return 2
+            if [ -e "$path" ]; then
+                printf '%s\n' "$name"
+                return 0
+            fi
+        done
+        return 1
+    }
+
+    _has_changes() {
+        local changes; changes="$(git -C "$1" status --porcelain=v1 --untracked-files=all)" || return 2
+        [ -n "$changes" ]
+    }
+
+    _has_ignored_files() {
+        local ignored; ignored="$(git -C "$1" ls-files --others --ignored --exclude-standard --directory)" || return 2
+        [ -n "$ignored" ]
+    }
+
+    _has_published_ref() {
+        local branch="$1"
+        local ref
+        local refs
+        local upstream; upstream="$(git -C "$WT_PRIMARY_PATH" for-each-ref --format='%(upstream)' "refs/heads/$branch")" || return 2
+        [ -z "$upstream" ] || return 0
+        refs="$(git -C "$WT_PRIMARY_PATH" for-each-ref --format='%(refname)' refs/remotes)" || return 2
+        for ref in $refs; do
+            case "$ref" in refs/remotes/*/"$branch") return 0 ;; esac
+        done
+        return 1
+    }
+
+    _load_task() {
+        local supplied="${1:-}"
+        local branch_state
+        _resolve_branch "$supplied" || return $?
+        _branch_exists "$WT_TASK_REF"
+        branch_state=$?
+        [ "$branch_state" -le 1 ] || return 1
+        [ "$branch_state" -eq 0 ] || {
+            _error "Local task branch does not exist: $WT_TASK_BRANCH"
+            return 1
+        }
+        _scan_worktrees "$WT_TASK_REF" || return $?
+    }
+
+    _require_available_task_worktree() {
+        [ -n "$WT_TARGET_PATH" ] || {
+            _error "Task branch is not attached to a worktree: $WT_TASK_BRANCH"
+            return 1
+        }
+        [ "$WT_TARGET_PATH" != "$WT_PRIMARY_PATH" ] || {
+            _error "The primary checkout cannot be used as a task worktree"
+            return 2
+        }
+        [ "$WT_TARGET_PRUNABLE" -eq 0 ] && [ -d "$WT_TARGET_PATH" ] || {
+            _error "Task worktree is missing or prunable: $WT_TARGET_PATH"
+            return 1
+        }
+        [ "$WT_TARGET_DETACHED" -eq 0 ] || {
+            _error "Task worktree is detached: $WT_TARGET_PATH"
+            return 1
+        }
+    }
+
+    _require_unlocked_task() {
+        [ "$WT_TARGET_LOCKED" -eq 0 ] || {
+            _error "Task worktree is locked: $WT_TARGET_PATH"
+            return 1
+        }
+    }
+
+    _require_clean() {
+        local worktree="$1"
+        local label="$2"
+        local rc
+        _has_changes "$worktree"
+        rc=$?
+        if [ "$rc" -gt 1 ]; then
+            _error "Cannot inspect $label cleanliness"
+            return 1
+        fi
+        if [ "$rc" -eq 0 ]; then
+            _error "$label has tracked or untracked changes: $worktree"
+            git -C "$worktree" status --short >&2
+            return 1
+        fi
+    }
+
+    _require_no_operation() {
+        local worktree="$1"
+        local label="$2"
+        local operation
+        local rc
+        operation="$(_operation_name "$worktree")"
+        rc=$?
+        [ "$rc" -ne 1 ] || return 0
+        [ "$rc" -eq 0 ] || { _error "Cannot inspect $label Git operations"; return 1; }
+        _error "$label has an in-progress Git operation: $operation"
+        return 1
+    }
+
+    _relation() {
+        local rc
+        git -C "$WT_PRIMARY_PATH" merge-base --is-ancestor "$WT_TASK_REF" "$WT_INTEGRATION_REF"
+        rc=$?
+        [ "$rc" -ne 0 ] || { printf 'integrated\n'; return 0; }
+        [ "$rc" -eq 1 ] || { _error "Cannot compare Git ancestry"; return 1; }
+        git -C "$WT_PRIMARY_PATH" merge-base --is-ancestor "$WT_INTEGRATION_REF" "$WT_TASK_REF"
+        rc=$?
+        [ "$rc" -ne 0 ] || { printf 'landable\n'; return 0; }
+        [ "$rc" -eq 1 ] || { _error "Cannot compare Git ancestry"; return 1; }
+        printf 'diverged\n'
+    }
+
+    _linear_history_policy() {
+        _config_bool wt.linearHistory true
+    }
+
+    _task_merge_commit() {
+        git -C "$WT_PRIMARY_PATH" rev-list --merges --max-count=1 "$WT_INTEGRATION_REF..$WT_TASK_REF"
+    }
+
+    _status() {
+        local supplied="${1:-}"
+        local relation
+        local task_state=available
+        local clean=unknown
+        local ignored=unknown
+        local operation=unknown
+        local locked=no
+        local next
+        local linear_history
+        local task_merge
+        local rc
+
+        _load_task "$supplied" || return $?
+        relation="$(_relation)" || return 1
+        linear_history="$(_linear_history_policy)" || return $?
+        task_merge="$(_task_merge_commit)" || return $?
+        if [ -z "$WT_TARGET_PATH" ]; then
+            task_state="not attached"
+            clean="not inspected"
+            ignored="not inspected"
+            operation="not inspected"
+            next="$SCRIPT_NAME start $WT_TASK_BRANCH"
+        elif [ "$WT_TARGET_PRUNABLE" -ne 0 ] || [ ! -d "$WT_TARGET_PATH" ]; then
+            task_state="missing or prunable"
+            clean="not inspected"
+            ignored="not inspected"
+            operation="not inspected"
+            next="inspect the missing registration"
+        else
+            _has_changes "$WT_TARGET_PATH"
+            case "$?" in
+                0) clean=no ;;
+                1) clean=yes ;;
+                *) _error "Cannot inspect task cleanliness"; return 1 ;;
+            esac
+            _has_ignored_files "$WT_TARGET_PATH"
+            case "$?" in
+                0) ignored=yes ;;
+                1) ignored=no ;;
+                *) _error "Cannot inspect ignored task files"; return 1 ;;
+            esac
+            operation="$(_operation_name "$WT_TARGET_PATH")"
+            rc=$?
+            case "$rc" in
+                0) ;;
+                1) operation=none ;;
+                *) _error "Cannot inspect task Git operations"; return 1 ;;
+            esac
+            [ "$WT_TARGET_LOCKED" -eq 0 ] || locked=yes
+            if [ "$clean" != yes ] || [ "$operation" != none ] || [ "$locked" != no ]; then
+                next="resolve task worktree blockers"
+            elif [ "$relation" = integrated ]; then
+                next="$SCRIPT_NAME close $WT_TASK_BRANCH"
+            elif [ "$linear_history" = true ] && [ -n "$task_merge" ]; then
+                next="inspect and flatten task merge commits before sync or land"
+            elif [ "$relation" = landable ]; then
+                next="$SCRIPT_NAME land $WT_TASK_BRANCH after approval"
+            else
+                next="$SCRIPT_NAME sync $WT_TASK_BRANCH"
+            fi
+        fi
+
+        printf 'REPOSITORY          %s\n' "$WT_REPO_NAME"
+        printf 'PRIMARY             %s\n' "$(_canonical_output_path "$WT_PRIMARY_PATH")"
+        printf 'INTEGRATION_BRANCH  %s\n' "$WT_PRIMARY_BRANCH"
+        printf 'TASK_BRANCH         %s\n' "$WT_TASK_BRANCH"
+        if [ -n "$WT_TARGET_PATH" ]; then
+            printf 'WORKTREE            %s\n' "$(_canonical_output_path "$WT_TARGET_PATH")"
+        else
+            printf 'WORKTREE            %s\n' "$task_state"
+        fi
+        printf 'STATE               %s\n' "$task_state"
+        printf 'CLEAN               %s\n' "$clean"
+        printf 'IGNORED_FILES       %s\n' "$ignored"
+        printf 'LOCKED              %s\n' "$locked"
+        printf 'OPERATION           %s\n' "$operation"
+        printf 'RELATION            %s\n' "$relation"
+        printf 'LINEAR_HISTORY      %s\n' "$linear_history"
+        printf 'TASK_MERGE_COMMIT   %s\n' "${task_merge:-none}"
+        printf 'NEXT                 %s\n' "$next"
+    }
+
+    _sync() {
+        local supplied="${1:-}"
+        local linear_history
+        local task_merge
+        local fork_point
+        local published
+        local skipped
+        local -a rebase_options=()
+        _load_task "$supplied" || return $?
+        _require_available_task_worktree || return $?
+        _require_unlocked_task || return $?
+        _require_clean "$WT_TARGET_PATH" "Task worktree" || return $?
+        _require_no_operation "$WT_TARGET_PATH" "Task worktree" || return $?
+        _has_published_ref "$WT_TASK_BRANCH"
+        published=$?
+        [ "$published" -le 1 ] || { _error "Cannot inspect task publication refs"; return 1; }
+        if [ "$published" -eq 0 ]; then
+            _error "Refusing to rebase a branch with an upstream or matching remote-tracking ref: $WT_TASK_BRANCH"
+            return 1
+        fi
+        linear_history="$(_linear_history_policy)" || return $?
+        task_merge="$(_task_merge_commit)" || return $?
+        if [ "$linear_history" = true ] && [ -n "$task_merge" ]; then
+            _error "$WT_TASK_BRANCH contains merge commit $task_merge; inspect and flatten it before sync or set wt.linearHistory=false for intentional merges"
+            return 1
+        fi
+        [ "$linear_history" = true ] || rebase_options+=(--rebase-merges)
+        # The primary branch's reflog finds the task's real base after the primary
+        # was rewritten (e.g. rebased onto its upstream), so the primary's pre-rewrite
+        # commits are not replayed as if they were task commits
+        if fork_point="$(git -C "$WT_TARGET_PATH" merge-base --fork-point "$WT_INTEGRATION_REF" HEAD 2>/dev/null)"; then
+            skipped="$(git -C "$WT_TARGET_PATH" rev-list --count "$fork_point" --not "$WT_INTEGRATION_REF")" || return 1
+            case "$skipped" in
+                0) ;;
+                1) _info "$WT_PRIMARY_BRANCH was rewritten; skipping 1 commit from its earlier history" ;;
+                *) _info "$WT_PRIMARY_BRANCH was rewritten; skipping $skipped commits from its earlier history" ;;
+            esac
+        fi
+        _info "Rebasing $WT_TASK_BRANCH onto $WT_PRIMARY_BRANCH"
+        git -C "$WT_TARGET_PATH" rebase --fork-point "${rebase_options[@]}" "$WT_INTEGRATION_REF" >&2 || {
+            _error "Rebase did not complete; inspect the task worktree before continuing"
+            return 1
+        }
+        _canonical_output_path "$WT_TARGET_PATH"
+    }
+
+    _require_land_policy() {
+        local guard
+        local rc
+        _config_list wt.landGuard || return $?
+        for guard in "${WT_CONFIG_VALUES[@]}"; do
+            [ -n "$guard" ] || { _error "wt.landGuard requires a trusted Bash command"; return 2; }
+            (cd "$WT_PRIMARY_PATH" && /bin/bash -c "$guard" "$SCRIPT_NAME-land-guard" "$WT_COMMON_DIR" "$WT_PRIMARY_PATH" "$WT_PRIMARY_BRANCH" "$WT_TASK_BRANCH") >&2
+            rc=$?
+            [ "$rc" -eq 0 ] || { _error "Local integration guard refused land (exit $rc)"; return "$rc"; }
+        done
+    }
+
+    _land() {
+        local supplied="${1:-}"
+        local relation
+        local primary_head
+        local task_head
+        local primary_tree
+        local task_tree
+        local linear_history
+        local task_merge
+
+        _load_task "$supplied" || return $?
+        _require_land_policy || return $?
+        _require_available_task_worktree || return $?
+        _require_unlocked_task || return $?
+        _require_clean "$WT_TARGET_PATH" "Task worktree" || return $?
+        _require_no_operation "$WT_TARGET_PATH" "Task worktree" || return $?
+        _require_clean "$WT_PRIMARY_PATH" "Primary worktree" || return $?
+        _require_no_operation "$WT_PRIMARY_PATH" "Primary worktree" || return $?
+        relation="$(_relation)" || {
+            _error "Cannot compare task and integration branches"
+            return 1
+        }
+        if [ "$relation" = integrated ]; then
+            _info "$WT_TASK_BRANCH is already integrated into $WT_PRIMARY_BRANCH"
+            _canonical_output_path "$WT_PRIMARY_PATH"
+            return 0
+        fi
+        [ "$relation" = landable ] || {
+            _error "$WT_TASK_BRANCH is not a fast-forward of $WT_PRIMARY_BRANCH; run $SCRIPT_NAME sync"
+            return 1
+        }
+        linear_history="$(_linear_history_policy)" || return $?
+        task_merge="$(_task_merge_commit)" || return $?
+        if [ "$linear_history" = true ] && [ -n "$task_merge" ]; then
+            _error "$WT_TASK_BRANCH contains merge commit $task_merge; refusing to add it to $WT_PRIMARY_BRANCH"
+            return 1
+        fi
+        _info "Fast-forwarding $WT_PRIMARY_BRANCH to $WT_TASK_BRANCH"
+        git -C "$WT_PRIMARY_PATH" merge --ff-only "$WT_TASK_REF" >&2 || return 1
+        primary_head="$(git -C "$WT_PRIMARY_PATH" rev-parse HEAD)" || return 1
+        task_head="$(git -C "$WT_TARGET_PATH" rev-parse HEAD)" || return 1
+        primary_tree="$(git -C "$WT_PRIMARY_PATH" rev-parse 'HEAD^{tree}')" || return 1
+        task_tree="$(git -C "$WT_TARGET_PATH" rev-parse 'HEAD^{tree}')" || return 1
+        [ "$primary_head" = "$task_head" ] && [ "$primary_tree" = "$task_tree" ] || {
+            _error "Post-land verification did not find matching commits and trees"
+            return 1
+        }
+        _info "Verified local integration of $WT_TASK_BRANCH"
+        _canonical_output_path "$WT_PRIMARY_PATH"
+    }
+
+    _verify_close_identity() {
+        local target_git_dir
+        local target_common_dir
+        local expected_prefix="$WT_COMMON_DIR/worktrees/"
+
+        [ -d "$WT_PRIMARY_PATH/.git" ] || {
+            _error "Primary checkout does not own a real .git directory: $WT_PRIMARY_PATH"
+            return 1
+        }
+        [ -f "$WT_TARGET_PATH/.git" ] || {
+            _error "Task worktree does not have a linked .git file: $WT_TARGET_PATH"
+            return 1
+        }
+        target_git_dir="$(git -C "$WT_TARGET_PATH" rev-parse --path-format=absolute --git-dir 2>/dev/null)" || return 1
+        target_common_dir="$(git -C "$WT_TARGET_PATH" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 1
+        [ "$target_common_dir" = "$WT_COMMON_DIR" ] || {
+            _error "Task worktree points at a different common Git directory"
+            return 1
+        }
+        case "$target_git_dir/" in
+            "$expected_prefix"*) ;;
+            *) _error "Task administration directory is outside the primary worktree registry"; return 1 ;;
+        esac
+    }
+
+    _verify_metadata() {
+        local marker="$1"
+        local version
+        local common_dir
+        local branch_ref
+        local worktree
+        WT_PARENT_OWNED=0
+        [ -e "$marker" ] || return 0
+        [ -f "$marker" ] || {
+            _error "Wrapper metadata is not a regular file: $marker"
+            return 1
+        }
+        version="$(git config --file "$marker" --get wt.version 2>/dev/null)" || return 1
+        common_dir="$(git config --file "$marker" --get wt.commondir 2>/dev/null)" || return 1
+        branch_ref="$(git config --file "$marker" --get wt.branchref 2>/dev/null)" || return 1
+        worktree="$(git config --file "$marker" --get wt.worktree 2>/dev/null)" || return 1
+        [ "$version" = 1 ] &&
+            [ "$common_dir" = "$WT_COMMON_DIR" ] &&
+            [ "$branch_ref" = "$WT_TASK_REF" ] &&
+            [ "$worktree" = "$WT_TARGET_PATH" ] || {
+                _error "Wrapper metadata does not match the live worktree registration: $marker"
+                return 1
+            }
+        WT_PARENT_OWNED=1
+    }
+
+    _close() {
+        local supplied="${1:-}"
+        local equivalent_tree="${2:-0}"
+        local equivalent_tree_at="${3:-}"
+        local replayed=0
+        local primary_tree
+        local task_tree
+        local parent
+        local parent_name
+        local marker
+        local ancestry
+        local branch_state
+
+        _load_task "$supplied" || return $?
+        _require_available_task_worktree || return $?
+        _require_unlocked_task || return $?
+        _verify_close_identity || return $?
+        _require_clean "$WT_TARGET_PATH" "Task worktree" || return $?
+        _require_no_operation "$WT_TARGET_PATH" "Task worktree" || return $?
+        _require_no_operation "$WT_PRIMARY_PATH" "Primary worktree" || return $?
+        git -C "$WT_PRIMARY_PATH" merge-base --is-ancestor "$WT_TASK_REF" "$WT_INTEGRATION_REF"
+        ancestry=$?
+        [ "$ancestry" -le 1 ] || { _error "Cannot inspect task ancestry before cleanup"; return 1; }
+        if [ "$ancestry" -eq 1 ]; then
+            [ "$equivalent_tree" -eq 1 ] || [ -n "$equivalent_tree_at" ] || {
+                _error "$WT_TASK_BRANCH has commits not contained in $WT_PRIMARY_BRANCH"
+                return 1
+            }
+            if [ -n "$equivalent_tree_at" ]; then
+                case "$equivalent_tree_at" in *[!0-9a-f]*|"") _error "--equivalent-tree-at requires a commit ID"; return 2 ;; esac
+                [ "${#equivalent_tree_at}" -eq "${#WT_PRIMARY_HEAD}" ] || { _error "--equivalent-tree-at requires a full commit ID"; return 2; }
+                git -C "$WT_PRIMARY_PATH" merge-base --is-ancestor "$equivalent_tree_at" "$WT_INTEGRATION_REF" || {
+                    _error "$equivalent_tree_at is not an ancestor of $WT_PRIMARY_BRANCH"
+                    return 1
+                }
+                primary_tree="$(git -C "$WT_PRIMARY_PATH" rev-parse "$equivalent_tree_at^{tree}")" || return 1
+            else
+                primary_tree="$(git -C "$WT_PRIMARY_PATH" rev-parse "$WT_INTEGRATION_REF^{tree}")" || return 1
+            fi
+            task_tree="$(git -C "$WT_PRIMARY_PATH" rev-parse "$WT_TASK_REF^{tree}")" || return 1
+            [ "$primary_tree" = "$task_tree" ] || {
+                _error "$WT_TASK_BRANCH does not match the tree of $WT_PRIMARY_BRANCH"
+                return 1
+            }
+            replayed=1
+        fi
+
+        parent="${WT_TARGET_PATH%/*}"
+        parent_name="${parent##*/}"
+        marker=""
+        case "$parent_name" in
+            "$WT_REPO_NAME-worktree."*) marker="$parent/.wt-metadata" ;;
+        esac
+        if [ -n "$marker" ]; then
+            _verify_metadata "$marker" || return $?
+        else
+            WT_PARENT_OWNED=0
+        fi
+        cd "$WT_PRIMARY_PATH" || return 1
+        _info "Removing integrated worktree $WT_TARGET_PATH"
+        git worktree remove "$WT_TARGET_PATH" >&2 || return 1
+        _scan_worktrees "$WT_TASK_REF" || return $?
+        [ -z "$WT_TARGET_PATH" ] || {
+            _error "Git still reports a worktree for $WT_TASK_BRANCH"
+            return 1
+        }
+        if [ "$replayed" -eq 1 ]; then
+            git branch -D "$WT_TASK_BRANCH" >&2
+        else
+            git branch -d "$WT_TASK_BRANCH" >&2
+        fi || {
+            _error "Worktree removal succeeded but the local branch was retained: $WT_TASK_BRANCH"
+            return 1
+        }
+        _branch_exists "$WT_TASK_REF"
+        branch_state=$?
+        [ "$branch_state" -le 1 ] || return 1
+        [ "$branch_state" -ne 0 ] || {
+            _error "Git still reports the local task branch after deletion"
+            return 1
+        }
+        if [ "$WT_PARENT_OWNED" -eq 1 ]; then
+            rm -f -- "$marker"
+            if ! rmdir "$parent" 2>/dev/null; then
+                _warn "Wrapper parent contains other files and was preserved: $parent"
+            fi
+        fi
+        _info "Closed $WT_TASK_BRANCH"
+        _canonical_output_path "$WT_PRIMARY_PATH"
+    }
+
+    local root_override=""
+    local equivalent_tree=0
+    local equivalent_tree_at=""
+    local help=0
+    local passthru=0
+    local -a requested_scopes=()
+    local -a positionals=()
+    local -a WT_REQUESTED_SCOPES=()
+    local -a WT_SCOPES=()
+    local -a WT_CONFIG_VALUES=()
+    local -a WT_PROJECT_ROOTS=()
+    local -a WT_INCLUDED_SCOPES=()
+    local -a WT_PROTECTED_PATHS=()
+    local WT_SPARSE=false
+    local WT_START_HEAD=""
+
+    _expand_short_opts "rsa" "$@"
+    set -- "${_EXPANDED[@]}"
+    unset _EXPANDED
+
+    while [ $# -gt 0 ]; do
+        if [ "$passthru" -eq 1 ]; then
+            positionals+=("$1")
+            shift
+            continue
+        fi
+        case "$1" in
+            -h|--help) help=1; shift ;;
+            -e|--equivalent-tree) equivalent_tree=1; shift ;;
+            -a|--equivalent-tree-at)
+                [ $# -ge 2 ] && [ -n "$2" ] || { _error "$1 requires a commit ID"; return 2; }
+                equivalent_tree_at="$2"
+                shift 2
+                ;;
+            --equivalent-tree-at=*)
+                equivalent_tree_at="${1#*=}"
+                [ -n "$equivalent_tree_at" ] || { _error "--equivalent-tree-at requires a commit ID. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                shift
+                ;;
+            -r|--root)
+                [ $# -ge 2 ] && [ -n "$2" ] || { _error "$1 requires a non-empty path"; return 2; }
+                root_override="$2"
+                shift 2
+                ;;
+            --root=*)
+                root_override="${1#--root=}"
+                [ -n "$root_override" ] || { _error "--root requires a non-empty path"; return 2; }
+                shift
+                ;;
+            -s|--scope)
+                [ $# -ge 2 ] && [ -n "$2" ] || { _error "$1 requires a non-empty path"; return 2; }
+                requested_scopes+=("$2")
+                shift 2
+                ;;
+            --scope=*)
+                local scope_value="${1#--scope=}"
+                [ -n "$scope_value" ] || { _error "--scope requires a non-empty path"; return 2; }
+                requested_scopes+=("$scope_value")
+                shift
+                ;;
+            --) passthru=1; shift ;;
+            -*) _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
+            *) positionals+=("$1"); shift ;;
+        esac
+    done
+
+    if [ "$help" -eq 1 ]; then
+        _show_help
+        return 0
+    fi
+
+    local command=start
+    local branch=""
+    if [ "${#positionals[@]}" -gt 0 ]; then
+        case "${positionals[0]}" in
+            start|status|sync|land|close)
+                command="${positionals[0]}"
+                [ "${#positionals[@]}" -le 2 ] || { _error "Too many arguments for $command"; return 2; }
+                [ "${#positionals[@]}" -lt 2 ] || branch="${positionals[1]}"
+                ;;
+            *)
+                [ "${#positionals[@]}" -eq 1 ] || { _error "Expected one branch name"; return 2; }
+                branch="${positionals[0]}"
+                ;;
+        esac
+    elif [ "$command" = start ]; then
+        _error "A task branch is required. Run \`$SCRIPT_NAME -h\` for usage"
+        return 2
+    fi
+
+    if [ "$command" != start ] && { [ -n "$root_override" ] || [ "${#requested_scopes[@]}" -gt 0 ]; }; then
+        _error "--root and --scope require the start command"
+        return 2
+    fi
+    if [ "$equivalent_tree" -eq 1 ] && [ "$command" != close ]; then
+        _error "--equivalent-tree requires close"
+        return 2
+    fi
+    if [ -n "$equivalent_tree_at" ] && [ "$command" != close ]; then
+        _error "--equivalent-tree-at requires close"
+        return 2
+    fi
+    if [ "$equivalent_tree" -eq 1 ] && [ -n "$equivalent_tree_at" ]; then
+        _error "Choose one equivalent-tree option"
+        return 2
+    fi
+    if [ "$command" = start ] && [ -z "$branch" ]; then
+        _error "start requires a task branch"
+        return 2
+    fi
+
+    _require_command git || return $?
+    _require_git_version || return $?
+    _load_context || return $?
+    WT_REQUESTED_SCOPES=("${requested_scopes[@]}")
+
+    case "$command" in
+        start) _start "$branch" "$root_override" ;;
+        status) _status "$branch" ;;
+        sync) _sync "$branch" ;;
+        land) _land "$branch" ;;
+        close) _close "$branch" "$equivalent_tree" "$equivalent_tree_at" ;;
+    esac
+)
+
+if _wt "$@"; then
+    __wt_rc=0
+else
+    __wt_rc=$?
+fi
+unset -f _wt
+if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    eval "unset __wt_rc; return $__wt_rc"
+fi
+eval "unset __wt_rc; exit $__wt_rc"
