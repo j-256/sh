@@ -6,8 +6,9 @@ Standards for test files in this repository.
 
 - Every script gets a `<name>.test.sh` in the `test/` directory (alongside `test-helpers.sh` and `test-runner.sh`). The exceptions are cross-cutting **meta-tests**, named `meta-*.test.sh` -- see [Meta-tests](#meta-tests)
 - Tests are self-contained, network-free, and runnable with bash 3.2+
-- No external dependencies beyond bash builtins and standard POSIX tools (mktemp, cat, mkdir, chmod, etc.)
-- All external commands the script-under-test calls (curl, dig, jq, etc.) are shimmed
+- No external dependencies beyond bash builtins and standard POSIX tools (mktemp, cat, mkdir, chmod, etc.), except Git for the isolated lifecycle fixtures below
+- External commands the script-under-test calls (curl, dig, jq, etc.) are shimmed, except isolated Git lifecycle fixtures
+- Git lifecycle tests may use real Git when correctness depends on repository, index, reflog, filter, or worktree behavior. Keep those fixtures inside the test temporary directory, disable system and global Git configuration, supply a synthetic identity, and avoid network access. Shim optional tools and injected failures at their boundary
 - Each test case gets a fresh temp directory for isolation
 - Test files do NOT follow CONVENTIONS.md -- they use a simpler structure
 - Test files are **execute-only**: run them with `test-runner.sh` or `bash <file>`, never source them. `run_tests` ends in `exit`, so sourcing a test into an interactive shell would close it -- the helper guards against this (see [Permissions](#permissions))
