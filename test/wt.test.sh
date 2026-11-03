@@ -458,6 +458,43 @@ test_close_refuses_dirty_files() {
     assert_file_exists "dirty worktree remains" "$worktree/base.txt"
 }
 
+test_close_removes_ds_store_but_refuses_other_untracked_files() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" task/ds-store)"
+    mkdir -p "$worktree/nested"
+    printf 'finder metadata\n' > "$worktree/.DS_Store"
+    printf 'finder metadata\n' > "$worktree/nested/.DS_Store"
+    printf 'keep\n' > "$worktree/nested/notes.txt"
+
+    run_wt_from "$worktree" status
+    assert_stdout_contains "other untracked file blocks close" "CLEAN               no"
+
+    run_wt_from "$repo" close task/ds-store
+    assert_rc "other untracked file prevents close" 1
+    assert_file_exists "metadata remains after refused close" "$worktree/.DS_Store"
+    assert_file_exists "other untracked file remains" "$worktree/nested/notes.txt"
+
+    rm "$worktree/nested/notes.txt"
+    run_wt_from "$worktree" status
+    assert_stdout_contains "metadata alone is clean for close" "CLEAN               yes"
+    assert_stdout_contains "metadata permits close" "NEXT                 wt close task/ds-store"
+
+    run_wt_from "$repo" close task/ds-store
+    assert_rc "metadata only close exits 0" 0
+    assert_path_absent "worktree and metadata are removed" "$worktree"
+}
+
+test_close_refuses_tracked_ds_store_changes() {
+    local repo; repo="$(init_repo)"
+    commit_path "$repo" .DS_Store original metadata
+    local worktree; worktree="$(start_task "$repo" task/tracked-ds-store)"
+    printf 'changed\n' > "$worktree/.DS_Store"
+
+    run_wt_from "$repo" close task/tracked-ds-store
+    assert_rc "tracked metadata change prevents close" 1
+    assert_file_exists "tracked metadata remains" "$worktree/.DS_Store"
+}
+
 test_close_removes_ignored_files_with_worktree() {
     local repo; repo="$(init_repo)"
     local worktree; worktree="$(start_task "$repo" task/ignored)"

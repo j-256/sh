@@ -123,7 +123,7 @@ Only configure commands you trust: guards execute as your user and can have thei
 
 `close` checks linked worktree identity, cleanliness, locks, active Git operations, and containment in the integration branch. It uses non-forcing `git worktree remove`, retaining Git's refusal for initialized submodules, and deletes the integrated local branch. It also recognizes matching metadata from the older nested worktree layout.
 
-Tracked, staged, and untracked changes block cleanup. Ignored files are informational and are deleted with the disposable worktree. Keep durable data elsewhere.
+Tracked, staged, and untracked changes block cleanup, except untracked `.DS_Store` files. `close` removes those Finder metadata files after its safety checks pass. Ignored files are informational and are deleted with the disposable worktree. Keep durable data elsewhere.
 
 After an external rebase or squash integration, commit ancestry may differ while the content is identical. Explicit recovery options permit cleanup only after exact Git tree equality:
 

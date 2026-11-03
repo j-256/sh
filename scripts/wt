@@ -103,6 +103,7 @@ PRECONDITIONS
   sync requires a clean task without upstream or matching remote-tracking refs.
   land requires clean task and primary checkouts and a fast-forward relationship.
   close requires a clean task contained in integration, or an exact-tree recovery.
+  Untracked .DS_Store files do not block close and are removed during cleanup.
 
   Before start, committed attributes are checked for default and named git-crypt
   filters in the checkout selection, including cone-mode root and ancestor files.
@@ -136,9 +137,10 @@ CAVEATS
   checked-out branch is the integration target, not the remote default branch.
   sync uses --fork-point; primary reflog history can exclude discarded commits.
   With wt.linearHistory=false, sync uses --rebase-merges. Resolve and inspect any
-  conflicts before continuing. close lets Git delete ignored worktree files and
-  deletes the local task branch. Exact-tree recovery may delete an uncontained
-  branch; --equivalent-tree-at needs a full SHA-1 or SHA-256 ancestor commit ID.
+  conflicts before continuing. close removes untracked .DS_Store files, lets Git
+  delete ignored worktree files, and deletes the local task branch. Exact-tree
+  recovery may delete an uncontained branch; --equivalent-tree-at needs a full
+  SHA-1 or SHA-256 ancestor commit ID.
   Workflow approval belongs to the caller; land does not ask for confirmation.
 
 EOF
@@ -810,8 +812,42 @@ EOF
     }
 
     _has_changes() {
+        if [ "${2:-}" = allow-ds-store ]; then
+            local entries
+            local entry
+            entries="$(mktemp "${TMPDIR:-/tmp}/wt-status.XXXXXXXX")" || return 2
+            if ! git -C "$1" status --porcelain=v1 -z --untracked-files=all > "$entries"; then
+                rm "$entries"
+                return 2
+            fi
+            while IFS= read -r -d '' entry; do
+                case "$entry" in
+                    '?? .DS_Store'|'?? '*/.DS_Store) ;;
+                    *) rm "$entries"; return 0 ;;
+                esac
+            done < "$entries"
+            rm "$entries"
+            return 1
+        fi
         local changes; changes="$(git -C "$1" status --porcelain=v1 --untracked-files=all)" || return 2
         [ -n "$changes" ]
+    }
+
+    _remove_untracked_ds_store() {
+        local worktree="$1"
+        local entries
+        local path
+        entries="$(mktemp "${TMPDIR:-/tmp}/wt-ds-store.XXXXXXXX")" || return 1
+        if ! git -C "$worktree" ls-files --others --exclude-standard -z > "$entries"; then
+            rm "$entries"
+            return 1
+        fi
+        while IFS= read -r -d '' path; do
+            case "$path" in
+                .DS_Store|*/.DS_Store) rm -- "$worktree/$path" || { rm "$entries"; return 1; } ;;
+            esac
+        done < "$entries"
+        rm "$entries"
     }
 
     _has_ignored_files() {
@@ -876,7 +912,7 @@ EOF
         local worktree="$1"
         local label="$2"
         local rc
-        _has_changes "$worktree"
+        _has_changes "$worktree" "${3:-}"
         rc=$?
         if [ "$rc" -gt 1 ]; then
             _error "Cannot inspect $label cleanliness"
@@ -953,7 +989,11 @@ EOF
             operation="not inspected"
             next="inspect the missing registration"
         else
-            _has_changes "$WT_TARGET_PATH"
+            if [ "$relation" = integrated ]; then
+                _has_changes "$WT_TARGET_PATH" allow-ds-store
+            else
+                _has_changes "$WT_TARGET_PATH"
+            fi
             case "$?" in
                 0) clean=no ;;
                 1) clean=yes ;;
@@ -1183,7 +1223,7 @@ EOF
         _require_available_task_worktree || return $?
         _require_unlocked_task || return $?
         _verify_close_identity || return $?
-        _require_clean "$WT_TARGET_PATH" "Task worktree" || return $?
+        _require_clean "$WT_TARGET_PATH" "Task worktree" allow-ds-store || return $?
         _require_no_operation "$WT_TARGET_PATH" "Task worktree" || return $?
         _require_no_operation "$WT_PRIMARY_PATH" "Primary worktree" || return $?
         git -C "$WT_PRIMARY_PATH" merge-base --is-ancestor "$WT_TASK_REF" "$WT_INTEGRATION_REF"
@@ -1225,6 +1265,7 @@ EOF
             WT_PARENT_OWNED=0
         fi
         cd "$WT_PRIMARY_PATH" || return 1
+        _remove_untracked_ds_store "$WT_TARGET_PATH" || { _error "Cannot remove task .DS_Store files"; return 1; }
         _info "Removing integrated worktree $WT_TARGET_PATH"
         git worktree remove "$WT_TARGET_PATH" >&2 || return 1
         _scan_worktrees "$WT_TASK_REF" || return $?
