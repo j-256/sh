@@ -815,6 +815,7 @@ EOF
         if [ "${2:-}" = allow-ds-store ]; then
             local entries
             local entry
+            local changed=1
             entries="$(mktemp "${TMPDIR:-/tmp}/wt-status.XXXXXXXX")" || return 2
             if ! git -C "$1" status --porcelain=v1 -z --untracked-files=all > "$entries"; then
                 rm "$entries"
@@ -823,11 +824,11 @@ EOF
             while IFS= read -r -d '' entry; do
                 case "$entry" in
                     '?? .DS_Store'|'?? '*/.DS_Store) ;;
-                    *) rm "$entries"; return 0 ;;
+                    *) changed=0; break ;;
                 esac
             done < "$entries"
-            rm "$entries"
-            return 1
+            rm "$entries" || return 2
+            return "$changed"
         fi
         local changes; changes="$(git -C "$1" status --porcelain=v1 --untracked-files=all)" || return 2
         [ -n "$changes" ]
@@ -837,6 +838,7 @@ EOF
         local worktree="$1"
         local entries
         local path
+        local failed=0
         entries="$(mktemp "${TMPDIR:-/tmp}/wt-ds-store.XXXXXXXX")" || return 1
         if ! git -C "$worktree" ls-files --others --exclude-standard -z > "$entries"; then
             rm "$entries"
@@ -844,10 +846,11 @@ EOF
         fi
         while IFS= read -r -d '' path; do
             case "$path" in
-                .DS_Store|*/.DS_Store) rm -- "$worktree/$path" || { rm "$entries"; return 1; } ;;
+                .DS_Store|*/.DS_Store) rm -- "$worktree/$path" || { failed=1; break; } ;;
             esac
         done < "$entries"
-        rm "$entries"
+        rm "$entries" || return 1
+        return "$failed"
     }
 
     _has_ignored_files() {
