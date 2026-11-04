@@ -31,7 +31,9 @@ Links in tracked markdown point at real repo paths (`scripts/tsd`, `docs/tsd.md`
 ## Before committing
 
 ```sh
-make test          # runs the full suite (test/test-runner.sh)
+make test ARGS="wt" # run the affected script's tests
 ```
 
-The pre-commit hook automatically runs the fast, static checks (currently the comment-style lint) on every commit, but it only covers a subset and can be bypassed with `git commit --no-verify`. Run `make test` yourself before pushing to catch everything – the hook is a convenience gate, not a substitute for the full suite.
+For a localized change, run the affected script tests, relevant integration checks, and applicable static or meta-tests. Reserve bare `make test`, which runs the repository-wide full suite, for sweeping or cross-cutting changes affecting many scripts, shared runtime or test infrastructure, or an explicit request. Do not rerun unrelated tests solely because you are committing, synchronizing, or integrating.
+
+The pre-commit hook automatically runs its configured fast static checks on every commit, but it only covers a subset and can be bypassed with `git commit --no-verify`. Run the appropriate scoped verification yourself before pushing; the hook is a convenience gate, not a substitute for behavior tests. See [TESTING.md](TESTING.md) for the test entrypoints and meta-test catalog.
