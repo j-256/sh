@@ -125,6 +125,10 @@ Only configure commands you trust: guards execute as your user and can have thei
 
 Tracked, staged, and untracked changes block cleanup, except untracked `.DS_Store` files. `close` removes those Finder metadata files after its safety checks pass. Ignored files are informational and are deleted with the disposable worktree. Keep durable data elsewhere.
 
+Git can delete some files and remove a worktree's registration while still returning a removal error, such as when another process recreates `.DS_Store` during directory deletion. Before removal, `close` snapshots the linked Git administration directory under `<common-dir>/wt-close.XXXXXXXX`, outside Git's worktree registry. Afterward it checks both the filesystem and registrations, including when Git returned success. A partial failure retains the task branch and restores lost metadata and the Git link only if the directory identity, branch, and existing Git link still match the captured state. Existing replacement registrations or directories are never overwritten. The command does not automatically retry deletion or use force.
+
+Inspect the reported remaining directory and `git status` before retrying `close`; deleted tracked files may appear as local deletions, and new data stays protected. The snapshot preserves Git metadata, not deleted worktree contents. When identity changed, inspection failed, or restoration could not be verified, the command reports a retained recovery snapshot for manual review. Do not prune registrations or force-delete the remaining files to bypass a partial failure. A nonzero Git result remains a failure even if its directory and registration disappeared; the branch stays available for inspection.
+
 After an external rebase or squash integration, commit ancestry may differ while the content is identical. Explicit recovery options permit cleanup only after exact Git tree equality:
 
 ```bash

@@ -99,6 +99,64 @@ assert_dir_exists() {
     fi
 }
 
+inject_remove_failure() {
+    local mode="$1"
+    export WT_REMOVE_FAILURE="$mode"
+    export WT_REAL_GIT
+    WT_REAL_GIT="$(command -v git)"
+    export WT_REMOVE_ADMIN
+    WT_REMOVE_ADMIN="$(git -C "$worktree" rev-parse --path-format=absolute --git-dir)"
+    cat > "$SHIM_DIR/git" <<'SHIM'
+#!/bin/bash
+if [ "$1" = -C ] && [ "$3" = worktree ] && [ "$4" = list ] && [ -f "$TEST_DIR/fail-scan" ]; then
+    exit 1
+fi
+if [ "$1" = worktree ] && [ "$2" = remove ]; then
+    worktree="$3"
+    case "$WT_REMOVE_FAILURE" in
+        registered) exit 1 ;;
+        vanished)
+            "$WT_REAL_GIT" "$@" || exit $?
+            exit 1 ;;
+        replaced)
+            "$WT_REAL_GIT" "$@" || exit $?
+            mkdir -p "$worktree"
+            printf 'external replacement\n' > "$worktree/notes.txt"
+            exit 1 ;;
+        symlink)
+            "$WT_REAL_GIT" "$@" || exit $?
+            mkdir "$TEST_DIR/replacement"
+            printf 'external data\n' > "$TEST_DIR/replacement/notes.txt"
+            ln -s "$TEST_DIR/replacement" "$worktree"
+            exit 1 ;;
+        missing-link) rm "$worktree/.git" ;;
+        changed-link) printf 'gitdir: /external/changed\n' > "$worktree/.git" ;;
+        changed-branch)
+            "$WT_REAL_GIT" -c user.name='WT Test' -c user.email='wt@example.invalid' commit -q --allow-empty -m concurrent
+            "$WT_REAL_GIT" update-ref refs/heads/task/changed-branch HEAD ;;
+    esac
+    mkdir -p "$worktree/nested"
+    printf 'late metadata\n' > "$worktree/nested/.DS_Store"
+    printf 'new data\n' > "$worktree/notes.txt"
+    rm "$worktree/base.txt"
+    rm -rf "$WT_REMOVE_ADMIN"
+    [ "$WT_REMOVE_FAILURE" != scan-failed ] || : > "$TEST_DIR/fail-scan"
+    if [ "$WT_REMOVE_FAILURE" = removed-parent ]; then
+        rmdir "${WT_REMOVE_ADMIN%/*}" || exit 1
+    fi
+    if [ "$WT_REMOVE_FAILURE" = changed-admin ]; then
+        mkdir -p "$WT_REMOVE_ADMIN"
+        printf 'external registration\n' > "$WT_REMOVE_ADMIN/HEAD"
+    fi
+    printf 'error: failed to delete worktree: Directory not empty\n' >&2
+    [ "$WT_REMOVE_FAILURE" != false-success ] || exit 0
+    exit 1
+fi
+exec "$WT_REAL_GIT" "$@"
+SHIM
+    chmod +x "$SHIM_DIR/git"
+}
+
 test_help_and_usage() {
     run_script --help
     assert_rc "long help exits 0" 0
@@ -456,6 +514,190 @@ test_close_refuses_dirty_files() {
     assert_rc "dirty close exits 1" 1
     assert_stderr_contains "dirty close is explained" "tracked or untracked changes"
     assert_file_exists "dirty worktree remains" "$worktree/base.txt"
+}
+
+test_close_restores_registration_after_partial_removal() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" task/partial)"
+    local snapshot="$TEST_DIR/index.before"
+    local admin; admin="$(git -C "$worktree" rev-parse --path-format=absolute --git-dir)"
+    cp "$admin/index" "$snapshot"
+    mkdir -p "$repo/.git/git-crypt"
+    ln -s "$repo/.git/git-crypt" "$admin/git-crypt"
+    inject_remove_failure partial
+
+    run_wt_from "$repo" close task/partial
+    assert_rc "partial removal returns failure" 1
+    assert_file_exists "late data is preserved" "$worktree/notes.txt"
+    assert_file_exists "late metadata is preserved" "$worktree/nested/.DS_Store"
+    assert_eq "registration remains usable" "$(git -C "$worktree" branch --show-current 2>/dev/null)" task/partial
+    cmp "$admin/index" "$snapshot" >/dev/null 2>&1
+    assert_eq "captured index is restored byte for byte" "$?" 0
+    assert_eq "git-crypt metadata remains a symlink" "$(readlink "$admin/git-crypt")" "$repo/.git/git-crypt"
+    assert_stderr_contains "partial failure names recovery" "Restored worktree registration"
+    assert_stderr_contains "partial failure names retained branch" task/partial
+    assert_stdout_not_contains "failed close emits no success path" "$repo"
+    run_wt_from "$repo" status task/partial
+    assert_rc "restored task can be inspected" 0
+    assert_stdout_contains "partial checkout is dirty" "CLEAN               no"
+}
+
+test_close_restores_missing_link_after_partial_removal_from_task() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" task/missing-link)"
+    inject_remove_failure missing-link
+
+    run_wt_from "$worktree" close
+    assert_rc "partial removal from task returns failure" 1
+    assert_eq "missing Git link is restored" "$(git -C "$worktree" branch --show-current 2>/dev/null)" task/missing-link
+    assert_file_exists "task-local failure keeps new data" "$worktree/notes.txt"
+    assert_stderr_contains "task-local failure reports recovery" "Restored worktree registration"
+}
+
+test_close_restores_registration_when_git_removes_registry_parent() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" task/removed-parent)"
+    inject_remove_failure removed-parent
+
+    run_wt_from "$repo" close task/removed-parent
+    assert_rc "last-worktree removal failure stays nonzero" 1
+    assert_eq "deleted registry parent is recreated safely" "$(git -C "$worktree" branch --show-current 2>/dev/null)" task/removed-parent
+    assert_file_exists "registry recovery preserves unexpected files" "$worktree/notes.txt"
+}
+
+test_close_preserves_existing_registration_on_remove_failure() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" task/registered)"
+    inject_remove_failure registered
+
+    run_wt_from "$repo" close task/registered
+    assert_rc "Git refusal remains a failure" 1
+    assert_eq "surviving registration is untouched" "$(git -C "$worktree" branch --show-current)" task/registered
+    assert_file_exists "refused checkout remains" "$worktree/base.txt"
+    assert_stderr_contains "surviving-registration failure is actionable" "Worktree removal failed"
+    assert_stderr_contains "surviving-registration failure names path" "$worktree"
+}
+
+test_close_does_not_overwrite_changed_link_or_registration() {
+    local mode
+    for mode in changed-link changed-admin; do
+        local repo; repo="$(init_repo "$TEST_DIR/$mode")"
+        local worktree; worktree="$(start_task "$repo" "task/$mode")"
+        inject_remove_failure "$mode"
+
+        run_wt_from "$repo" close "task/$mode"
+        assert_rc "$mode remains a failure" 1
+        assert_file_exists "$mode preserves new data" "$worktree/notes.txt"
+        if [ "$mode" = changed-link ]; then
+            assert_eq "changed Git link is not overwritten" "$(cat "$worktree/.git")" 'gitdir: /external/changed'
+        else
+            assert_eq "replacement registration is not overwritten" "$(cat "$WT_REMOVE_ADMIN/HEAD")" 'external registration'
+        fi
+        assert_stderr_contains "$mode retains a recovery snapshot" "Recovery snapshot retained"
+        git -C "$repo" show-ref --verify --quiet "refs/heads/task/$mode"
+        assert_eq "$mode keeps task branch" "$?" 0
+        rm "$SHIM_DIR/git"
+    done
+}
+
+test_close_preserves_replacement_directory_on_remove_failure() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" task/replaced)"
+    inject_remove_failure replaced
+
+    run_wt_from "$repo" close task/replaced
+    assert_rc "replacement directory prevents recovery" 1
+    assert_eq "replacement content remains" "$(cat "$worktree/notes.txt")" 'external replacement'
+    assert_path_absent "replacement directory gets no Git link" "$worktree/.git"
+    assert_stderr_contains "replacement preserves recovery snapshot" "Recovery snapshot retained"
+}
+
+test_close_preserves_directory_symlink_on_remove_failure() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" task/symlink)"
+    inject_remove_failure symlink
+
+    run_wt_from "$repo" close task/symlink
+    assert_rc "replacement symlink prevents metadata recovery" 1
+    assert_eq "replacement symlink is untouched" "$(readlink "$worktree")" "$TEST_DIR/replacement"
+    assert_eq "symlink destination data remains" "$(cat "$TEST_DIR/replacement/notes.txt")" 'external data'
+    assert_path_absent "symlink destination gets no Git link" "$TEST_DIR/replacement/.git"
+    assert_stderr_contains "symlink replacement keeps recovery snapshot" "Recovery snapshot retained"
+}
+
+test_close_keeps_snapshot_when_registration_inspection_fails() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" task/scan-failed)"
+    inject_remove_failure scan-failed
+
+    run_wt_from "$repo" close task/scan-failed
+    assert_rc "failed outcome inspection remains nonzero" 1
+    assert_file_exists "failed inspection preserves remaining data" "$worktree/notes.txt"
+    assert_stderr_contains "failed inspection is explicit" "Cannot inspect removal outcome"
+    assert_stderr_contains "failed inspection retains recovery evidence" "Recovery snapshot retained"
+}
+
+test_close_refuses_registration_restore_when_branch_changed() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" task/changed-branch)"
+    inject_remove_failure changed-branch
+
+    run_wt_from "$repo" close task/changed-branch
+    assert_rc "changed branch prevents metadata recovery" 1
+    assert_path_absent "old registration is not installed for changed branch" "$WT_REMOVE_ADMIN"
+    assert_file_exists "changed branch preserves new files" "$worktree/notes.txt"
+    assert_stderr_contains "changed branch retains recovery evidence" "Recovery snapshot retained"
+}
+
+test_close_checks_directory_even_when_git_reports_success() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" task/false-success)"
+    inject_remove_failure false-success
+
+    run_wt_from "$repo" close task/false-success
+    assert_rc "remaining directory prevents success" 1
+    assert_eq "false success restores inspectable registration" "$(git -C "$worktree" branch --show-current 2>/dev/null)" task/false-success
+    assert_file_exists "false success preserves unexpected files" "$worktree/notes.txt"
+}
+
+test_close_never_removes_files_when_snapshot_copy_fails() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" task/snapshot-failed)"
+    cat > "$SHIM_DIR/cp" <<'SHIM'
+#!/bin/bash
+exit 1
+SHIM
+    chmod +x "$SHIM_DIR/cp"
+
+    run_wt_from "$repo" close task/snapshot-failed
+    assert_rc "snapshot failure stops removal" 1
+    assert_file_exists "snapshot failure keeps original checkout" "$worktree/base.txt"
+    assert_eq "snapshot failure keeps original registration" "$(git -C "$worktree" branch --show-current)" task/snapshot-failed
+    assert_stderr_contains "snapshot failure explains no removal" "removal was not attempted"
+}
+
+test_close_reports_nonzero_remove_even_when_directory_vanished() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" task/vanished)"
+    inject_remove_failure vanished
+
+    run_wt_from "$worktree" close
+    assert_rc "nonzero remove is not disguised as success" 1
+    assert_path_absent "already removed directory is not recreated" "$worktree"
+    git -C "$repo" show-ref --verify --quiet refs/heads/task/vanished
+    assert_eq "nonzero removal retains branch" "$?" 0
+    assert_stderr_contains "removed-directory outcome is explicit" "directory and registration were removed"
+}
+
+test_close_succeeds_when_called_from_task_directory() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" task/from-task)"
+
+    run_wt_from "$worktree" close
+    assert_rc "task-local close succeeds" 0
+    assert_path_absent "task-local close removes checkout" "$worktree"
+    git -C "$repo" show-ref --verify --quiet refs/heads/task/from-task
+    assert_eq "task-local close removes branch" "$?" 1
 }
 
 test_close_removes_ds_store_but_refuses_other_untracked_files() {

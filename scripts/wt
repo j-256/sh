@@ -104,6 +104,9 @@ PRECONDITIONS
   land requires clean task and primary checkouts and a fast-forward relationship.
   close requires a clean task contained in integration, or an exact-tree recovery.
   Untracked .DS_Store files do not block close and are removed during cleanup.
+  Failed removal retains the task branch and restores a lost registration only
+  when the directory, branch, and Git-link identity are unchanged. Inspect the
+  remaining files and git status before retrying; no deletion is force-retried.
 
   Before start, committed attributes are checked for default and named git-crypt
   filters in the checkout selection, including cone-mode root and ancestor files.
@@ -141,6 +144,11 @@ CAVEATS
   delete ignored worktree files, and deletes the local task branch. Exact-tree
   recovery may delete an uncontained branch; --equivalent-tree-at needs a full
   SHA-1 or SHA-256 ancestor commit ID.
+  Git may partially delete files and unregister a worktree even on failure.
+  close snapshots linked Git metadata under <common-dir>/wt-close.XXXXXXXX.
+  If identity changed or recovery failed, that snapshot is retained for manual
+  inspection; it cannot restore files Git already deleted. Never prune or
+  force-delete a partial checkout to bypass the failure.
   Workflow approval belongs to the caller; land does not ask for confirmation.
 
 EOF
@@ -1209,6 +1217,11 @@ EOF
         WT_PARENT_OWNED=1
     }
 
+    _directory_identity() {
+        [ -d "$1" ] && [ ! -L "$1" ] || return 1
+        stat -c '%d:%i' "$1" 2>/dev/null || stat -f '%d:%i' "$1" 2>/dev/null
+    }
+
     _close() {
         local supplied="${1:-}"
         local equivalent_tree="${2:-0}"
@@ -1221,6 +1234,13 @@ EOF
         local marker
         local ancestry
         local branch_state
+        local worktree
+        local admin
+        local identity
+        local task_head
+        local snapshot
+        local remove_status
+        local restored=0
 
         _load_task "$supplied" || return $?
         _require_available_task_worktree || return $?
@@ -1269,13 +1289,70 @@ EOF
         fi
         cd "$WT_PRIMARY_PATH" || return 1
         _remove_untracked_ds_store "$WT_TARGET_PATH" || { _error "Cannot remove task .DS_Store files"; return 1; }
-        _info "Removing integrated worktree $WT_TARGET_PATH"
-        git worktree remove "$WT_TARGET_PATH" >&2 || return 1
-        _scan_worktrees "$WT_TASK_REF" || return $?
+        worktree="$WT_TARGET_PATH"
+        admin="$(git -C "$worktree" rev-parse --path-format=absolute --git-dir)" || return 1
+        identity="$(_directory_identity "$worktree")" || { _error "Cannot identify task directory: $worktree"; return 1; }
+        task_head="$(git -C "$WT_PRIMARY_PATH" rev-parse "$WT_TASK_REF")" || return 1
+        snapshot="$(mktemp -d "$WT_COMMON_DIR/wt-close.XXXXXXXX")" || { _error "Cannot preserve worktree registration"; return 1; }
+        if ! cp -RP "$admin" "$snapshot/admin" || ! cp -P "$worktree/.git" "$snapshot/gitfile"; then
+            _error "Cannot snapshot worktree registration; removal was not attempted"
+            _error "Recovery snapshot retained: $snapshot"
+            return 1
+        fi
+        # Git can delete registration even when recursive directory removal fails
+        WT_CALLER_TOP="$WT_PRIMARY_PATH"
+        _info "Removing integrated worktree $worktree"
+        if git worktree remove "$worktree" >&2; then remove_status=0; else remove_status=$?; fi
+        if ! _scan_worktrees "$WT_TASK_REF"; then
+            _error "Cannot inspect removal outcome; branch retained: $WT_TASK_BRANCH"
+            _error "Recovery snapshot retained: $snapshot"
+            return 1
+        fi
+        if [ "$remove_status" -ne 0 ] || [ -e "$worktree" ] || [ -L "$worktree" ]; then
+            _error "Worktree removal failed; local branch retained: $WT_TASK_BRANCH"
+            if [ ! -e "$worktree" ] && [ ! -L "$worktree" ] && [ ! -e "$admin" ] && [ ! -L "$admin" ] && [ -z "$WT_TARGET_PATH" ]; then
+                _error "The directory and registration were removed despite the nonzero Git result"
+                rm -rf -- "$snapshot" || return 1
+                return 1
+            fi
+            if [ -z "$WT_TARGET_PATH" ] && [ ! -e "$admin" ] && [ ! -L "$admin" ] &&
+                [ "$(_directory_identity "$worktree")" = "$identity" ] &&
+                [ "$(git -C "$WT_PRIMARY_PATH" rev-parse "$WT_TASK_REF" 2>/dev/null)" = "$task_head" ] &&
+                [ ! -L "$worktree/.git" ] &&
+                { [ ! -e "$worktree/.git" ] || cmp -s "$worktree/.git" "$snapshot/gitfile"; }; then
+                if [ ! -L "$WT_COMMON_DIR/worktrees" ] && mkdir -p "$WT_COMMON_DIR/worktrees" &&
+                    mkdir "$admin" && cp -RP "$snapshot/admin/." "$admin/"; then
+                    if [ -f "$worktree/.git" ] || ln "$snapshot/gitfile" "$worktree/.git"; then
+                        if cmp -s "$worktree/.git" "$snapshot/gitfile" && _scan_worktrees "$WT_TASK_REF" &&
+                            [ "$WT_TARGET_PATH" = "$worktree" ] && _verify_close_identity; then
+                            restored=1
+                            _warn "Restored worktree registration after partial removal: $worktree"
+                        fi
+                    fi
+                fi
+            fi
+            if [ "$restored" -eq 1 ] ||
+                { [ "$WT_TARGET_PATH" = "$worktree" ] && [ "$(_directory_identity "$worktree")" = "$identity" ] &&
+                    [ -f "$admin/HEAD" ] && cmp -s "$admin/HEAD" "$snapshot/admin/HEAD" &&
+                    cmp -s "$worktree/.git" "$snapshot/gitfile"; }; then
+                rm -rf -- "$snapshot" || return 1
+            else
+                _error "Recovery snapshot retained: $snapshot"
+            fi
+            _error "Inspect remaining files at '$worktree' and git status before retrying $SCRIPT_NAME close"
+            return 1
+        fi
         [ -z "$WT_TARGET_PATH" ] || {
             _error "Git still reports a worktree for $WT_TASK_BRANCH"
+            _error "Recovery snapshot retained: $snapshot"
             return 1
         }
+        [ ! -e "$admin" ] && [ ! -L "$admin" ] || {
+            _error "Git left task administration metadata: $admin"
+            _error "Recovery snapshot retained: $snapshot"
+            return 1
+        }
+        rm -rf -- "$snapshot" || return 1
         if [ "$replayed" -eq 1 ]; then
             git branch -D "$WT_TASK_BRANCH" >&2
         else
