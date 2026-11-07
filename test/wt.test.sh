@@ -1280,6 +1280,58 @@ test_archive_preserves_dirty_untracked_and_ignored_work_and_start_restores() {
     assert_file_exists "restored ignored file retained" "$restored/ignored/result.txt"
 }
 
+test_archive_refuses_clean_integrated_work_in_favor_of_close() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" completed)" || { fixture_setup_failed; return 1; }
+    printf 'Finder metadata\n' > "$worktree/.DS_Store"
+    run_wt_from "$repo" archive completed --archive-root "$TEST_DIR/archives" --reason Keep
+    assert_rc "integrated work cannot take the archive shortcut" 1
+    assert_stderr_contains "integrated work recommends guarded closure" 'wt close'
+    assert_dir_exists "refusal preserves the worktree" "$worktree"
+    assert_path_absent "refusal creates no archive storage" "$TEST_DIR/archives"
+    run_wt_from "$repo" close completed
+    assert_rc "recommended close completes cleanup" 0
+    assert_path_absent "guarded close removes the worktree" "$worktree"
+}
+
+test_archived_work_becomes_review_due_without_mutation() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" experiment)" || { fixture_setup_failed; return 1; }
+    commit_path "$worktree" experiment.txt committed experiment
+    run_wt_from "$repo" archive experiment --archive-root "$TEST_DIR/archives" --reason Benchmark
+    assert_rc "valuable unfinished work can be archived" 0
+    local archived; archived="$(fixture_worktree)" || { fixture_setup_failed; return 1; }
+    local receipt="${archived%/*}/.wt-archive"
+    git config --file "$receipt" wt.created "$(( $(date +%s) - 8 * 86400 ))"
+    local before; before="$(cat "$receipt")"
+    local registered; registered="$(git -C "$repo" worktree list --porcelain)"
+    run_wt_from "$repo" audit
+    assert_rc "archives require review after the age threshold" 4
+    assert_stdout_contains "aged archive has a distinct review finding" ARCHIVE_REVIEW_DUE
+    assert_stdout_contains "archive review retains its purpose" Benchmark
+    assert_eq "archive audit does not rewrite the receipt" "$(cat "$receipt")" "$before"
+    assert_eq "archive audit does not change registrations" "$(git -C "$repo" worktree list --porcelain)" "$registered"
+    assert_file_exists "review never disposes of archived work" "$archived/experiment.txt"
+}
+
+test_audit_prefers_closing_archived_work_after_integration() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" experiment)" || { fixture_setup_failed; return 1; }
+    commit_path "$worktree" experiment.txt committed experiment
+    run_wt_from "$repo" archive experiment --archive-root "$TEST_DIR/archives" --reason Benchmark
+    assert_rc "unintegrated work can be archived" 0
+    local archived; archived="$(fixture_worktree)" || { fixture_setup_failed; return 1; }
+    git -C "$repo" merge --ff-only experiment > "$TEST_DIR/merge.log" 2>&1
+    run_wt_from "$repo" audit
+    assert_rc "integration turns an archive into a cleanup finding" 4
+    assert_stdout_contains "integrated archive is distinguished" INTEGRATED_ARCHIVE
+    assert_file_exists "audit preserves the archive for guarded cleanup" "$archived/experiment.txt"
+    run_wt_from "$repo" start experiment --root "$TEST_DIR/restored"
+    assert_rc "integrated archive can be restored for cleanup" 0
+    run_wt_from "$repo" close experiment
+    assert_rc "restored integrated archive closes normally" 0
+}
+
 test_archive_requires_reason_and_refuses_locked_or_busy_worktrees() {
     local repo; repo="$(init_repo)"
     local worktree; worktree="$(start_task "$repo" experiment)" || { fixture_setup_failed; return 1; }
@@ -1308,6 +1360,7 @@ test_archive_rejects_destination_inside_worktree_and_failed_move_is_auditable() 
     run_wt_from "$repo" archive experiment --archive-root "$worktree/inside" --reason Keep
     assert_rc "archive refuses a nested destination" 2
     assert_path_absent "unsafe destination not created" "$worktree/inside"
+    printf 'experiment\n' > "$worktree/base.txt"
     export WT_REAL_GIT; WT_REAL_GIT="$(command -v git)"
     cat > "$SHIM_DIR/git" <<'SHIM'
 #!/bin/bash
@@ -1350,6 +1403,7 @@ test_audit_reports_integrated_orphan_missing_and_review_age_without_mutation() {
 test_archive_root_configuration_and_argument_validation() {
     local repo; repo="$(init_repo)"
     local worktree; worktree="$(start_task "$repo" experiment)" || { fixture_setup_failed; return 1; }
+    commit_path "$worktree" experiment.txt committed experiment
     git -C "$repo" config wt.archiveRoot "$TEST_DIR/configured-archive"
     run_wt_from "$repo" archive experiment --reason Keep
     assert_rc "configured archive root works" 0
@@ -1415,6 +1469,56 @@ SHIM
     assert_rc "pending archive is not silently resumed" 1
 }
 
+test_early_archive_receipt_failure_is_visible_without_moving_work() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" experiment)" || { fixture_setup_failed; return 1; }
+    printf 'keep me\n' > "$worktree/untracked.txt"
+    export WT_REAL_GIT; WT_REAL_GIT="$(command -v git)"
+    cat > "$SHIM_DIR/git" <<'SHIM'
+#!/bin/bash
+if [ "$1" = config ] && [ "$4" = wt.reason ]; then exit 1; fi
+exec "$WT_REAL_GIT" "$@"
+SHIM
+    chmod +x "$SHIM_DIR/git"
+    run_wt_from "$repo" archive experiment --archive-root "$TEST_DIR/archives" --reason Keep
+    assert_rc "early receipt failure remains an error" 1
+    assert_stderr_contains "receipt failure identifies recovery metadata" 'receipt'
+    assert_file_exists "early receipt failure preserves source" "$worktree/untracked.txt"
+    run_wt_from "$repo" audit
+    assert_rc "early receipt failure is auditable" 4
+    assert_stdout_contains "early failure identifies incomplete archive" ARCHIVE_PENDING
+}
+
+test_start_and_resume_report_verified_paths_when_stdout_is_captured() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" captured)" || { fixture_setup_failed; return 1; }
+    assert_stderr_contains "captured creation retains path evidence" "[INF][wt] Worktree ready: $worktree"
+    run_wt_from "$repo" start captured
+    assert_rc "resume succeeds" 0
+    assert_stderr_contains "resume retains path evidence" "[INF][wt] Worktree ready: $worktree"
+    assert_eq "stdout remains path-only" "$(get_stdout)" "$worktree"
+}
+
+test_audit_invalidates_retention_after_branch_rename() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" experiment)" || { fixture_setup_failed; return 1; }
+    printf 'edited\n' > "$worktree/base.txt"
+    local admin; admin="$(git -C "$worktree" rev-parse --path-format=absolute --git-dir)"
+    git config --file "$admin/wt-retained" wt.branchref refs/heads/experiment
+    git config --file "$admin/wt-retained" wt.head "$(git -C "$worktree" rev-parse HEAD)"
+    git -C "$worktree" status --porcelain=v1 -z --untracked-files=all > "$TEST_DIR/retained-status"
+    git config --file "$admin/wt-retained" wt.status "$(git -C "$worktree" hash-object "$TEST_DIR/retained-status")"
+    git config --file "$admin/wt-retained" wt.reason 'Awaiting review'
+    git config --file "$admin/wt-retained" wt.updated "$(date +%s)"
+    run_wt_from "$repo" audit
+    assert_rc "matching branch retention is accepted" 0
+    assert_stdout_contains "retention reason is visible" RETAINED
+    git -C "$worktree" branch -m renamed
+    run_wt_from "$repo" audit
+    assert_rc "renamed branch invalidates retention" 4
+    assert_stdout_contains "rename requires fresh disposition" RETENTION_CHANGED
+}
+
 test_audit_inspection_errors_are_incomplete_not_orphan_findings() {
     local repo; repo="$(init_repo)"
     local worktree; worktree="$(start_task "$repo" experiment)" || { fixture_setup_failed; return 1; }
@@ -1450,6 +1554,7 @@ test_archive_and_audit_follow_explicit_root_aliases_safely() {
     assert_stdout_contains "aliased audit inspects the task" INTEGRATED
     mkdir "$TEST_DIR/archive-base"
     ln -s "$TEST_DIR/archive-base" "$TEST_DIR/archive-alias"
+    printf 'experiment\n' > "$worktree/base.txt"
     run_wt_from "$repo" archive experiment --archive-root "$TEST_DIR/archive-alias/nested" --reason Keep
     assert_rc "archive accepts an explicit ancestor alias" 0
     assert_file_exists "aliased archive preserves source" "$(get_stdout)/base.txt"

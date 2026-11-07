@@ -20,7 +20,7 @@ $ cd "$primary_worktree"
 $ wt close improve-search
 ```
 
-`start` is the default command. Successful mutating commands print only the directory to use next; progress and errors go to stderr. Capturing that path does not change your shell's directory. Use `cd` explicitly.
+`start` is the default command. Successful mutating commands print only the directory to use next; progress and errors go to stderr. A successful start or resume also emits `[INF][wt] Worktree ready: <path>` on stderr, using the program-name override when set, so session integrations can observe creation when stdout is captured. Capturing that path does not change your shell's directory. Use `cd` explicitly.
 
 An existing task resumes its registered worktree. An existing branch without a worktree is attached. A new branch starts at the primary checkout's local `HEAD`, even when the command runs from another task. Uncommitted edits are left in their original checkout.
 
@@ -141,12 +141,12 @@ $ wt close --equivalent-tree-at "$merge_commit" improve-search
 
 ---
 
-## Preserve rejected experiments
+## Archive work with a concrete future use
 
-Use `archive` when you explicitly want to retain an abandoned or superseded task. Run from the primary checkout after stopping processes that use the task:
+Prefer approved integration followed by `wt close` for useful work. Close completed integrated work directly; `archive` refuses a clean integrated task. For rejected work without lasting value, obtain explicit approval to discard it. Reserve `archive` for a task with a concrete future use, and name that use in its retention reason. Run from the primary checkout after stopping processes that use the task:
 
 ```bash
-$ wt archive try-search-index --reason "Keep the rejected index experiment"
+$ wt archive try-search-index --reason "Compare index benchmarks during the next storage evaluation"
 $ wt start try-search-index
 ```
 
@@ -154,7 +154,7 @@ Archiving moves the complete directory into a private container with a `.wt-arch
 
 Set `wt.archiveRoot` or pass `-A`/`--archive-root` to choose a destination. The default is `${XDG_DATA_HOME:-$HOME/.local/share}/wt/archive`. Destinations must be absolute and outside the task, primary checkout, and Git administration. Locked worktrees, active Git operations, submodules and open files refuse archival or restoration. `lsof` is required only for those moves. Source and destination identity, registration, HEAD and porcelain status must match before success is recorded.
 
-A failed move or receipt update retains its paths and pending receipt. Inspect both paths, the receipt, the task branch and `git worktree list --porcelain` before recovery. Never prune or force-remove a partial result. `wt audit` reports pending receipts; `start` refuses incomplete or changed archives instead of retrying them automatically. The receipt records the original and destination paths, branch, commit, status fingerprint, reason, creation time and state; restored receipts additionally name the active path.
+A failed move or receipt update retains its paths and pending receipt. Intent is linked before receipt fields are populated, so interrupted setup remains visible to audit as pending or invalid metadata. Inspect both paths, the receipt, the task branch and `git worktree list --porcelain` before recovery. Never prune or force-remove a partial result. `wt audit` reports pending receipts; `start` refuses incomplete or changed archives instead of retrying them automatically. The receipt records the original and destination paths, branch, commit, status fingerprint, reason, creation time and state; restored receipts additionally name the active path.
 
 ## Audit worktree retention
 
@@ -165,7 +165,9 @@ $ wt audit --root "$HOME/worktrees" --stale-days 7
 
 The audit inspects all registered task worktrees in the invoking repository. An optional root also examines its immediate directories across repositories. It reports integrated leftovers, missing registrations, orphan directories, pending or changed archives, locks, active operations and tasks due for review. It never changes refs, the Git index, registrations or lifecycle metadata, and never creates the scanned root. Inspection failures return an error rather than establishing an empty result.
 
-Review age uses the recorded task creation time, an explicit retention timestamp, or the last commit time for older tasks. Age requests review; it does not prove abandonment. Session integrations can record an owner-only `wt-retained` Git-config file in the linked administration directory with `wt.head`, `wt.status`, `wt.reason` and `wt.updated` (epoch seconds). The status fingerprint is the Git blob hash of NUL-delimited porcelain-v1 status with all untracked files. Changed HEAD or status invalidates retention. An integrated branch remains a cleanup finding even when it has a retention reason.
+Archives remain subject to review. `ARCHIVE_REVIEW_DUE` applies the `--stale-days` threshold to the receipt's creation time and shows its retention reason. Review for integration, explicitly approved disposal, or continued value. `INTEGRATED_ARCHIVE` identifies archived work that has become clean and integrated: restore it with `wt start`, then use `wt close`. Age never triggers archival or deletion.
+
+Review age uses the recorded task creation time, an explicit retention timestamp, or the last commit time for older tasks. Age requests review; it does not prove abandonment. Session integrations can record an owner-only `wt-retained` Git-config file in the linked administration directory with `wt.branchref` (the full local branch ref), `wt.head`, `wt.status`, `wt.reason` and `wt.updated` (epoch seconds). The status fingerprint is the Git blob hash of NUL-delimited porcelain-v1 status with all untracked files. It describes Git status entries without hashing file contents or ignored outputs. Changed branch identity, HEAD or status invalidates retention. An integrated branch remains a cleanup finding even when it has a retention reason.
 
 ## Reference
 

@@ -32,6 +32,7 @@ _wt() (
     case "${BASH_SOURCE[0]}" in /dev/*|/proc/*) SCRIPT_NAME="" ;; esac
     case "$SCRIPT_NAME" in ""|bash|sh|zsh|dash) SCRIPT_NAME="wt" ;; esac
     SCRIPT_NAME="${WT_PROGRAM_NAME:-$SCRIPT_NAME}"
+    local SECONDS_PER_DAY=86400
 
     _error() { printf '[ERR][%s] %s\n' "$SCRIPT_NAME" "$*" >&2; }
     _warn() { printf '[WRN][%s] %s\n' "$SCRIPT_NAME" "$*" >&2; }
@@ -70,7 +71,7 @@ COMMANDS
   sync    Rebase a clean local-only task branch onto the integration branch
   land    Fast-forward a clean task without new merge commits by default
   close   Remove a clean integrated worktree or an exact replay with the flag
-  archive Preserve an explicitly retired task intact; start restores an archive
+  archive Preserve work with a concrete future use; start restores an archive
   audit   Inspect registered tasks and optionally a storage root without mutation
 OPTIONS
   -r, --root ${s}PATH${r}                  Absolute start storage directory or audit root
@@ -79,7 +80,7 @@ OPTIONS
   -a, --equivalent-tree-at ${s}COMMIT${r}  Compare with a full ancestor commit ID
   -h, --help                       Show help
   -A, --archive-root ${s}PATH${r}          Absolute archive storage directory
-  -R, --reason ${s}TEXT${r}                Required retention reason for archive
+  -R, --reason ${s}TEXT${r}                Required future use for archived work
   -d, --stale-days ${s}DAYS${r}            Review age in whole days for audit; default 7
 ENVIRONMENT
   WT_PROGRAM_NAME  Displayed command name when invoked through a wrapper
@@ -215,6 +216,12 @@ EOF
 
     _canonical_output_path() {
         printf '%s\n' "$1"
+    }
+
+    _start_output() {
+        # Preserve creation evidence when the calling shell captures stdout
+        _info "Worktree ready: $1"
+        _canonical_output_path "$1"
     }
 
     _require_git_version() {
@@ -758,7 +765,7 @@ EOF
                 return $?
             fi
             _info "Resuming $branch"
-            _canonical_output_path "$WT_TARGET_PATH"
+            _start_output "$WT_TARGET_PATH"
             return 0
         fi
 
@@ -832,7 +839,7 @@ EOF
         else
             _info "Attached worktree for $branch"
         fi
-        _canonical_output_path "$worktree"
+        _start_output "$worktree"
     }
 
     _operation_name() {
@@ -1513,6 +1520,8 @@ EOF
         local original
         local key
         local value
+        local relation
+        local rc
         _load_task "$supplied" || return $?
         _archive_preflight || return $?
         _archive_receipt || { _error "Invalid archive metadata"; return 1; }
@@ -1540,11 +1549,24 @@ EOF
         root="$(cd "$candidate" && pwd -P)$suffix" || return 1
         original="$(cd "$WT_TARGET_PATH" && pwd -P)" || return 1
         case "$root/" in "$original/"*|"$WT_PRIMARY_PATH/"*|"$WT_COMMON_DIR/"*) _error "Archive root cannot be inside a checkout or its Git directory"; return 2 ;; esac
+        relation="$(_relation)" || return 1
+        if [ "$relation" = integrated ]; then
+            _has_changes "$WT_TARGET_PATH" allow-ds-store
+            rc=$?
+            case "$rc" in
+                0) ;;
+                1) _error "Task is clean and already integrated; use wt close for the completed worktree and task branch"; return 1 ;;
+                *) _error "Cannot inspect task changes before archival"; return 1 ;;
+            esac
+        fi
         umask 077
         mkdir -p "$root" || return 1
         container="$(mktemp -d "$root/$WT_REPO_NAME-$(_worktree_name "$WT_TASK_BRANCH").XXXXXXXX")" || return 1
         receipt="$container/.wt-archive"
         admin="$(git -C "$WT_TARGET_PATH" rev-parse --path-format=absolute --git-dir)" || return 1
+        # Publish intent before any receipt field write can fail
+        : > "$receipt" || { _error "Cannot create archive receipt; inspect $container"; return 1; }
+        printf '%s\n' "$receipt" > "$admin/wt-archive" || { _error "Cannot link archive receipt; inspect $receipt"; return 1; }
         for key in version state commondir branchref original worktree head status reason created; do
             case "$key" in
                 version) value=1 ;; state) value=pending ;; commondir) value="$WT_COMMON_DIR" ;;
@@ -1553,10 +1575,8 @@ EOF
                 status) value="$(_status_fingerprint "$WT_TARGET_PATH")" || return 1 ;;
                 reason) value="$reason" ;; created) value="$(date +%s)" || return 1 ;;
             esac
-            git config --file "$receipt" "wt.$key" "$value" || return 1
+            git config --file "$receipt" "wt.$key" "$value" || { _error "Incomplete archive receipt; inspect $receipt"; return 1; }
         done
-        # Record pending intent before Git can move files or update its registration
-        printf '%s\n' "$receipt" > "$admin/wt-archive" || return 1
         _move_preserved_task "$container/worktree" || return $?
         git config --file "$receipt" wt.state archived || { _error "Archive moved but receipt is pending; inspect $receipt"; return 1; }
         _info "Archived $WT_TASK_BRANCH; branch, edits and ignored files retained"
@@ -1585,7 +1605,22 @@ EOF
         git config --file "$receipt" wt.state restored || return 1
         git config --file "$receipt" wt.restoredpath "$WT_TARGET_PATH" || return 1
         rm "$admin/wt-archive" || return 1
-        _canonical_output_path "$WT_TARGET_PATH"
+        _start_output "$WT_TARGET_PATH"
+    }
+
+    _audit_age() {
+        local timestamp="$1"
+        local days="$2"
+        local finding="$3"
+        local path="$4"
+        local now
+        case "$timestamp" in ''|*[!0-9]*) _error "Invalid lifecycle timestamp"; return 1 ;; esac
+        now="$(date +%s)" || return 1
+        if [ $((now - timestamp)) -ge $((days * SECONDS_PER_DAY)) ]; then
+            printf '%s %q\n' "$finding" "$path"
+            return 4
+        fi
+        return 0
     }
 
     _audit_one() (
@@ -1625,7 +1660,21 @@ EOF
             if [ "$state" = archived ] && [ "$(_receipt_value "$WT_ARCHIVE_RECEIPT" worktree)" = "$WT_TARGET_PATH" ] &&
                 [ "$(_receipt_value "$WT_ARCHIVE_RECEIPT" head)" = "$(git rev-parse HEAD)" ] &&
                 [ "$(_receipt_value "$WT_ARCHIVE_RECEIPT" status)" = "$(_status_fingerprint "$path")" ]; then
-                printf 'ARCHIVED %q\n' "$path"; return 0
+                relation="$(_relation)" || return 1
+                if [ "$relation" = integrated ]; then
+                    _has_changes "$path" allow-ds-store
+                    rc=$?
+                    case "$rc" in
+                        0) ;;
+                        1) printf 'INTEGRATED_ARCHIVE %q\n' "$path"; return 4 ;;
+                        *) printf 'INSPECTION_FAILED %q\n' "$path"; return 1 ;;
+                    esac
+                fi
+                timestamp="$(_receipt_value "$WT_ARCHIVE_RECEIPT" created)" || return 1
+                reason="$(_receipt_value "$WT_ARCHIVE_RECEIPT" reason)" || return 1
+                printf 'ARCHIVED %q %q\n' "$path" "$reason"
+                _audit_age "$timestamp" "$days" ARCHIVE_REVIEW_DUE "$path"
+                return $?
             fi
             printf 'ARCHIVE_PENDING %q\n' "$path"; return 4
         fi
@@ -1652,7 +1701,7 @@ EOF
             [ -f "$admin/wt-retained" ] && [ ! -L "$admin/wt-retained" ] || return 1
             head="$(git rev-parse HEAD)" || return 1
             fingerprint="$(_status_fingerprint "$path")" || return 1
-            if [ "$(_receipt_value "$admin/wt-retained" head)" != "$head" ] || [ "$(_receipt_value "$admin/wt-retained" status)" != "$fingerprint" ]; then
+            if [ "$(_receipt_value "$admin/wt-retained" branchref)" != "$WT_TASK_REF" ] || [ "$(_receipt_value "$admin/wt-retained" head)" != "$head" ] || [ "$(_receipt_value "$admin/wt-retained" status)" != "$fingerprint" ]; then
                 printf 'RETENTION_CHANGED %q\n' "$path"; return 4
             fi
             timestamp="$(_receipt_value "$admin/wt-retained" updated)" || return 1
@@ -1662,8 +1711,7 @@ EOF
             timestamp="$(git log -1 --format=%ct)" || return 1
             [ ! -f "$admin/wt-created" ] || IFS= read -r timestamp < "$admin/wt-created" || return 1
         fi
-        case "$timestamp" in ''|*[!0-9]*) _error "Invalid lifecycle timestamp"; return 1 ;; esac
-        if [ $(( $(date +%s) - timestamp )) -ge $((days * 86400)) ]; then printf 'REVIEW_DUE %q\n' "$path"; return 4; fi
+        _audit_age "$timestamp" "$days" REVIEW_DUE "$path" || return $?
         printf 'ACTIVE %q\n' "$path"
     )
 
