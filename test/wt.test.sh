@@ -40,11 +40,34 @@ init_repo() {
     printf '%s\n' "$repo"
 }
 
+fixture_directory() {
+    local directory="$1"
+    local fixture
+    local actual
+    [ -n "$directory" ] && [ -d "$directory" ] || return 1
+    fixture="$(cd "$TEST_DIR" && pwd -P)" || return 1
+    actual="$(cd "$directory" && pwd -P)" || return 1
+    case "$actual/" in "$fixture/"*) return 0 ;; esac
+    return 1
+}
+
+fixture_setup_failed() {
+    assert_eq "worktree fixture setup succeeded" 1 0
+}
+
+fixture_worktree() {
+    local directory; directory="$(get_stdout)" || return 1
+    # Git -C '' keeps the caller directory, so setup output must stay in the fixture
+    fixture_directory "$directory" && [ -f "$directory/.git" ] || return 1
+    printf '%s\n' "$directory"
+}
+
 commit_path() {
     local repo="$1"
     local path="$2"
     local content="$3"
     local message="$4"
+    fixture_directory "$repo" || return 1
     mkdir -p "$(dirname "$repo/$path")"
     printf '%s\n' "$content" > "$repo/$path"
     git -C "$repo" add -- "$path"
@@ -57,7 +80,7 @@ start_task() {
     local root="${3:-$TEST_DIR/worktrees}"
     run_wt_from "$repo" --root "$root" "$branch"
     [ "$(get_rc)" = 0 ] || return 1
-    get_stdout
+    fixture_worktree
 }
 
 start_legacy_task() {
@@ -180,7 +203,7 @@ test_help_and_usage() {
 
 test_start_creates_and_resumes_full_worktree() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" task/create)"
+    local worktree; worktree="$(start_task "$repo" task/create)" || { fixture_setup_failed; return 1; }
     local worktree_root; worktree_root="$(cd "$TEST_DIR/worktrees" && pwd -P)"
 
     assert_eq "start exits 0" "$(get_rc)" 0
@@ -200,7 +223,7 @@ test_start_attaches_an_existing_branch() {
     local repo; repo="$(init_repo)"
     git -C "$repo" branch task/existing
 
-    local worktree; worktree="$(start_task "$repo" task/existing)"
+    local worktree; worktree="$(start_task "$repo" task/existing)" || { fixture_setup_failed; return 1; }
     assert_eq "existing branch start exits 0" "$(get_rc)" 0
     assert_eq "existing branch is attached" "$(git -C "$worktree" branch --show-current)" "task/existing"
     assert_stderr_contains "existing branch is reported" "Attaching existing branch"
@@ -223,7 +246,7 @@ HOOK
     git -C "$repo" branch task/existing-hook
     for branch in task/new-hook task/existing-hook; do
         : > "$TEST_DIR/post-checkout.args"
-        worktree="$(start_task "$repo" "$branch")"
+        worktree="$(start_task "$repo" "$branch")" || { fixture_setup_failed; return 1; }
         assert_rc "$branch creation succeeds" 0
         assert_eq "$branch invokes native hook exactly once" "$(cat "$TEST_DIR/post-checkout.args")" "$(printf '%s\n%s\n1' "$zero" "$head")"
         assert_file_exists "$branch checks out content" "$worktree/base.txt"
@@ -242,14 +265,14 @@ test_separate_git_metadata_is_refused_consistently() {
 
 test_start_uses_primary_head_when_called_from_another_task() {
     local repo; repo="$(init_repo)"
-    local first; first="$(start_task "$repo" task/first)"
+    local first; first="$(start_task "$repo" task/first)" || { fixture_setup_failed; return 1; }
     commit_path "$first" first-only.txt first first
     local first_head; first_head="$(git -C "$first" rev-parse HEAD)"
     local primary_head; primary_head="$(git -C "$repo" rev-parse HEAD)"
 
     run_wt_from "$first" --root "$TEST_DIR/other-worktrees" task/second
     assert_rc "nested start exits 0" 0
-    local second; second="$(get_stdout)"
+    local second; second="$(fixture_worktree)" || { fixture_setup_failed; return 1; }
     assert_eq "new task starts at primary head" "$(git -C "$second" rev-parse HEAD)" "$primary_head"
     assert_not_contains "new task excludes caller-only commit" "$(git -C "$second" rev-list HEAD)" "$first_head"
     assert_path_absent "new task excludes caller-only file" "$second/first-only.txt"
@@ -266,7 +289,7 @@ test_sparse_start_infers_scope_and_adds_hooks() {
 
     run_wt_from "$repo/proj/demo" --root "$TEST_DIR/worktrees" task/sparse
     assert_rc "sparse start exits 0" 0
-    local worktree; worktree="$(get_stdout)"
+    local worktree; worktree="$(fixture_worktree)" || { fixture_setup_failed; return 1; }
     assert_file_exists "inferred project is checked out" "$worktree/proj/demo/demo.txt"
     assert_file_exists "hooks are checked out" "$worktree/.githooks/pre-commit"
     assert_path_absent "unselected subtree is absent" "$worktree/other/other.txt"
@@ -294,7 +317,7 @@ test_sparse_explicit_scopes() {
 
     run_wt_from "$repo" --root "$TEST_DIR/worktrees" --scope one -stwo task/multiple
     assert_rc "repeated scope start exits 0" 0
-    local worktree; worktree="$(get_stdout)"
+    local worktree; worktree="$(fixture_worktree)" || { fixture_setup_failed; return 1; }
     assert_file_exists "first explicit scope is checked out" "$worktree/one/one.txt"
     assert_file_exists "second explicit scope is checked out" "$worktree/two/two.txt"
     assert_path_absent "sec is absent without selection" "$worktree/sec/secret.txt"
@@ -302,7 +325,7 @@ test_sparse_explicit_scopes() {
 
 test_status_reports_landable_and_integrated_states() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" task/status)"
+    local worktree; worktree="$(start_task "$repo" task/status)" || { fixture_setup_failed; return 1; }
 
     run_wt_from "$worktree" status
     assert_rc "initial status exits 0" 0
@@ -318,7 +341,7 @@ test_status_reports_landable_and_integrated_states() {
 
 test_sync_rebases_local_task_onto_primary() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" task/sync)"
+    local worktree; worktree="$(start_task "$repo" task/sync)" || { fixture_setup_failed; return 1; }
     commit_path "$worktree" task.txt task task
     commit_path "$repo" primary.txt primary primary
 
@@ -337,7 +360,7 @@ test_sync_replays_only_task_commits_after_primary_rewrite() {
     local initial; initial="$(git -C "$repo" rev-parse HEAD)"
     commit_path "$repo" base.txt one 'primary: one'
     commit_path "$repo" base.txt two 'primary: two'
-    local worktree; worktree="$(start_task "$repo" task/rewrite)"
+    local worktree; worktree="$(start_task "$repo" task/rewrite)" || { fixture_setup_failed; return 1; }
     commit_path "$worktree" task.txt task task
     # Replay the primary's commits onto a new base that conflicts with the first of them
     git -C "$repo" reset -q --hard "$initial"
@@ -356,7 +379,7 @@ test_sync_replays_only_task_commits_after_primary_rewrite() {
 
 test_linear_history_is_default_and_merge_history_needs_repo_opt_out() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" task/merged)"
+    local worktree; worktree="$(start_task "$repo" task/merged)" || { fixture_setup_failed; return 1; }
     git -C "$worktree" switch -q -c task/side
     commit_path "$worktree" side.txt side side
     git -C "$worktree" switch -q task/merged
@@ -396,7 +419,7 @@ test_linear_history_is_default_and_merge_history_needs_repo_opt_out() {
 
 test_invalid_linear_history_setting_fails_closed() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" task/invalid-policy)"
+    local worktree; worktree="$(start_task "$repo" task/invalid-policy)" || { fixture_setup_failed; return 1; }
     git -C "$repo" config wt.linearHistory maybe
 
     run_wt_from "$worktree" status
@@ -406,7 +429,7 @@ test_invalid_linear_history_setting_fails_closed() {
 
 test_sync_refuses_remote_tracking_evidence() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" task/published)"
+    local worktree; worktree="$(start_task "$repo" task/published)" || { fixture_setup_failed; return 1; }
     git -C "$repo" update-ref refs/remotes/origin/task/published refs/heads/task/published
 
     run_wt_from "$worktree" sync
@@ -416,7 +439,7 @@ test_sync_refuses_remote_tracking_evidence() {
 
 test_land_fast_forwards_and_verifies_primary() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" task/land)"
+    local worktree; worktree="$(start_task "$repo" task/land)" || { fixture_setup_failed; return 1; }
     commit_path "$worktree" task.txt task task
     local task_head; task_head="$(git -C "$worktree" rev-parse HEAD)"
 
@@ -429,7 +452,7 @@ test_land_fast_forwards_and_verifies_primary() {
 
 test_land_refuses_diverged_primary() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" task/diverged)"
+    local worktree; worktree="$(start_task "$repo" task/diverged)" || { fixture_setup_failed; return 1; }
     commit_path "$worktree" task.txt task task
     commit_path "$repo" primary.txt primary primary
 
@@ -440,7 +463,7 @@ test_land_refuses_diverged_primary() {
 
 test_close_removes_only_integrated_worktree_and_branch() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" task/close)"
+    local worktree; worktree="$(start_task "$repo" task/close)" || { fixture_setup_failed; return 1; }
     commit_path "$worktree" task.txt task task
     run_wt_from "$worktree" land
     assert_rc "pre-close land exits 0" 0
@@ -457,7 +480,7 @@ test_close_removes_only_integrated_worktree_and_branch() {
 
 test_close_refuses_unintegrated_work() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" task/unintegrated)"
+    local worktree; worktree="$(start_task "$repo" task/unintegrated)" || { fixture_setup_failed; return 1; }
     commit_path "$worktree" task.txt task task
 
     run_wt_from "$repo" close task/unintegrated
@@ -470,7 +493,7 @@ test_close_refuses_unintegrated_work() {
 
 test_close_accepts_only_exact_replayed_tree() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" task/replayed)"
+    local worktree; worktree="$(start_task "$repo" task/replayed)" || { fixture_setup_failed; return 1; }
     commit_path "$worktree" task.txt task task
     local task_head; task_head="$(git -C "$worktree" rev-parse HEAD)"
     GIT_COMMITTER_DATE='2001-01-01T00:00:00Z' git -C "$repo" cherry-pick "$task_head" >/dev/null
@@ -481,7 +504,7 @@ test_close_accepts_only_exact_replayed_tree() {
     assert_rc "equivalent-tree close accepts matching replay" 0
     assert_path_absent "replayed worktree is removed" "$worktree"
 
-    worktree="$(start_task "$repo" task/different)"
+    worktree="$(start_task "$repo" task/different)" || { fixture_setup_failed; return 1; }
     commit_path "$worktree" other.txt other other
     run_wt_from "$repo" close --equivalent-tree task/different
     assert_rc "equivalent-tree close rejects a different tree" 1
@@ -490,7 +513,7 @@ test_close_accepts_only_exact_replayed_tree() {
 
 test_close_accepts_matching_primary_ancestor_after_later_commits() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" task/delayed)"
+    local worktree; worktree="$(start_task "$repo" task/delayed)" || { fixture_setup_failed; return 1; }
     commit_path "$worktree" task.txt task task
     local task_head; task_head="$(git -C "$worktree" rev-parse HEAD)"
     GIT_COMMITTER_DATE='2001-01-01T00:00:00Z' git -C "$repo" cherry-pick "$task_head" >/dev/null
@@ -508,7 +531,7 @@ test_close_accepts_matching_primary_ancestor_after_later_commits() {
 
 test_close_refuses_dirty_files() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" task/files)"
+    local worktree; worktree="$(start_task "$repo" task/files)" || { fixture_setup_failed; return 1; }
     printf 'dirty\n' >> "$worktree/base.txt"
 
     run_wt_from "$repo" close task/files
@@ -519,7 +542,7 @@ test_close_refuses_dirty_files() {
 
 test_close_restores_registration_after_partial_removal() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" task/partial)"
+    local worktree; worktree="$(start_task "$repo" task/partial)" || { fixture_setup_failed; return 1; }
     local snapshot="$TEST_DIR/index.before"
     local admin; admin="$(git -C "$worktree" rev-parse --path-format=absolute --git-dir)"
     cp "$admin/index" "$snapshot"
@@ -545,7 +568,7 @@ test_close_restores_registration_after_partial_removal() {
 
 test_close_restores_missing_link_after_partial_removal_from_task() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" task/missing-link)"
+    local worktree; worktree="$(start_task "$repo" task/missing-link)" || { fixture_setup_failed; return 1; }
     inject_remove_failure missing-link
 
     run_wt_from "$worktree" close
@@ -557,7 +580,7 @@ test_close_restores_missing_link_after_partial_removal_from_task() {
 
 test_close_restores_registration_when_git_removes_registry_parent() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" task/removed-parent)"
+    local worktree; worktree="$(start_task "$repo" task/removed-parent)" || { fixture_setup_failed; return 1; }
     inject_remove_failure removed-parent
 
     run_wt_from "$repo" close task/removed-parent
@@ -568,7 +591,7 @@ test_close_restores_registration_when_git_removes_registry_parent() {
 
 test_close_preserves_existing_registration_on_remove_failure() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" task/registered)"
+    local worktree; worktree="$(start_task "$repo" task/registered)" || { fixture_setup_failed; return 1; }
     inject_remove_failure registered
 
     run_wt_from "$repo" close task/registered
@@ -583,7 +606,7 @@ test_close_does_not_overwrite_changed_link_or_registration() {
     local mode
     for mode in changed-link changed-admin; do
         local repo; repo="$(init_repo "$TEST_DIR/$mode")"
-        local worktree; worktree="$(start_task "$repo" "task/$mode")"
+        local worktree; worktree="$(start_task "$repo" "task/$mode")" || { fixture_setup_failed; return 1; }
         inject_remove_failure "$mode"
 
         run_wt_from "$repo" close "task/$mode"
@@ -603,7 +626,7 @@ test_close_does_not_overwrite_changed_link_or_registration() {
 
 test_close_preserves_replacement_directory_on_remove_failure() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" task/replaced)"
+    local worktree; worktree="$(start_task "$repo" task/replaced)" || { fixture_setup_failed; return 1; }
     inject_remove_failure replaced
 
     run_wt_from "$repo" close task/replaced
@@ -615,7 +638,7 @@ test_close_preserves_replacement_directory_on_remove_failure() {
 
 test_close_preserves_directory_symlink_on_remove_failure() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" task/symlink)"
+    local worktree; worktree="$(start_task "$repo" task/symlink)" || { fixture_setup_failed; return 1; }
     inject_remove_failure symlink
 
     run_wt_from "$repo" close task/symlink
@@ -628,7 +651,7 @@ test_close_preserves_directory_symlink_on_remove_failure() {
 
 test_close_keeps_snapshot_when_registration_inspection_fails() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" task/scan-failed)"
+    local worktree; worktree="$(start_task "$repo" task/scan-failed)" || { fixture_setup_failed; return 1; }
     inject_remove_failure scan-failed
 
     run_wt_from "$repo" close task/scan-failed
@@ -640,7 +663,7 @@ test_close_keeps_snapshot_when_registration_inspection_fails() {
 
 test_close_refuses_registration_restore_when_branch_changed() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" task/changed-branch)"
+    local worktree; worktree="$(start_task "$repo" task/changed-branch)" || { fixture_setup_failed; return 1; }
     inject_remove_failure changed-branch
 
     run_wt_from "$repo" close task/changed-branch
@@ -652,7 +675,7 @@ test_close_refuses_registration_restore_when_branch_changed() {
 
 test_close_checks_directory_even_when_git_reports_success() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" task/false-success)"
+    local worktree; worktree="$(start_task "$repo" task/false-success)" || { fixture_setup_failed; return 1; }
     inject_remove_failure false-success
 
     run_wt_from "$repo" close task/false-success
@@ -663,7 +686,7 @@ test_close_checks_directory_even_when_git_reports_success() {
 
 test_close_never_removes_files_when_snapshot_copy_fails() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" task/snapshot-failed)"
+    local worktree; worktree="$(start_task "$repo" task/snapshot-failed)" || { fixture_setup_failed; return 1; }
     cat > "$SHIM_DIR/cp" <<'SHIM'
 #!/bin/bash
 exit 1
@@ -679,7 +702,7 @@ SHIM
 
 test_close_reports_nonzero_remove_even_when_directory_vanished() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" task/vanished)"
+    local worktree; worktree="$(start_task "$repo" task/vanished)" || { fixture_setup_failed; return 1; }
     inject_remove_failure vanished
 
     run_wt_from "$worktree" close
@@ -692,7 +715,7 @@ test_close_reports_nonzero_remove_even_when_directory_vanished() {
 
 test_close_succeeds_when_called_from_task_directory() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" task/from-task)"
+    local worktree; worktree="$(start_task "$repo" task/from-task)" || { fixture_setup_failed; return 1; }
 
     run_wt_from "$worktree" close
     assert_rc "task-local close succeeds" 0
@@ -703,7 +726,7 @@ test_close_succeeds_when_called_from_task_directory() {
 
 test_close_removes_ds_store_but_refuses_other_untracked_files() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" task/ds-store)"
+    local worktree; worktree="$(start_task "$repo" task/ds-store)" || { fixture_setup_failed; return 1; }
     mkdir -p "$worktree/nested"
     printf 'finder metadata\n' > "$worktree/.DS_Store"
     printf 'finder metadata\n' > "$worktree/nested/.DS_Store"
@@ -730,7 +753,7 @@ test_close_removes_ds_store_but_refuses_other_untracked_files() {
 test_close_refuses_tracked_ds_store_changes() {
     local repo; repo="$(init_repo)"
     commit_path "$repo" .DS_Store original metadata
-    local worktree; worktree="$(start_task "$repo" task/tracked-ds-store)"
+    local worktree; worktree="$(start_task "$repo" task/tracked-ds-store)" || { fixture_setup_failed; return 1; }
     printf 'changed\n' > "$worktree/.DS_Store"
 
     run_wt_from "$repo" close task/tracked-ds-store
@@ -740,7 +763,7 @@ test_close_refuses_tracked_ds_store_changes() {
 
 test_close_removes_ignored_files_with_worktree() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" task/ignored)"
+    local worktree; worktree="$(start_task "$repo" task/ignored)" || { fixture_setup_failed; return 1; }
     mkdir -p "$worktree/ignored"
     printf 'generated\n' > "$worktree/ignored/artifact.txt"
 
@@ -758,7 +781,7 @@ test_close_removes_ignored_files_with_worktree() {
 
 test_close_refuses_locked_and_active_worktrees() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" task/protected)"
+    local worktree; worktree="$(start_task "$repo" task/protected)" || { fixture_setup_failed; return 1; }
     git -C "$repo" worktree lock --reason test "$worktree"
 
     run_wt_from "$repo" close task/protected
@@ -783,7 +806,7 @@ test_close_allows_unmapped_gitlink_outside_sparse_scope() {
 
     run_wt_from "$repo/selected" --root "$TEST_DIR/worktrees" task/gitlink
     assert_rc "gitlink sparse start exits 0" 0
-    local worktree; worktree="$(get_stdout)"
+    local worktree; worktree="$(fixture_worktree)" || { fixture_setup_failed; return 1; }
     local submodule_rc=0
     git -C "$worktree" submodule status --recursive >/dev/null 2>&1 || submodule_rc=$?
     assert_eq "fixture submodule status fails" "$submodule_rc" 128
@@ -862,7 +885,7 @@ test_explicit_scope_enables_sparse_checkout() {
     commit_path "$repo" packages/api/file.txt api api
     run_wt_from "$repo" start --root "$TEST_DIR/trees" --scope=packages/ui scoped
     assert_rc "explicit scope selects sparse mode" 0
-    local worktree; worktree="$(get_stdout)"
+    local worktree; worktree="$(fixture_worktree)" || { fixture_setup_failed; return 1; }
     assert_file_exists "explicit scope exists" "$worktree/packages/ui/file.txt"
     assert_path_absent "other package is absent" "$worktree/packages/api/file.txt"
 }
@@ -875,7 +898,7 @@ test_project_scope_inference_is_configurable() {
     git -C "$repo" config wt.projectRoot packages
     run_wt_from "$repo/packages/ui/src" --root "$TEST_DIR/trees" inferred
     assert_rc "configured project root succeeds" 0
-    local worktree; worktree="$(get_stdout)"
+    local worktree; worktree="$(fixture_worktree)" || { fixture_setup_failed; return 1; }
     assert_file_exists "inferred child exists" "$worktree/packages/ui/src/file.txt"
     assert_path_absent "sibling project is absent" "$worktree/packages/api/file.txt"
 }
@@ -981,7 +1004,7 @@ test_attaching_branch_uses_its_own_committed_attributes() {
 
 test_land_guards_receive_context_and_keep_stdout_clean() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" guarded)"
+    local worktree; worktree="$(start_task "$repo" guarded)" || { fixture_setup_failed; return 1; }
     commit_path "$worktree" feature.txt feature feature
     local before; before="$(git -C "$repo" rev-parse HEAD)"
     # shellcheck disable=SC2016 # "Expressions don't expand in single quotes, use double quotes for that." -- The configured command expands variables in its child process
@@ -1018,7 +1041,7 @@ test_extended_option_grammar() {
     commit_path "$repo" ui/file.txt ui ui
     run_wt_from "$repo" grammar --root="$TEST_DIR/trees" -sui
     assert_rc "interleaved glued and equal forms work" 0
-    local worktree; worktree="$(get_stdout)"
+    local worktree; worktree="$(fixture_worktree)" || { fixture_setup_failed; return 1; }
     run_wt_from "$repo" close --equivalent-tree-at="$(git -C "$repo" rev-parse HEAD)" -- grammar
     assert_rc "equal recovery commit is accepted" 0
     run_wt_from "$repo" --root "$TEST_DIR/trees" start -- close
@@ -1052,7 +1075,7 @@ test_failed_branch_inspection_cannot_choose_the_wrong_checkout_commit() {
 
 test_failed_git_inspection_never_reports_clean_or_rebases() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" inspection)"
+    local worktree; worktree="$(start_task "$repo" inspection)" || { fixture_setup_failed; return 1; }
     commit_path "$worktree" feature.txt feature feature
     write_failing_git
     WT_FAIL_COMMAND=status run_wt_from "$worktree" status
@@ -1072,7 +1095,7 @@ test_failed_git_inspection_never_reports_clean_or_rebases() {
 
 test_recovery_accepts_full_sha256_ancestor_ids() {
     local repo; repo="$(GIT_DEFAULT_HASH=sha256 init_repo)"
-    local worktree; worktree="$(start_task "$repo" hash-recovery)"
+    local worktree; worktree="$(start_task "$repo" hash-recovery)" || { fixture_setup_failed; return 1; }
     commit_path "$worktree" feature.txt feature feature
     commit_path "$repo" feature.txt feature replay
     local replay; replay="$(git -C "$repo" rev-parse HEAD)"
@@ -1125,11 +1148,11 @@ test_crypt_driver_can_find_shared_keys_in_linked_worktrees() {
     git -C "$repo" config filter.git-crypt.smudge 'test -f "$(git rev-parse --git-dir)/git-crypt/keys/default" && cat'
     run_wt_from "$repo" --root "$TEST_DIR/trees" --scope vault sparse-crypt-state
     assert_rc "sparse crypt driver finds common key state" 0
-    local worktree; worktree="$(get_stdout)"
+    local worktree; worktree="$(fixture_worktree)" || { fixture_setup_failed; return 1; }
     assert_file_exists "sparse encrypted fixture is checked out" "$worktree/vault/item.txt"
     run_wt_from "$repo" --root "$TEST_DIR/trees" full-crypt-state
     assert_rc "full crypt driver finds common key state" 0
-    worktree="$(get_stdout)"
+    worktree="$(fixture_worktree)" || { fixture_setup_failed; return 1; }
     assert_file_exists "full encrypted fixture is checked out" "$worktree/vault/item.txt"
     run_wt_from "$repo" close full-crypt-state
     assert_rc "crypt worktree cleanup succeeds" 0
@@ -1150,7 +1173,7 @@ test_explicit_descendant_does_not_authorize_broader_protected_include() {
 
 test_failed_ancestry_inspection_preserves_exact_tree_recovery() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" failed-recovery)"
+    local worktree; worktree="$(start_task "$repo" failed-recovery)" || { fixture_setup_failed; return 1; }
     commit_path "$worktree" feature.txt feature task
     commit_path "$repo" feature.txt feature replay
     write_failing_git
@@ -1163,7 +1186,7 @@ test_failed_ancestry_inspection_preserves_exact_tree_recovery() {
 
 test_sourced_lifecycle_handles_inherited_errexit() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" source-task)"
+    local worktree; worktree="$(start_task "$repo" source-task)" || { fixture_setup_failed; return 1; }
     (
         cd "$worktree" || exit 1
         /bin/bash -ec '. "$1" status; printf "source-returned\n"; case "$-" in *e*) exit 0 ;; *) exit 9 ;; esac' bash "$UNDER_TEST"
@@ -1209,7 +1232,7 @@ test_explicit_storage_stays_strict_and_candidates_are_validated() {
 
 test_resuming_does_not_resolve_storage_candidates() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" resume-storage)"
+    local worktree; worktree="$(start_task "$repo" resume-storage)" || { fixture_setup_failed; return 1; }
     git -C "$repo" config --add wt.root relative/root
     run_wt_from "$repo" resume-storage
     assert_rc "resume ignores unused root configuration" 0
@@ -1227,7 +1250,7 @@ test_program_name_override_preserves_wrapper_identity() {
 
 test_archive_preserves_dirty_untracked_and_ignored_work_and_start_restores() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" experiment)"
+    local worktree; worktree="$(start_task "$repo" experiment)" || { fixture_setup_failed; return 1; }
     commit_path "$worktree" experiment.txt committed experiment
     local head; head="$(git -C "$worktree" rev-parse HEAD)"
     printf 'edited\n' > "$worktree/base.txt"
@@ -1239,7 +1262,7 @@ test_archive_preserves_dirty_untracked_and_ignored_work_and_start_restores() {
     local before; before="$(git -C "$worktree" status --porcelain=v1 --untracked-files=all)"
     run_wt_from "$repo" archive experiment --archive-root "$TEST_DIR/archive with spaces" --reason 'Keep rejected experiment'
     assert_rc "archive succeeds without integrating the branch" 0
-    local archived; archived="$(get_stdout)"
+    local archived; archived="$(fixture_worktree)" || { fixture_setup_failed; return 1; }
     assert_path_absent "active directory moved" "$worktree"
     assert_file_exists "untracked file retained" "$archived/draft.txt"
     assert_file_exists "ignored file retained" "$archived/ignored/result.txt"
@@ -1251,7 +1274,7 @@ test_archive_preserves_dirty_untracked_and_ignored_work_and_start_restores() {
     assert_stdout_contains "archive reported" ARCHIVED
     run_wt_from "$repo" start experiment --root "$TEST_DIR/restored"
     assert_rc "explicit start restores archive into active storage" 0
-    local restored; restored="$(get_stdout)"
+    local restored; restored="$(fixture_worktree)" || { fixture_setup_failed; return 1; }
     assert_contains "restored into requested root" "$restored" "$TEST_DIR/restored/"
     assert_eq "restored edits retained" "$(git -C "$restored" status --porcelain=v1 --untracked-files=all)" "$before"
     assert_file_exists "restored ignored file retained" "$restored/ignored/result.txt"
@@ -1259,7 +1282,7 @@ test_archive_preserves_dirty_untracked_and_ignored_work_and_start_restores() {
 
 test_archive_requires_reason_and_refuses_locked_or_busy_worktrees() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" experiment)"
+    local worktree; worktree="$(start_task "$repo" experiment)" || { fixture_setup_failed; return 1; }
     run_wt_from "$repo" archive experiment --archive-root "$TEST_DIR/archives"
     assert_rc "archive requires explicit reason" 2
     assert_dir_exists "missing reason preserves work" "$worktree"
@@ -1281,7 +1304,7 @@ SHIM
 
 test_archive_rejects_destination_inside_worktree_and_failed_move_is_auditable() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" experiment)"
+    local worktree; worktree="$(start_task "$repo" experiment)" || { fixture_setup_failed; return 1; }
     run_wt_from "$repo" archive experiment --archive-root "$worktree/inside" --reason Keep
     assert_rc "archive refuses a nested destination" 2
     assert_path_absent "unsafe destination not created" "$worktree/inside"
@@ -1302,7 +1325,7 @@ SHIM
 
 test_audit_reports_integrated_orphan_missing_and_review_age_without_mutation() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" completed)"
+    local worktree; worktree="$(start_task "$repo" completed)" || { fixture_setup_failed; return 1; }
     local registered; registered="$(git -C "$repo" worktree list --porcelain)"
     local refs; refs="$(git -C "$repo" show-ref)"
     mkdir "$TEST_DIR/worktrees/orphan"
@@ -1326,7 +1349,7 @@ test_audit_reports_integrated_orphan_missing_and_review_age_without_mutation() {
 
 test_archive_root_configuration_and_argument_validation() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" experiment)"
+    local worktree; worktree="$(start_task "$repo" experiment)" || { fixture_setup_failed; return 1; }
     git -C "$repo" config wt.archiveRoot "$TEST_DIR/configured-archive"
     run_wt_from "$repo" archive experiment --reason Keep
     assert_rc "configured archive root works" 0
@@ -1336,7 +1359,7 @@ test_archive_root_configuration_and_argument_validation() {
     run_wt_from "$repo" status experiment --archive-root "$TEST_DIR/unused"
     assert_rc "archive root requires archive" 2
     assert_path_absent "unused archive root not created" "$TEST_DIR/unused"
-    worktree="$(start_task "$repo" empty-config)"
+    worktree="$(start_task "$repo" empty-config)" || { fixture_setup_failed; return 1; }
     git -C "$repo" config wt.archiveRoot ''
     run_wt_from "$repo" archive empty-config --reason Keep
     assert_rc "empty archive configuration refuses" 2
@@ -1346,7 +1369,7 @@ test_archive_root_configuration_and_argument_validation() {
 
 test_archive_refuses_active_operations_submodules_and_unusable_lsof() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" experiment)"
+    local worktree; worktree="$(start_task "$repo" experiment)" || { fixture_setup_failed; return 1; }
     local admin; admin="$(git -C "$worktree" rev-parse --path-format=absolute --git-dir)"
     git -C "$worktree" rev-parse HEAD > "$admin/MERGE_HEAD"
     run_wt_from "$repo" archive experiment --archive-root "$TEST_DIR/archives" --reason Keep
@@ -1371,7 +1394,7 @@ SHIM
 
 test_archive_receipt_failure_preserves_moved_work_and_audit_reports_pending() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" experiment)"
+    local worktree; worktree="$(start_task "$repo" experiment)" || { fixture_setup_failed; return 1; }
     printf 'keep me\n' > "$worktree/untracked.txt"
     export WT_REAL_GIT; WT_REAL_GIT="$(command -v git)"
     cat > "$SHIM_DIR/git" <<'SHIM'
@@ -1394,7 +1417,7 @@ SHIM
 
 test_audit_inspection_errors_are_incomplete_not_orphan_findings() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" experiment)"
+    local worktree; worktree="$(start_task "$repo" experiment)" || { fixture_setup_failed; return 1; }
     export WT_REAL_GIT; WT_REAL_GIT="$(command -v git)"
     export WT_BAD_TREE="$worktree"
     cat > "$SHIM_DIR/git" <<'SHIM'
@@ -1410,7 +1433,7 @@ SHIM
 
 test_audit_preserves_uncommitted_tasks_as_active_instead_of_cleanup_candidates() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" experiment)"
+    local worktree; worktree="$(start_task "$repo" experiment)" || { fixture_setup_failed; return 1; }
     printf 'active work\n' > "$worktree/base.txt"
     run_wt_from "$repo" audit
     assert_rc "uncommitted work is not an integrated cleanup candidate" 0
@@ -1420,7 +1443,7 @@ test_audit_preserves_uncommitted_tasks_as_active_instead_of_cleanup_candidates()
 
 test_archive_and_audit_follow_explicit_root_aliases_safely() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" experiment)"
+    local worktree; worktree="$(start_task "$repo" experiment)" || { fixture_setup_failed; return 1; }
     ln -s "$TEST_DIR/worktrees" "$TEST_DIR/active-alias"
     run_wt_from "$repo" audit --root "$TEST_DIR/active-alias"
     assert_rc "read-only audit accepts a storage alias" 4
@@ -1434,12 +1457,25 @@ test_archive_and_audit_follow_explicit_root_aliases_safely() {
 
 test_audit_finder_metadata_does_not_hide_integrated_cleanup_candidates() {
     local repo; repo="$(init_repo)"
-    local worktree; worktree="$(start_task "$repo" completed)"
+    local worktree; worktree="$(start_task "$repo" completed)" || { fixture_setup_failed; return 1; }
     printf 'Finder metadata\n' > "$worktree/.DS_Store"
     run_wt_from "$repo" audit
     assert_rc "untracked Finder metadata does not hide integration" 4
     assert_stdout_contains "Finder-only leftover is reported" INTEGRATED
     assert_file_exists "read-only audit preserves metadata" "$worktree/.DS_Store"
+}
+
+test_failed_setup_never_switches_the_callers_repository_branch() {
+    local repo; repo="$(init_repo)"
+    (
+        cd "$repo" || exit 1
+        UNDER_TEST="$TEST_DIR/missing-executable"
+        commit_path() { return 1; }
+        test_linear_history_is_default_and_merge_history_needs_repo_opt_out
+    ) > "$TEST_DIR/failed-setup.log" 2>&1
+    assert_eq "failed setup never falls back to the caller checkout" "$(git -C "$repo" branch --show-current)" main
+    assert_eq "failed setup creates no caller-side test branch" "$(git -C "$repo" branch --list task/side)" ''
+    assert_contains "failed setup remains an explicit test failure" "$(cat "$TEST_DIR/failed-setup.log")" '[FAIL]'
 }
 
 run_tests "$@"
