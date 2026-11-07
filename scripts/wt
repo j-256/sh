@@ -8,18 +8,24 @@
 #   wt sync [branch]
 #   wt land [branch]
 #   wt close [--equivalent-tree | --equivalent-tree-at COMMIT] [branch]
+#   wt archive --reason TEXT [--archive-root PATH] [branch]
+#   wt audit [--root PATH] [--stale-days DAYS]
 #
 # Options:
-#   -r, --root PATH    Override the worktree storage root for start
+#   -r, --root PATH    Override start storage or select an audit root
 #   -s, --scope PATH   Select a sparse-checkout scope (repeatable)
 #   -e, --equivalent-tree  Close a replay with an identical integration tree
 #   -a, --equivalent-tree-at COMMIT  Compare with a full ancestor commit ID
 #   -h, --help         Show help
+#   -A, --archive-root PATH  Override archive storage
+#   -R, --reason TEXT  Explain why an experiment is retained
+#   -d, --stale-days DAYS  Review age for audit
 #
 # Environment:
 #   WT_PROGRAM_NAME  Override the displayed command name for a caller wrapper
 #   HOME             Supplies the default XDG state base
 #   XDG_STATE_HOME   Worktree storage base when wt.root is unset
+#   XDG_DATA_HOME    Archive storage base when wt.archiveRoot is unset
 
 _wt() (
     local SCRIPT_NAME; SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
@@ -48,6 +54,8 @@ SYNOPSIS
   $SCRIPT_NAME sync [${s}branch${r}]
   $SCRIPT_NAME land [${s}branch${r}]
   $SCRIPT_NAME close [--equivalent-tree | --equivalent-tree-at ${s}COMMIT${r}] [${s}branch${r}]
+  $SCRIPT_NAME archive --reason ${s}TEXT${r} [--archive-root ${s}PATH${r}] [${s}branch${r}]
+  $SCRIPT_NAME audit [--root ${s}PATH${r}] [--stale-days ${s}DAYS${r}]
 DESCRIPTION
   Creates or resumes a task worktree by default. The remaining commands
   inspect, rebase, fast-forward into the primary checkout, and remove an
@@ -62,16 +70,22 @@ COMMANDS
   sync    Rebase a clean local-only task branch onto the integration branch
   land    Fast-forward a clean task without new merge commits by default
   close   Remove a clean integrated worktree or an exact replay with the flag
+  archive Preserve an explicitly retired task intact; start restores an archive
+  audit   Inspect registered tasks and optionally a storage root without mutation
 OPTIONS
-  -r, --root ${s}PATH${r}                  Absolute worktree storage directory for start
+  -r, --root ${s}PATH${r}                  Absolute start storage directory or audit root
   -s, --scope ${s}PATH${r}                 Sparse directory relative to repository root; repeatable
   -e, --equivalent-tree            Close a replay matching the integration tree
   -a, --equivalent-tree-at ${s}COMMIT${r}  Compare with a full ancestor commit ID
   -h, --help                       Show help
+  -A, --archive-root ${s}PATH${r}          Absolute archive storage directory
+  -R, --reason ${s}TEXT${r}                Required retention reason for archive
+  -d, --stale-days ${s}DAYS${r}            Review age in whole days for audit; default 7
 ENVIRONMENT
   WT_PROGRAM_NAME  Displayed command name when invoked through a wrapper
   HOME             Supplies the default ~/.local/state base
   XDG_STATE_HOME   Absolute worktree state base when wt.root is unset
+  XDG_DATA_HOME    Archive data base when wt.archiveRoot is unset
 FILES
   Reads Git configuration from the primary checkout. Use git config to set:
     wt.root             Absolute preferred storage directory; repeatable in order
@@ -81,6 +95,7 @@ FILES
     wt.protectedPath    Directory requiring explicit --scope selection; repeatable
     wt.linearHistory    Boolean, default true; false enables task merge commits
     wt.landGuard        Trusted Bash command to run before land; repeatable
+    wt.archiveRoot      Absolute archive root; defaults to XDG data wt/archive
   Relative directories must name existing trees at the task's checkout commit.
   Without projectRoot, infer the caller's top-level directory. Within a project
   root, infer its immediate child. At the repository or project root pass --scope.
@@ -130,11 +145,13 @@ EXIT STATUS
   1  Runtime failure or safety refusal
   2  Invalid usage, configuration, or unsupported repository state
   3  Missing dependency or unsupported Git version
+  4  Audit completed with findings requiring review
   Other nonzero statuses are propagated from a configured landGuard
 DEPENDENCIES
   Git 2.43+; Bash 3.2+
   Configured Git filter drivers (when their files are selected)
   Programs referenced by landGuard (only when land invokes that guard)
+  lsof (archive and restoration only, to refuse worktrees with open files)
 CAVEATS
   All decisions use local refs; no remote state is refreshed. The primary's
   checked-out branch is the integration target, not the remote default branch.
@@ -150,6 +167,12 @@ CAVEATS
   inspection; it cannot restore files Git already deleted. Never prune or
   force-delete a partial checkout to bypass the failure.
   Workflow approval belongs to the caller; land does not ask for confirmation.
+  archive requires an explicit reason and preserves ignored files and branches.
+  Archives remain registered and depend on the primary repository's Git history.
+  Default archives: \${XDG_DATA_HOME:-\$HOME/.local/share}/wt/archive.
+  Receipts and partial moves are preserved for inspection, never force-retried.
+  audit never deletes, archives, prunes or creates task branches. Age prompts
+  review only. Run archive from outside the task so its shell is not using it.
 
 EOF
     }
@@ -729,6 +752,11 @@ EOF
                 _error "The branch is checked out in a locked worktree: $WT_TARGET_PATH"
                 return 1
             }
+            _archive_receipt || { _error "Invalid archive metadata"; return 1; }
+            if [ -n "$WT_ARCHIVE_RECEIPT" ]; then
+                _restore_archive "$root_override"
+                return $?
+            fi
             _info "Resuming $branch"
             _canonical_output_path "$WT_TARGET_PATH"
             return 0
@@ -797,6 +825,8 @@ EOF
             return 1
         }
         worktree="$WT_TARGET_PATH"
+        local activity_admin; activity_admin="$(git -C "$worktree" rev-parse --path-format=absolute --git-dir)" || return 1
+        date +%s > "$activity_admin/wt-created" || return 1
         if [ "$created_branch" -eq 1 ]; then
             _info "Created worktree for $branch"
         else
@@ -1378,7 +1408,310 @@ EOF
         _canonical_output_path "$WT_PRIMARY_PATH"
     }
 
+    _status_fingerprint() {
+        local snapshot
+        local fingerprint
+        snapshot="$(mktemp "${TMPDIR:-/tmp}/wt-state.XXXXXXXX")" || return 1
+        if ! GIT_OPTIONAL_LOCKS=0 git -C "$1" status --porcelain=v1 -z --untracked-files=all > "$snapshot"; then
+            rm "$snapshot"
+            return 1
+        fi
+        fingerprint="$(git hash-object --stdin < "$snapshot")" || { rm "$snapshot"; return 1; }
+        rm "$snapshot" || return 1
+        printf '%s\n' "$fingerprint"
+    }
+
+    _require_idle_files() {
+        local worktree="$1"
+        local output
+        local errors
+        local rc
+        _require_command lsof || return $?
+        errors="$(mktemp "${TMPDIR:-/tmp}/wt-open.XXXXXXXX")" || return 1
+        output="$(lsof -t +D "$worktree" 2> "$errors")"
+        rc=$?
+        if [ "$rc" -eq 127 ]; then
+            rm "$errors"
+            _error "lsof is required for archival and restoration"
+            return 3
+        fi
+        if [ -n "$output" ]; then
+            rm "$errors"
+            _error "Task worktree has open files; stop its processes before archiving"
+            return 1
+        fi
+        if [ "$rc" -ne 1 ] || [ -s "$errors" ]; then
+            rm "$errors"
+            _error "Cannot establish whether the task has open files"
+            return 1
+        fi
+        rm "$errors"
+    }
+
+    _archive_preflight() {
+        _require_available_task_worktree || return $?
+        _require_unlocked_task || return $?
+        _verify_close_identity || return $?
+        _require_no_operation "$WT_TARGET_PATH" "Task worktree" || return $?
+        _require_no_operation "$WT_PRIMARY_PATH" "Primary worktree" || return $?
+        local submodules; submodules="$(git -C "$WT_TARGET_PATH" ls-files --stage)" || return 1
+        case "$submodules" in 160000*|*$'\n'160000*) _error "Worktrees containing submodules cannot be archived"; return 1 ;; esac
+        _require_idle_files "$WT_TARGET_PATH"
+    }
+
+    _receipt_value() {
+        git config --file "$1" --get "wt.$2"
+    }
+
+    _archive_receipt() {
+        local admin; admin="$(git -C "$WT_TARGET_PATH" rev-parse --path-format=absolute --git-dir)" || return 1
+        WT_ARCHIVE_RECEIPT=""
+        [ -e "$admin/wt-archive" ] || return 0
+        [ -f "$admin/wt-archive" ] && [ ! -L "$admin/wt-archive" ] || return 1
+        IFS= read -r WT_ARCHIVE_RECEIPT < "$admin/wt-archive" || return 1
+        [ -f "$WT_ARCHIVE_RECEIPT" ] && [ ! -L "$WT_ARCHIVE_RECEIPT" ] || return 1
+        [ "$(_receipt_value "$WT_ARCHIVE_RECEIPT" version)" = 1 ] &&
+            [ "$(_receipt_value "$WT_ARCHIVE_RECEIPT" commondir)" = "$WT_COMMON_DIR" ] &&
+            [ "$(_receipt_value "$WT_ARCHIVE_RECEIPT" branchref)" = "$WT_TASK_REF" ] || return 1
+    }
+
+    _move_preserved_task() {
+        local destination="$1"
+        local original="$WT_TARGET_PATH"
+        local identity
+        local head
+        local fingerprint
+        # Retain the directory itself; compare Git state without reading file contents
+        identity="$(_directory_identity "$original")" || return 1
+        head="$(git -C "$original" rev-parse HEAD)" || return 1
+        fingerprint="$(_status_fingerprint "$original")" || return 1
+        if ! git -C "$WT_PRIMARY_PATH" worktree move "$original" "$destination" >&2; then
+            _error "Worktree move failed; inspect both paths and the preserved receipt before retrying"
+            return 1
+        fi
+        _scan_worktrees "$WT_TASK_REF" || return 1
+        [ ! -e "$original" ] && [ -d "$destination" ] &&
+            [ "$(_directory_identity "$destination")" = "$identity" ] &&
+            [ "$(cd "$WT_TARGET_PATH" && pwd -P)" = "$(cd "$destination" && pwd -P)" ] &&
+            [ "$(git -C "$destination" rev-parse HEAD)" = "$head" ] &&
+            [ "$(_status_fingerprint "$destination")" = "$fingerprint" ] || {
+                _error "Moved worktree could not be verified; paths and receipt preserved for recovery"
+                return 1
+            }
+        _verify_close_identity
+    }
+
+    _archive() {
+        local supplied="$1"
+        local root="$2"
+        local reason="$3"
+        local candidate
+        local suffix=""
+        local container
+        local receipt
+        local admin
+        local original
+        local key
+        local value
+        _load_task "$supplied" || return $?
+        _archive_preflight || return $?
+        _archive_receipt || { _error "Invalid archive metadata"; return 1; }
+        [ -z "$WT_ARCHIVE_RECEIPT" ] || { _error "Task already has an archive receipt; inspect it before retrying"; return 1; }
+        if [ -z "$root" ]; then
+            _config_list wt.archiveRoot || return $?
+            [ "${#WT_CONFIG_VALUES[@]}" -le 1 ] || { _error "wt.archiveRoot must name one directory"; return 2; }
+            if [ "${#WT_CONFIG_VALUES[@]}" -eq 1 ]; then
+                root="${WT_CONFIG_VALUES[0]}"
+                [ -n "$root" ] || { _error "wt.archiveRoot must name an absolute directory"; return 2; }
+            else
+                [ -n "${XDG_DATA_HOME:-${HOME:-}}" ] || { _error "Archive storage requires XDG_DATA_HOME or HOME"; return 2; }
+                root="${XDG_DATA_HOME:-${HOME:-}/.local/share}/wt/archive"
+            fi
+        fi
+        case "$root" in /*) ;; *) _error "Archive root must be absolute"; return 2 ;; esac
+        case "/${root#/}/" in */../*|*/./*) _error "Archive root cannot contain dot components"; return 2 ;; esac
+        candidate="$root"
+        while [ ! -e "$candidate" ]; do
+            suffix="/${candidate##*/}$suffix"
+            candidate="${candidate%/*}"
+            [ -n "$candidate" ] || candidate=/
+        done
+        [ -d "$candidate" ] || { _error "Archive root must resolve through a directory"; return 2; }
+        root="$(cd "$candidate" && pwd -P)$suffix" || return 1
+        original="$(cd "$WT_TARGET_PATH" && pwd -P)" || return 1
+        case "$root/" in "$original/"*|"$WT_PRIMARY_PATH/"*|"$WT_COMMON_DIR/"*) _error "Archive root cannot be inside a checkout or its Git directory"; return 2 ;; esac
+        umask 077
+        mkdir -p "$root" || return 1
+        container="$(mktemp -d "$root/$WT_REPO_NAME-$(_worktree_name "$WT_TASK_BRANCH").XXXXXXXX")" || return 1
+        receipt="$container/.wt-archive"
+        admin="$(git -C "$WT_TARGET_PATH" rev-parse --path-format=absolute --git-dir)" || return 1
+        for key in version state commondir branchref original worktree head status reason created; do
+            case "$key" in
+                version) value=1 ;; state) value=pending ;; commondir) value="$WT_COMMON_DIR" ;;
+                branchref) value="$WT_TASK_REF" ;; original) value="$WT_TARGET_PATH" ;;
+                worktree) value="$container/worktree" ;; head) value="$(git -C "$WT_TARGET_PATH" rev-parse HEAD)" || return 1 ;;
+                status) value="$(_status_fingerprint "$WT_TARGET_PATH")" || return 1 ;;
+                reason) value="$reason" ;; created) value="$(date +%s)" || return 1 ;;
+            esac
+            git config --file "$receipt" "wt.$key" "$value" || return 1
+        done
+        # Record pending intent before Git can move files or update its registration
+        printf '%s\n' "$receipt" > "$admin/wt-archive" || return 1
+        _move_preserved_task "$container/worktree" || return $?
+        git config --file "$receipt" wt.state archived || { _error "Archive moved but receipt is pending; inspect $receipt"; return 1; }
+        _info "Archived $WT_TASK_BRANCH; branch, edits and ignored files retained"
+        _canonical_output_path "$WT_TARGET_PATH"
+    }
+
+    _restore_archive() {
+        local root_override="$1"
+        local receipt="$WT_ARCHIVE_RECEIPT"
+        local destination
+        local admin
+        [ "$(_receipt_value "$receipt" state)" = archived ] || { _error "Archive is incomplete; inspect $receipt"; return 1; }
+        [ "$(_receipt_value "$receipt" worktree)" = "$WT_TARGET_PATH" ] &&
+            [ "$(_receipt_value "$receipt" head)" = "$(git -C "$WT_TARGET_PATH" rev-parse HEAD)" ] &&
+            [ "$(_receipt_value "$receipt" status)" = "$(_status_fingerprint "$WT_TARGET_PATH")" ] || {
+                _error "Archived worktree changed; inspect it before restoration"
+                return 1
+            }
+        _archive_preflight || return $?
+        _select_root "$root_override" || return $?
+        destination="$(mktemp -d "$WT_ROOT/$WT_REPO_NAME-$(_worktree_name "$WT_TASK_BRANCH").XXXXXXXX")" || return 1
+        rmdir "$destination" || return 1
+        git config --file "$receipt" wt.state restoring || return 1
+        _move_preserved_task "$destination" || return $?
+        admin="$(git -C "$WT_TARGET_PATH" rev-parse --path-format=absolute --git-dir)" || return 1
+        git config --file "$receipt" wt.state restored || return 1
+        git config --file "$receipt" wt.restoredpath "$WT_TARGET_PATH" || return 1
+        rm "$admin/wt-archive" || return 1
+        _canonical_output_path "$WT_TARGET_PATH"
+    }
+
+    _audit_one() (
+        local path="$1"
+        local days="$2"
+        local branch
+        local admin
+        local state
+        local reason
+        local timestamp
+        local head
+        local fingerprint
+        local marker
+        local relation
+        local operation
+        local rc
+        # Each audit scope independently disables optional Git writes
+        # shellcheck disable=SC2030
+        export GIT_OPTIONAL_LOCKS=0
+        if [ ! -d "$path" ]; then printf 'MISSING %q\n' "$path"; return 4; fi
+        if [ -L "$path" ] || [ ! -f "$path/.git" ] || [ -L "$path/.git" ]; then printf 'ORPHAN %q\n' "$path"; return 4; fi
+        IFS= read -r marker < "$path/.git" || return 1
+        case "$marker" in
+            'gitdir: '*) marker="${marker#gitdir: }" ;;
+            *) printf 'ORPHAN %q\n' "$path"; return 4 ;;
+        esac
+        case "$marker" in /*) ;; *) marker="$path/$marker" ;; esac
+        if [ ! -d "$marker" ]; then printf 'ORPHAN %q\n' "$path"; return 4; fi
+        cd "$path" || return 1
+        if ! _load_context >/dev/null 2>&1; then printf 'INSPECTION_FAILED %q\n' "$path"; return 1; fi
+        branch="$(git symbolic-ref --quiet --short HEAD)" || { printf 'DETACHED %q\n' "$path"; return 4; }
+        _load_task "$branch" || return 1
+        _verify_close_identity || return 1
+        _archive_receipt || { printf 'INVALID_ARCHIVE %q\n' "$path"; return 4; }
+        if [ -n "$WT_ARCHIVE_RECEIPT" ]; then
+            state="$(_receipt_value "$WT_ARCHIVE_RECEIPT" state)" || return 1
+            if [ "$state" = archived ] && [ "$(_receipt_value "$WT_ARCHIVE_RECEIPT" worktree)" = "$WT_TARGET_PATH" ] &&
+                [ "$(_receipt_value "$WT_ARCHIVE_RECEIPT" head)" = "$(git rev-parse HEAD)" ] &&
+                [ "$(_receipt_value "$WT_ARCHIVE_RECEIPT" status)" = "$(_status_fingerprint "$path")" ]; then
+                printf 'ARCHIVED %q\n' "$path"; return 0
+            fi
+            printf 'ARCHIVE_PENDING %q\n' "$path"; return 4
+        fi
+        if [ "$WT_TARGET_LOCKED" -ne 0 ]; then printf 'LOCKED %q\n' "$path"; return 4; fi
+        operation="$(_operation_name "$path")"
+        rc=$?
+        case "$rc" in
+            0) printf 'OPERATION %q %q\n' "$path" "$operation"; return 4 ;;
+            1) ;;
+            *) printf 'INSPECTION_FAILED %q\n' "$path"; return 1 ;;
+        esac
+        relation="$(_relation)" || return 1
+        if [ "$relation" = integrated ]; then
+            _has_changes "$path" allow-ds-store
+            rc=$?
+            case "$rc" in
+                0) ;;
+                1) printf 'INTEGRATED %q\n' "$path"; return 4 ;;
+                *) printf 'INSPECTION_FAILED %q\n' "$path"; return 1 ;;
+            esac
+        fi
+        admin="$(git rev-parse --path-format=absolute --git-dir)" || return 1
+        if [ -e "$admin/wt-retained" ]; then
+            [ -f "$admin/wt-retained" ] && [ ! -L "$admin/wt-retained" ] || return 1
+            head="$(git rev-parse HEAD)" || return 1
+            fingerprint="$(_status_fingerprint "$path")" || return 1
+            if [ "$(_receipt_value "$admin/wt-retained" head)" != "$head" ] || [ "$(_receipt_value "$admin/wt-retained" status)" != "$fingerprint" ]; then
+                printf 'RETENTION_CHANGED %q\n' "$path"; return 4
+            fi
+            timestamp="$(_receipt_value "$admin/wt-retained" updated)" || return 1
+            reason="$(_receipt_value "$admin/wt-retained" reason)" || return 1
+            printf 'RETAINED %q %q\n' "$path" "$reason"
+        else
+            timestamp="$(git log -1 --format=%ct)" || return 1
+            [ ! -f "$admin/wt-created" ] || IFS= read -r timestamp < "$admin/wt-created" || return 1
+        fi
+        case "$timestamp" in ''|*[!0-9]*) _error "Invalid lifecycle timestamp"; return 1 ;; esac
+        if [ $(( $(date +%s) - timestamp )) -ge $((days * 86400)) ]; then printf 'REVIEW_DUE %q\n' "$path"; return 4; fi
+        printf 'ACTIVE %q\n' "$path"
+    )
+
+    _audit() {
+        local root="$1"
+        local days="$2"
+        local field
+        local path
+        local previous
+        local rc
+        local outcome=0
+        local -a paths=()
+        # The per-entry subshell also sets this independently
+        # shellcheck disable=SC2031
+        export GIT_OPTIONAL_LOCKS=0
+        local scan; scan="$(mktemp "${TMPDIR:-/tmp}/wt-audit.XXXXXXXX")" || return 1
+        git -C "$WT_PRIMARY_PATH" worktree list --porcelain -z > "$scan" || { rm "$scan"; return 1; }
+        while IFS= read -r -d '' field; do
+            case "$field" in 'worktree '*)
+                path="${field#worktree }"
+                [ "$path" = "$WT_PRIMARY_PATH" ] || paths+=("$path")
+                ;;
+            esac
+        done < "$scan"
+        rm "$scan" || return 1
+        if [ -n "$root" ]; then
+            case "$root" in /*) ;; *) _error "Audit root must be absolute"; return 2 ;; esac
+            [ -d "$root" ] || { _error "Audit root must be an existing directory"; return 2; }
+            for path in "$root"/* "$root"/.[!.]* "$root"/..?*; do
+                [ -d "$path" ] || continue
+                for previous in "${paths[@]}"; do
+                    [ ! -d "$previous" ] || [ ! "$path" -ef "$previous" ] || continue 2
+                done
+                paths+=("$path")
+            done
+        fi
+        for path in "${paths[@]}"; do
+            if _audit_one "$path" "$days"; then rc=0; else rc=$?; fi
+            case "$rc" in 0) ;; 4) [ "$outcome" -eq 1 ] || outcome=4 ;; *) outcome=1 ;; esac
+        done
+        return "$outcome"
+    }
+
     local root_override=""
+    local archive_root=""
+    local archive_reason=""
+    local stale_days=7
+    local stale_explicit=0
     local equivalent_tree=0
     local equivalent_tree_at=""
     local help=0
@@ -1394,7 +1727,7 @@ EOF
     local WT_SPARSE=false
     local WT_START_HEAD=""
 
-    _expand_short_opts "rsa" "$@"
+    _expand_short_opts "rsaARd" "$@"
     set -- "${_EXPANDED[@]}"
     unset _EXPANDED
 
@@ -1405,6 +1738,24 @@ EOF
             continue
         fi
         case "$1" in
+            -A|--archive-root|-R|--reason|-d|--stale-days)
+                [ $# -ge 2 ] && [ -n "$2" ] || { _error "$1 requires a non-empty value"; return 2; }
+                case "$1" in
+                    -A|--archive-root) archive_root="$2" ;;
+                    -R|--reason) archive_reason="$2" ;;
+                    -d|--stale-days) stale_days="$2"; stale_explicit=1 ;;
+                esac
+                shift 2 ;;
+            --archive-root=*|--reason=*|--stale-days=*)
+                local option="${1%%=*}"
+                local value="${1#*=}"
+                [ -n "$value" ] || { _error "$option requires a non-empty value"; return 2; }
+                case "$option" in
+                    --archive-root) archive_root="$value" ;;
+                    --reason) archive_reason="$value" ;;
+                    --stale-days) stale_days="$value"; stale_explicit=1 ;;
+                esac
+                shift ;;
             -h|--help) help=1; shift ;;
             -e|--equivalent-tree) equivalent_tree=1; shift ;;
             -a|--equivalent-tree-at)
@@ -1453,7 +1804,7 @@ EOF
     local branch=""
     if [ "${#positionals[@]}" -gt 0 ]; then
         case "${positionals[0]}" in
-            start|status|sync|land|close)
+            start|status|sync|land|close|archive|audit)
                 command="${positionals[0]}"
                 [ "${#positionals[@]}" -le 2 ] || { _error "Too many arguments for $command"; return 2; }
                 [ "${#positionals[@]}" -lt 2 ] || branch="${positionals[1]}"
@@ -1468,9 +1819,22 @@ EOF
         return 2
     fi
 
-    if [ "$command" != start ] && { [ -n "$root_override" ] || [ "${#requested_scopes[@]}" -gt 0 ]; }; then
+    if [ "$command" != start ] && [ "$command" != audit ] && { [ -n "$root_override" ] || [ "${#requested_scopes[@]}" -gt 0 ]; }; then
         _error "--root and --scope require the start command"
         return 2
+    fi
+    if [ "$command" != archive ] && { [ -n "$archive_root" ] || [ -n "$archive_reason" ]; }; then
+        _error "--archive-root and --reason require archive"; return 2
+    fi
+    if [ "$command" = archive ] && [ -z "${archive_reason//[[:space:]]/}" ]; then
+        _error "archive requires --reason"; return 2
+    fi
+    if [ "$command" = audit ]; then
+        [ -z "$branch" ] && [ "${#requested_scopes[@]}" -eq 0 ] || { _error "audit does not accept a branch or scope"; return 2; }
+        case "$stale_days" in ''|*[!0-9]*|????????*) _error "--stale-days requires a nonnegative whole number below 10000000"; return 2 ;; esac
+        stale_days=$((10#$stale_days))
+    elif [ "$stale_explicit" -eq 1 ]; then
+        _error "--stale-days requires audit"; return 2
     fi
     if [ "$equivalent_tree" -eq 1 ] && [ "$command" != close ]; then
         _error "--equivalent-tree requires close"
@@ -1500,6 +1864,8 @@ EOF
         sync) _sync "$branch" ;;
         land) _land "$branch" ;;
         close) _close "$branch" "$equivalent_tree" "$equivalent_tree_at" ;;
+        archive) _archive "$branch" "$archive_root" "$archive_reason" ;;
+        audit) _audit "$root_override" "$stale_days" ;;
     esac
 )
 

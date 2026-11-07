@@ -14,6 +14,7 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_CONFIG_COUNT
 
 write_shims() {
     export XDG_STATE_HOME="$TEST_DIR/state"
+    export XDG_DATA_HOME="$TEST_DIR/data"
 }
 
 run_wt_from() {
@@ -1222,6 +1223,223 @@ test_program_name_override_preserves_wrapper_identity() {
     WT_PROGRAM_NAME=local-wt run_script --unknown
     assert_rc "wrapper invalid argument refuses" 2
     assert_stderr_contains "diagnostic uses wrapper identity" '[ERR][local-wt]'
+}
+
+test_archive_preserves_dirty_untracked_and_ignored_work_and_start_restores() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" experiment)"
+    commit_path "$worktree" experiment.txt committed experiment
+    local head; head="$(git -C "$worktree" rev-parse HEAD)"
+    printf 'edited\n' > "$worktree/base.txt"
+    printf 'staged\n' > "$worktree/staged.txt"
+    git -C "$worktree" add -- staged.txt
+    printf 'untracked\n' > "$worktree/draft.txt"
+    mkdir "$worktree/ignored"
+    printf 'retained output\n' > "$worktree/ignored/result.txt"
+    local before; before="$(git -C "$worktree" status --porcelain=v1 --untracked-files=all)"
+    run_wt_from "$repo" archive experiment --archive-root "$TEST_DIR/archive with spaces" --reason 'Keep rejected experiment'
+    assert_rc "archive succeeds without integrating the branch" 0
+    local archived; archived="$(get_stdout)"
+    assert_path_absent "active directory moved" "$worktree"
+    assert_file_exists "untracked file retained" "$archived/draft.txt"
+    assert_file_exists "ignored file retained" "$archived/ignored/result.txt"
+    assert_eq "head retained" "$(git -C "$archived" rev-parse HEAD)" "$head"
+    assert_eq "dirty state retained" "$(git -C "$archived" status --porcelain=v1 --untracked-files=all)" "$before"
+    assert_eq "archive receipt verified" "$(git config --file "${archived%/*}/.wt-archive" --get wt.state)" archived
+    run_wt_from "$repo" audit
+    assert_rc "verified archive has no cleanup finding" 0
+    assert_stdout_contains "archive reported" ARCHIVED
+    run_wt_from "$repo" start experiment --root "$TEST_DIR/restored"
+    assert_rc "explicit start restores archive into active storage" 0
+    local restored; restored="$(get_stdout)"
+    assert_contains "restored into requested root" "$restored" "$TEST_DIR/restored/"
+    assert_eq "restored edits retained" "$(git -C "$restored" status --porcelain=v1 --untracked-files=all)" "$before"
+    assert_file_exists "restored ignored file retained" "$restored/ignored/result.txt"
+}
+
+test_archive_requires_reason_and_refuses_locked_or_busy_worktrees() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" experiment)"
+    run_wt_from "$repo" archive experiment --archive-root "$TEST_DIR/archives"
+    assert_rc "archive requires explicit reason" 2
+    assert_dir_exists "missing reason preserves work" "$worktree"
+    git -C "$repo" worktree lock "$worktree"
+    run_wt_from "$repo" archive experiment --archive-root "$TEST_DIR/archives" --reason Keep
+    assert_rc "archive refuses locked worktree" 1
+    git -C "$repo" worktree unlock "$worktree"
+    cat > "$SHIM_DIR/lsof" <<'SHIM'
+#!/bin/bash
+printf '12345\n'
+exit 0
+SHIM
+    chmod +x "$SHIM_DIR/lsof"
+    run_wt_from "$repo" archive experiment --archive-root "$TEST_DIR/archives" --reason Keep
+    assert_rc "archive refuses open files" 1
+    assert_dir_exists "busy worktree preserved" "$worktree"
+    assert_stderr_contains "busy refusal explained" 'open files'
+}
+
+test_archive_rejects_destination_inside_worktree_and_failed_move_is_auditable() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" experiment)"
+    run_wt_from "$repo" archive experiment --archive-root "$worktree/inside" --reason Keep
+    assert_rc "archive refuses a nested destination" 2
+    assert_path_absent "unsafe destination not created" "$worktree/inside"
+    export WT_REAL_GIT; WT_REAL_GIT="$(command -v git)"
+    cat > "$SHIM_DIR/git" <<'SHIM'
+#!/bin/bash
+if [ "$1" = -C ] && [ "$3" = worktree ] && [ "$4" = move ]; then exit 1; fi
+exec "$WT_REAL_GIT" "$@"
+SHIM
+    chmod +x "$SHIM_DIR/git"
+    run_wt_from "$repo" archive experiment --archive-root "$TEST_DIR/archives" --reason Keep
+    assert_rc "failed move remains failure" 1
+    assert_dir_exists "failed move preserves original" "$worktree"
+    run_wt_from "$repo" audit
+    assert_rc "unfinished archive remains an audit finding" 4
+    assert_stdout_contains "archive failure visible" ARCHIVE_PENDING
+}
+
+test_audit_reports_integrated_orphan_missing_and_review_age_without_mutation() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" completed)"
+    local registered; registered="$(git -C "$repo" worktree list --porcelain)"
+    local refs; refs="$(git -C "$repo" show-ref)"
+    mkdir "$TEST_DIR/worktrees/orphan"
+    printf 'gitdir: /missing/admin\n' > "$TEST_DIR/worktrees/orphan/.git"
+    run_wt_from "$repo" audit --root "$TEST_DIR/worktrees"
+    assert_rc "audit findings use exit 4" 4
+    assert_stdout_contains "integrated leftovers reported" INTEGRATED
+    assert_stdout_contains "orphan reported" ORPHAN
+    assert_eq "audit does not alter refs" "$(git -C "$repo" show-ref)" "$refs"
+    assert_eq "audit does not alter registrations" "$(git -C "$repo" worktree list --porcelain)" "$registered"
+    commit_path "$worktree" feature.txt feature feature
+    run_wt_from "$repo" audit --stale-days 0
+    assert_rc "age prompts review without deletion" 4
+    assert_stdout_contains "review age reported" REVIEW_DUE
+    assert_dir_exists "review age does not delete work" "$worktree"
+    mv "$worktree" "$TEST_DIR/displaced"
+    run_wt_from "$repo" audit
+    assert_rc "missing registration is a finding" 4
+    assert_stdout_contains "missing worktree reported" MISSING
+}
+
+test_archive_root_configuration_and_argument_validation() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" experiment)"
+    git -C "$repo" config wt.archiveRoot "$TEST_DIR/configured-archive"
+    run_wt_from "$repo" archive experiment --reason Keep
+    assert_rc "configured archive root works" 0
+    assert_contains "configured archive root selected" "$(get_stdout)" "$TEST_DIR/configured-archive/"
+    run_wt_from "$repo" audit --stale-days nope
+    assert_rc "invalid age refuses" 2
+    run_wt_from "$repo" status experiment --archive-root "$TEST_DIR/unused"
+    assert_rc "archive root requires archive" 2
+    assert_path_absent "unused archive root not created" "$TEST_DIR/unused"
+    worktree="$(start_task "$repo" empty-config)"
+    git -C "$repo" config wt.archiveRoot ''
+    run_wt_from "$repo" archive empty-config --reason Keep
+    assert_rc "empty archive configuration refuses" 2
+    assert_dir_exists "invalid configuration preserves source" "$worktree"
+    assert_path_absent "invalid configuration does not create the fallback" "$XDG_DATA_HOME/wt/archive"
+}
+
+test_archive_refuses_active_operations_submodules_and_unusable_lsof() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" experiment)"
+    local admin; admin="$(git -C "$worktree" rev-parse --path-format=absolute --git-dir)"
+    git -C "$worktree" rev-parse HEAD > "$admin/MERGE_HEAD"
+    run_wt_from "$repo" archive experiment --archive-root "$TEST_DIR/archives" --reason Keep
+    assert_rc "active operation refuses archive" 1
+    assert_dir_exists "operation refusal preserves directory" "$worktree"
+    rm "$admin/MERGE_HEAD"
+    git -C "$worktree" update-index --add --cacheinfo "160000,$(git -C "$worktree" rev-parse HEAD),vendor"
+    run_wt_from "$repo" archive experiment --archive-root "$TEST_DIR/archives" --reason Keep
+    assert_rc "submodule-bearing task refuses archive" 1
+    git -C "$worktree" update-index --force-remove vendor
+    cat > "$SHIM_DIR/lsof" <<'SHIM'
+#!/bin/bash
+exit 127
+SHIM
+    chmod +x "$SHIM_DIR/lsof"
+    run_wt_from "$repo" archive experiment --archive-root "$TEST_DIR/archives" --reason Keep
+    assert_rc "archive-only dependency failure is distinct" 3
+    run_wt_from "$repo" audit
+    assert_rc "audit does not require lsof" 4
+    assert_path_absent "all refusals avoid archive creation" "$TEST_DIR/archives"
+}
+
+test_archive_receipt_failure_preserves_moved_work_and_audit_reports_pending() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" experiment)"
+    printf 'keep me\n' > "$worktree/untracked.txt"
+    export WT_REAL_GIT; WT_REAL_GIT="$(command -v git)"
+    cat > "$SHIM_DIR/git" <<'SHIM'
+#!/bin/bash
+if [ "$1" = config ] && [ "$4" = wt.state ] && [ "$5" = archived ]; then exit 1; fi
+exec "$WT_REAL_GIT" "$@"
+SHIM
+    chmod +x "$SHIM_DIR/git"
+    run_wt_from "$repo" archive experiment --archive-root "$TEST_DIR/archives" --reason Keep
+    assert_rc "late receipt failure remains an error" 1
+    local moved; moved="$(git -C "$repo" for-each-ref --format='%(worktreepath)' refs/heads/experiment)"
+    assert_file_exists "late failure preserves untracked work" "$moved/untracked.txt"
+    assert_path_absent "source moved only once" "$worktree"
+    run_wt_from "$repo" audit
+    assert_rc "late receipt failure is auditable" 4
+    assert_stdout_contains "late receipt diagnostic" ARCHIVE_PENDING
+    run_wt_from "$repo" start experiment
+    assert_rc "pending archive is not silently resumed" 1
+}
+
+test_audit_inspection_errors_are_incomplete_not_orphan_findings() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" experiment)"
+    export WT_REAL_GIT; WT_REAL_GIT="$(command -v git)"
+    export WT_BAD_TREE="$worktree"
+    cat > "$SHIM_DIR/git" <<'SHIM'
+#!/bin/bash
+if [ "$1" = rev-parse ] && [ "$2" = --is-inside-work-tree ] && [ "$PWD" = "$WT_BAD_TREE" ]; then exit 1; fi
+exec "$WT_REAL_GIT" "$@"
+SHIM
+    chmod +x "$SHIM_DIR/git"
+    run_wt_from "$repo" audit
+    assert_rc "failed Git inspection returns incomplete audit" 1
+    assert_stdout_contains "inspection failure is visible" INSPECTION_FAILED
+}
+
+test_audit_preserves_uncommitted_tasks_as_active_instead_of_cleanup_candidates() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" experiment)"
+    printf 'active work\n' > "$worktree/base.txt"
+    run_wt_from "$repo" audit
+    assert_rc "uncommitted work is not an integrated cleanup candidate" 0
+    assert_stdout_contains "uncommitted task remains active" ACTIVE
+    assert_eq "active edits are preserved" "$(cat "$worktree/base.txt")" 'active work'
+}
+
+test_archive_and_audit_follow_explicit_root_aliases_safely() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" experiment)"
+    ln -s "$TEST_DIR/worktrees" "$TEST_DIR/active-alias"
+    run_wt_from "$repo" audit --root "$TEST_DIR/active-alias"
+    assert_rc "read-only audit accepts a storage alias" 4
+    assert_stdout_contains "aliased audit inspects the task" INTEGRATED
+    mkdir "$TEST_DIR/archive-base"
+    ln -s "$TEST_DIR/archive-base" "$TEST_DIR/archive-alias"
+    run_wt_from "$repo" archive experiment --archive-root "$TEST_DIR/archive-alias/nested" --reason Keep
+    assert_rc "archive accepts an explicit ancestor alias" 0
+    assert_file_exists "aliased archive preserves source" "$(get_stdout)/base.txt"
+}
+
+test_audit_finder_metadata_does_not_hide_integrated_cleanup_candidates() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" completed)"
+    printf 'Finder metadata\n' > "$worktree/.DS_Store"
+    run_wt_from "$repo" audit
+    assert_rc "untracked Finder metadata does not hide integration" 4
+    assert_stdout_contains "Finder-only leftover is reported" INTEGRATED
+    assert_file_exists "read-only audit preserves metadata" "$worktree/.DS_Store"
 }
 
 run_tests "$@"

@@ -141,6 +141,32 @@ $ wt close --equivalent-tree-at "$merge_commit" improve-search
 
 ---
 
+## Preserve rejected experiments
+
+Use `archive` when you explicitly want to retain an abandoned or superseded task. Run from the primary checkout after stopping processes that use the task:
+
+```bash
+$ wt archive try-search-index --reason "Keep the rejected index experiment"
+$ wt start try-search-index
+```
+
+Archiving moves the complete directory into a private container with a `.wt-archive` receipt. It retains the local branch, index, edits, untracked files, ignored outputs, and Git registration. No integration or branch deletion occurs. Archives still depend on the canonical repository's Git history, and moving them does not reclaim disk space. Explicit `start` restores a verified archive into active storage, honoring `--root` and `wt.root`.
+
+Set `wt.archiveRoot` or pass `-A`/`--archive-root` to choose a destination. The default is `${XDG_DATA_HOME:-$HOME/.local/share}/wt/archive`. Destinations must be absolute and outside the task, primary checkout, and Git administration. Locked worktrees, active Git operations, submodules and open files refuse archival or restoration. `lsof` is required only for those moves. Source and destination identity, registration, HEAD and porcelain status must match before success is recorded.
+
+A failed move or receipt update retains its paths and pending receipt. Inspect both paths, the receipt, the task branch and `git worktree list --porcelain` before recovery. Never prune or force-remove a partial result. `wt audit` reports pending receipts; `start` refuses incomplete or changed archives instead of retrying them automatically. The receipt records the original and destination paths, branch, commit, status fingerprint, reason, creation time and state; restored receipts additionally name the active path.
+
+## Audit worktree retention
+
+```bash
+$ wt audit
+$ wt audit --root "$HOME/worktrees" --stale-days 7
+```
+
+The audit inspects all registered task worktrees in the invoking repository. An optional root also examines its immediate directories across repositories. It reports integrated leftovers, missing registrations, orphan directories, pending or changed archives, locks, active operations and tasks due for review. It never changes refs, the Git index, registrations or lifecycle metadata, and never creates the scanned root. Inspection failures return an error rather than establishing an empty result.
+
+Review age uses the recorded task creation time, an explicit retention timestamp, or the last commit time for older tasks. Age requests review; it does not prove abandonment. Session integrations can record an owner-only `wt-retained` Git-config file in the linked administration directory with `wt.head`, `wt.status`, `wt.reason` and `wt.updated` (epoch seconds). The status fingerprint is the Git blob hash of NUL-delimited porcelain-v1 status with all untracked files. Changed HEAD or status invalidates retention. An integrated branch remains a cleanup finding even when it has a retention reason.
+
 ## Reference
 
 ### Commands and options
@@ -153,7 +179,12 @@ $ wt close --equivalent-tree-at "$merge_commit" improve-search
 | `wt sync [branch]` | Rebase the clean task onto local integration |
 | `wt land [branch]` | Run guards and fast-forward clean local integration |
 | `wt close [options] [branch]` | Remove an integrated task and its local branch |
-| `-r`, `--root PATH` | Absolute storage directory for start |
+| `wt archive --reason TEXT [branch]` | Retain an experiment intact with a recovery receipt |
+| `wt audit [options]` | Read-only retention and registration audit |
+| `-r`, `--root PATH` | Absolute start storage directory or existing audit root |
+| `-A`, `--archive-root PATH` | Archive destination root |
+| `-R`, `--reason TEXT` | Required explanation for archiving |
+| `-d`, `--stale-days DAYS` | Nonnegative review age for audit; default `7` |
 | `-s`, `--scope PATH` | Sparse directory relative to the repository; repeatable |
 | `-e`, `--equivalent-tree` | Compare a replayed task with the integration tree for close |
 | `-a`, `--equivalent-tree-at COMMIT` | Compare a replayed task with a full ancestor commit ID for close |
@@ -172,6 +203,7 @@ Value-taking flags also accept `--root=PATH`, `--scope=PATH`, `--equivalent-tree
 | `wt.protectedPath` | Repeatable relative directory requiring explicit scope selection |
 | `wt.linearHistory` | Boolean; default `true` |
 | `wt.landGuard` | Repeatable trusted Bash command invoked before land |
+| `wt.archiveRoot` | Absolute archive root, overriding the XDG data default |
 
 ### Environment variables
 
@@ -179,7 +211,8 @@ Value-taking flags also accept `--root=PATH`, `--scope=PATH`, `--equivalent-tree
 | --- | --- |
 | `WT_PROGRAM_NAME` | Optional displayed command name supplied by a caller wrapper |
 | `XDG_STATE_HOME` | Absolute storage base when no root is supplied; tasks use `wt/worktrees/` beneath it |
-| `HOME` | Supplies the default state base, `$HOME/.local/state` |
+| `HOME` | Supplies default state and data bases |
+| `XDG_DATA_HOME` | Absolute data base for default archives beneath `wt/archive/` |
 
 Configured `wt.root` directories are tried in order, followed by the XDG storage directory. An unavailable candidate is skipped; an invalid relative or empty candidate refuses creation. `--root` is a strict override and does not fall back. Resume returns its existing path before storage selection.
 
@@ -193,6 +226,7 @@ Each new directory is named `<repository>-<branch-name>.XXXXXX`, with unsafe nam
 | `1` | Runtime failure or safety refusal |
 | `2` | Invalid usage, configuration, or unsupported repository state |
 | `3` | Missing dependency or unsupported Git version |
+| `4` | Audit completed with review findings |
 | Other nonzero status | Propagated rejection from a configured land guard |
 
 ### Dependencies
@@ -200,3 +234,4 @@ Each new directory is named `<repository>-<branch-name>.XXXXXX`, with unsafe nam
 - Bash 3.2+ and Git 2.43+, including [committed attribute inspection](https://git-scm.com/docs/git-check-attr/2.43.0)
 - The configured Git filter drivers when their files are selected, including git-crypt for a git-crypt repository
 - Programs referenced by a land guard, only when that guard runs
+- `lsof` for archive and restoration, to refuse directories with open files
