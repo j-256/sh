@@ -231,8 +231,11 @@ EOF
     done
 )
 
-_find_zone_by_name "$@"
-__find_zone_by_name_rc=$?
+if _find_zone_by_name "$@"; then
+    __find_zone_by_name_rc=0
+else
+    __find_zone_by_name_rc=$?
+fi
 unset -f _find_zone_by_name
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __find_zone_by_name_rc; return $__find_zone_by_name_rc"

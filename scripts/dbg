@@ -231,8 +231,11 @@ EOF
     done
 }
 
-__dbg__main "$@"
-__dbg__rc=$?
+if __dbg__main "$@"; then
+    __dbg__rc=0
+else
+    __dbg__rc=$?
+fi
 unset -f __dbg__main
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __dbg__rc; return $__dbg__rc"

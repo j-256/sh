@@ -826,8 +826,11 @@ EOF
     esac
 )
 
-_daemons "$@"
-__daemons_rc=$?
+if _daemons "$@"; then
+    __daemons_rc=0
+else
+    __daemons_rc=$?
+fi
 unset -f _daemons
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __daemons_rc; return $__daemons_rc"

@@ -107,8 +107,11 @@ EOF
     return 0
 )
 
-_swap "$@"
-__swap_rc=$?
+if _swap "$@"; then
+    __swap_rc=0
+else
+    __swap_rc=$?
+fi
 unset -f _swap
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __swap_rc; return $__swap_rc"

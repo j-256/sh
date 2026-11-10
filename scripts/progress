@@ -304,8 +304,11 @@ EOF
     fi
 )
 
-_progress "$@"
-__progress_rc=$?
+if _progress "$@"; then
+    __progress_rc=0
+else
+    __progress_rc=$?
+fi
 unset -f _progress
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __progress_rc; return $__progress_rc"

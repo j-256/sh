@@ -138,8 +138,11 @@ EOF
     fi
 )
 
-_install_bash "$@"
-__install_bash_rc=$?
+if _install_bash "$@"; then
+    __install_bash_rc=0
+else
+    __install_bash_rc=$?
+fi
 unset -f _install_bash
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __install_bash_rc; return $__install_bash_rc"

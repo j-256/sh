@@ -188,8 +188,11 @@ EOF
     done
 )
 
-_screenshot_rename "$@"
-__screenshot_rename_rc=$?
+if _screenshot_rename "$@"; then
+    __screenshot_rename_rc=0
+else
+    __screenshot_rename_rc=$?
+fi
 unset -f _screenshot_rename
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __screenshot_rename_rc; return $__screenshot_rename_rc"

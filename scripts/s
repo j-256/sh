@@ -199,8 +199,11 @@ EOF
     esac
 )
 
-_s "$@"
-__s_rc=$?
+if _s "$@"; then
+    __s_rc=0
+else
+    __s_rc=$?
+fi
 unset -f _s
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __s_rc; return $__s_rc"

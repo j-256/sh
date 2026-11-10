@@ -246,8 +246,11 @@ EOF
     fi
 )
 
-_snippet "$@"
-__snippet_rc=$?
+if _snippet "$@"; then
+    __snippet_rc=0
+else
+    __snippet_rc=$?
+fi
 unset -f _snippet
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __snippet_rc; return $__snippet_rc"

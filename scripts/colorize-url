@@ -209,8 +209,11 @@ EOF
     echo "$colorized_url"
 )
 
-_colorize_url "$@"
-__colorize_url_rc=$?
+if _colorize_url "$@"; then
+    __colorize_url_rc=0
+else
+    __colorize_url_rc=$?
+fi
 unset -f _colorize_url
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __colorize_url_rc; return $__colorize_url_rc"

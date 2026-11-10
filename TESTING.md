@@ -240,7 +240,9 @@ Most test files target one script: `<name>.test.sh` exercises `../<name>`, and d
 
 | File | Asserts |
 | --- | --- |
-| `meta-cleanup-on-source.test.sh` | Sourcing any script with `--help` leaks no functions or variables into the caller's shell (CONVENTIONS Cleanup Trap / Source-only scripts) |
+| `meta-cleanup-on-source.test.sh` | Sourcing any script with `--help`, with `errexit` enabled or disabled, completes without leaking functions or variables into the caller's shell (CONVENTIONS Cleanup Trap / Source-only scripts) |
+| `meta-wrapper-guard.test.sh` | Every outer wrapper in the script fleet and test runner captures its status in the canonical `if`/`else` guard before cleanup; synthetic cases reject bare calls, inverted statuses, overwritten statuses, and mismatched variables (CONVENTIONS "Failure handling and `errexit`") |
+| `meta-exit-handler.test.sh` | Production exit handlers preserve success and failure statuses under `errexit`, clean up before sourced failures terminate the caller, allow continued execution when the caller handles failure, preserve the caller's `errexit` setting, and support stdin execution. Script bodies are replaced with controlled wrapper results (CONVENTIONS "Failure handling and `errexit`") |
 | `meta-curl-pipe.test.sh` | Every script works when piped or process-substituted (`curl \| bash`, `bash <(...)`, `. <(...)`) (CONVENTIONS "Use `$SCRIPT_NAME`") |
 | `meta-coverage.test.sh` | Every Bash script has a test, every non-`meta-` test has a matching Bash script, every script has a doc and an INDEX row linking both, and every direct `docs/*.md` has a script. The bundled Node `render-md` needs a doc and INDEX row but has no per-script shell test |
 | `meta-comment-style.test.sh` | No comment ends in a trailing `.` or `!` (CONVENTIONS Style rule); internal sentence-separating periods in a multi-line block are allowed |
@@ -270,7 +272,7 @@ test/install-hooks.sh             # points core.hooksPath at test/hooks/
 test/install-hooks.sh --uninstall # restore the default
 ```
 
-The hook (`test/hooks/pre-commit`) runs only the static, no-script-execution meta-tests listed in its `STATIC_METATESTS` variable (currently `meta-comment-style`, `meta-canonical-letters`, and `meta-coverage`), so it stays fast and there is no incentive to skip it. The slower fleet meta-tests and per-script suites are **not** run by the hook -- run those with `test-runner.sh` before pushing.
+The hook (`test/hooks/pre-commit`) runs only the static, no-script-execution meta-tests listed in its `STATIC_METATESTS` variable, including `meta-wrapper-guard`, so it stays fast and there is no incentive to skip it. The slower fleet meta-tests and per-script suites are **not** run by the hook -- run those with `test-runner.sh` before pushing.
 
 The hook is a convenience gate, not a guarantee: `git commit --no-verify` bypasses it, and a clone that never runs `install` has no hook at all. Server-side CI is the only unskippable enforcement; until this repo has it, the hook plus a periodic full `test-runner.sh` run are the backstop.
 
@@ -282,6 +284,7 @@ The hook is a convenience gate, not a guarantee: `git commit --no-verify` bypass
 - **Argument validation** -- missing required args, invalid values, unknown flags. Assert on specific exit codes where the script defines them
 - **Core behavior** -- happy path with valid args. Assert on stdout/stderr and exit code. For scripts that modify files, assert on filesystem state in the temp dir
 - **Exit codes** -- each distinct exit code the script uses should have at least one test case
+- **Exit-handler changes** -- exercise success and failure under `/bin/bash -e` in executed and sourced contexts. On sourced failure, use an EXIT trap in the test caller to verify cleanup before the shell exits; separately handle the source status in an `if` to verify status propagation and continued execution. Check that the caller's `errexit` setting is preserved (CONVENTIONS [Failure handling and `errexit`](CONVENTIONS.md#failure-handling-and-errexit))
 
 ### Test when relevant
 

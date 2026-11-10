@@ -211,8 +211,11 @@ EOF
     echo "${converted_size}${input_unit}"
 )
 
-_convert_size "$@"
-__convert_size_rc=$?
+if _convert_size "$@"; then
+    __convert_size_rc=0
+else
+    __convert_size_rc=$?
+fi
 unset -f _convert_size
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __convert_size_rc; return $__convert_size_rc"

@@ -115,8 +115,11 @@ EOF
     echo "$header_b64.$payload_b64.$signature"
 )
 
-_dw_jwt "$@"
-__dw_jwt_rc=$?
+if _dw_jwt "$@"; then
+    __dw_jwt_rc=0
+else
+    __dw_jwt_rc=$?
+fi
 unset -f _dw_jwt
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __dw_jwt_rc; return $__dw_jwt_rc"

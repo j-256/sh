@@ -94,8 +94,11 @@ EOF
     done
 )
 
-_cf_ips_subnets "$@"
-__cf_ips_subnets_rc=$?
+if _cf_ips_subnets "$@"; then
+    __cf_ips_subnets_rc=0
+else
+    __cf_ips_subnets_rc=$?
+fi
 unset -f _cf_ips_subnets
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __cf_ips_subnets_rc; return $__cf_ips_subnets_rc"

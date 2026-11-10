@@ -339,8 +339,11 @@ _tsd() (
     #endregion
 )
 
-_tsd "$@"
-__tsd_rc=$?
+if _tsd "$@"; then
+    __tsd_rc=0
+else
+    __tsd_rc=$?
+fi
 unset -f _tsd
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __tsd_rc; return $__tsd_rc"

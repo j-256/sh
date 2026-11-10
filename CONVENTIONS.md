@@ -133,10 +133,15 @@ __prompt__main() {
     ...
 }
 
-__prompt__main "$@"
-__prompt__rc=$?
+if __prompt__main "$@"; then
+    __prompt__rc=0
+else
+    __prompt__rc=$?
+fi
 unset -f __prompt__main
 ```
+
+Use the same guarded invocation in source-only scripts as in the [Source/Execute Exit Handler](#sourceexecute-exit-handler), preserving the `__<script>__` namespace.
 
 The rule covers:
 
@@ -314,8 +319,11 @@ The pattern: `__<script>__unset` does the work (clean up our helpers so they don
 Every script ends with a block that handles both sourced and executed contexts:
 
 ```bash
-_script_name "$@"
-__script_name_rc=$?
+if _script_name "$@"; then
+    __script_name_rc=0
+else
+    __script_name_rc=$?
+fi
 unset -f _script_name
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __script_name_rc; return $__script_name_rc"
@@ -324,10 +332,31 @@ eval "unset __script_name_rc; exit $__script_name_rc"
 ```
 
 This ensures:
+
 1. The wrapper function is unset after running (no namespace pollution)
-2. When sourced (`. script`), returns the correct exit code without killing the caller's shell
+2. When sourced (`. script`), returns the correct exit code to the caller
 3. When executed (`./script`), exits with the correct code
 4. When piped into `bash` via stdin (`curl ... | bash`), `${BASH_SOURCE[0]}` is empty at top level -- without the `-n` guard, `"" != "bash"` evaluates true and the `return` fires at top level, emitting `return: can only \`return' from a function or sourced script`. The guard routes this case to `exit`.
+
+### Failure handling and `errexit`
+
+Use the `if` guard when invoking the outer wrapper so a nonzero status is captured before cleanup, even when the caller has enabled `set -e` (`errexit`). With a bare `_script_name "$@"` followed by `__script_name_rc=$?`, `errexit` can terminate the shell before the assignment and `unset -f` run. Capture `$?` immediately in the `else` branch; `if ! _script_name "$@"` would invert the status before it can be saved.
+
+Enforced for the script fleet and test runner by `test/meta-wrapper-guard.test.sh` and the pre-commit hook. `test/meta-exit-handler.test.sh` executes each production handler with controlled wrapper results to check status propagation, cleanup before an errexit caller exits, continued execution when the caller handles failure, and stdin execution (see [TESTING.md](TESTING.md#meta-tests)).
+
+The guard also suppresses `errexit` throughout the wrapper and its function calls, including a `( ... )` body. An internal `set -e` does not restore it in this context. See the Bash manual's [`-e` semantics](https://www.gnu.org/software/bash/manual/html_node/The-Set-Builtin.html). Check operations whose failure must stop the script explicitly, using `command || return $?` or an `if`/`else` branch that reports the error and returns the intended status. An unchecked failure followed by a successful command can otherwise be reported as success. Review those paths before converting an existing wrapper; apply conditional calls to helpers only when their error handling supports that context too.
+
+Cleanup traps can still run with `errexit` active. Handle expected no-op or best-effort failure statuses explicitly, such as `cleanup || :`, so they cannot interrupt remaining cleanup or replace the intended script status.
+
+The guard ensures cleanup runs before the final `return` or `exit`; it does not disable the caller's `errexit` setting. A nonzero return from a sourced script can still terminate a caller using `set -e`. A caller that needs to continue must handle the source status explicitly:
+
+```bash
+if . ./script-name "$@"; then
+    rc=0
+else
+    rc=$?
+fi
+```
 
 ## Variable Declarations
 

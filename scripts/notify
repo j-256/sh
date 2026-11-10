@@ -465,8 +465,11 @@ APPLESCRIPT
     return "$say_rc"
 )
 
-_notify "$@"
-__notify_rc=$?
+if _notify "$@"; then
+    __notify_rc=0
+else
+    __notify_rc=$?
+fi
 unset -f _notify
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __notify_rc; return $__notify_rc"

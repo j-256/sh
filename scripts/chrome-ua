@@ -242,8 +242,11 @@ EOF
     return 0
 )
 
-_chrome_ua "$@"
-__chrome_ua_rc=$?
+if _chrome_ua "$@"; then
+    __chrome_ua_rc=0
+else
+    __chrome_ua_rc=$?
+fi
 unset -f _chrome_ua
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __chrome_ua_rc; return $__chrome_ua_rc"

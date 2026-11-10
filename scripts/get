@@ -510,8 +510,11 @@ EOF
     return 0
 )
 
-_get "$@"
-__get_rc=$?
+if _get "$@"; then
+    __get_rc=0
+else
+    __get_rc=$?
+fi
 unset -f _get
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __get_rc; return $__get_rc"

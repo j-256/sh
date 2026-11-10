@@ -231,8 +231,11 @@ EOF
     echo "$pubkey"
 )
 
-_dkim_pubkey "$@"
-__dkim_pubkey_rc=$?
+if _dkim_pubkey "$@"; then
+    __dkim_pubkey_rc=0
+else
+    __dkim_pubkey_rc=$?
+fi
 unset -f _dkim_pubkey
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __dkim_pubkey_rc; return $__dkim_pubkey_rc"

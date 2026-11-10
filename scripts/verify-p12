@@ -168,8 +168,11 @@ EOF
     | sed 's|^.*<a href="/on/demandware.servlet||; s|">.*$||'
 )
 
-_verify_p12 "$@"
-__verify_p12_rc=$?
+if _verify_p12 "$@"; then
+    __verify_p12_rc=0
+else
+    __verify_p12_rc=$?
+fi
 unset -f _verify_p12
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __verify_p12_rc; return $__verify_p12_rc"

@@ -202,8 +202,11 @@ EOF
     fi
 )
 
-_explode "$@"
-__explode_rc=$?
+if _explode "$@"; then
+    __explode_rc=0
+else
+    __explode_rc=$?
+fi
 unset -f _explode
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __explode_rc; return $__explode_rc"

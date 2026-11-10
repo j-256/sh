@@ -155,8 +155,11 @@ EOF
     echo "obase=$out_base; ibase=$in_base; $up_num" | bc
 )
 
-_baseconv "$@"
-__baseconv_rc=$?
+if _baseconv "$@"; then
+    __baseconv_rc=0
+else
+    __baseconv_rc=$?
+fi
 unset -f _baseconv
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __baseconv_rc; return $__baseconv_rc"

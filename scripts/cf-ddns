@@ -283,8 +283,11 @@ EOF
 )
 
 # Call main function, passing script arguments
-_cf_ddns "$@"
-__cf_ddns_rc=$?
+if _cf_ddns "$@"; then
+    __cf_ddns_rc=0
+else
+    __cf_ddns_rc=$?
+fi
 unset -f _cf_ddns
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __cf_ddns_rc; return $__cf_ddns_rc"

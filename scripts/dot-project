@@ -130,8 +130,11 @@ DOT_PROJECT_TEMPLATE
     return "$failed"
 )
 
-_dot_project "$@"
-__dot_project_rc=$?
+if _dot_project "$@"; then
+    __dot_project_rc=0
+else
+    __dot_project_rc=$?
+fi
 unset -f _dot_project
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __dot_project_rc; return $__dot_project_rc"

@@ -202,8 +202,11 @@ EOF
     fi
 )
 
-_git_add_nonsub "$@"
-__git_add_nonsub_rc=$?
+if _git_add_nonsub "$@"; then
+    __git_add_nonsub_rc=0
+else
+    __git_add_nonsub_rc=$?
+fi
 unset -f _git_add_nonsub
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __git_add_nonsub_rc; return $__git_add_nonsub_rc"

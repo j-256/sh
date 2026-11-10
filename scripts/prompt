@@ -86,7 +86,7 @@ EOF
     __prompt__unset() {
         unset -f __prompt__unset __prompt__show_help __prompt__restore
     }
-    trap '__prompt__restore; __prompt__unset || echo "'"$__prompt__name"' trap failed!" >&2; trap - RETURN' RETURN
+    trap '__prompt__restore || :; __prompt__unset || echo "'"$__prompt__name"' trap failed!" >&2; trap - RETURN' RETURN
 
     case "$1" in
         -h|--help) __prompt__show_help; return 0 ;;
@@ -189,8 +189,11 @@ EOF
     eval "$__prompt__varname"'="$__prompt__input"'
 }
 
-__prompt__main "$@"
-__prompt__rc=$?
+if __prompt__main "$@"; then
+    __prompt__rc=0
+else
+    __prompt__rc=$?
+fi
 unset -f __prompt__main
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __prompt__rc; return $__prompt__rc"

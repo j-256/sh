@@ -147,8 +147,11 @@ EOF
     echo "          ${#outliers[@]} of ${#numbers[@]} ($percent_outliers)"
 )
 
-_stats "$@"
-__stats_rc=$?
+if _stats "$@"; then
+    __stats_rc=0
+else
+    __stats_rc=$?
+fi
 unset -f _stats
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __stats_rc; return $__stats_rc"

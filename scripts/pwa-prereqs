@@ -388,8 +388,11 @@ EOF
     fi
 )
 
-_pwa_prereqs "$@"
-__pwa_prereqs_rc=$?
+if _pwa_prereqs "$@"; then
+    __pwa_prereqs_rc=0
+else
+    __pwa_prereqs_rc=$?
+fi
 unset -f _pwa_prereqs
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __pwa_prereqs_rc; return $__pwa_prereqs_rc"

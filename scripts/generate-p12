@@ -281,8 +281,11 @@ EOF
     _echo "$p12_filename"
 )
 
-_generate_p12 "$@"
-__generate_p12_rc=$?
+if _generate_p12 "$@"; then
+    __generate_p12_rc=0
+else
+    __generate_p12_rc=$?
+fi
 unset -f _generate_p12
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __generate_p12_rc; return $__generate_p12_rc"

@@ -746,8 +746,11 @@ EOF
     return 0
 )
 
-_git_remote_audit "$@"
-__git_remote_audit_rc=$?
+if _git_remote_audit "$@"; then
+    __git_remote_audit_rc=0
+else
+    __git_remote_audit_rc=$?
+fi
 unset -f _git_remote_audit
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __git_remote_audit_rc; return $__git_remote_audit_rc"

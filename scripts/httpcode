@@ -95,8 +95,11 @@ EOF
     printf '%s\n' "$parsed"
 )
 
-_httpcode "$@"
-__httpcode_rc=$?
+if _httpcode "$@"; then
+    __httpcode_rc=0
+else
+    __httpcode_rc=$?
+fi
 unset -f _httpcode
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __httpcode_rc; return $__httpcode_rc"

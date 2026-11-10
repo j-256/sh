@@ -423,8 +423,11 @@ EOF
     return 0
 )
 
-_curl_timing "$@"
-__curl_timing_rc=$?
+if _curl_timing "$@"; then
+    __curl_timing_rc=0
+else
+    __curl_timing_rc=$?
+fi
 unset -f _curl_timing
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __curl_timing_rc; return $__curl_timing_rc"

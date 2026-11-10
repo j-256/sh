@@ -192,8 +192,11 @@ EOF
     echo "total: $credits_used_total"
 )
 
-_ods_usage "$@"
-__ods_usage_rc=$?
+if _ods_usage "$@"; then
+    __ods_usage_rc=0
+else
+    __ods_usage_rc=$?
+fi
 unset -f _ods_usage
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __ods_usage_rc; return $__ods_usage_rc"

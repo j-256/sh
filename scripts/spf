@@ -1074,8 +1074,11 @@ EOF
     esac
 )
 
-_spf "$@"
-__spf_rc=$?
+if _spf "$@"; then
+    __spf_rc=0
+else
+    __spf_rc=$?
+fi
 unset -f _spf
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __spf_rc; return $__spf_rc"

@@ -476,8 +476,11 @@ EOF
     fi
 )
 
-_flaky_server "$@"
-__flaky_server_rc=$?
+if _flaky_server "$@"; then
+    __flaky_server_rc=0
+else
+    __flaky_server_rc=$?
+fi
 unset -f _flaky_server
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __flaky_server_rc; return $__flaky_server_rc"

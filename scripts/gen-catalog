@@ -170,8 +170,11 @@ EOF
     main "$@"
 )
 
-_gen_catalog "$@"
-__gen_catalog_rc=$?
+if _gen_catalog "$@"; then
+    __gen_catalog_rc=0
+else
+    __gen_catalog_rc=$?
+fi
 unset -f _gen_catalog
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __gen_catalog_rc; return $__gen_catalog_rc"

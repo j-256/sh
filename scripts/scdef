@@ -743,8 +743,11 @@ EOF
     _fetch_and_render "$code"
 )
 
-_scdef "$@"
-__scdef_rc=$?
+if _scdef "$@"; then
+    __scdef_rc=0
+else
+    __scdef_rc=$?
+fi
 unset -f _scdef
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __scdef_rc; return $__scdef_rc"

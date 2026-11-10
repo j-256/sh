@@ -176,8 +176,11 @@ EOF
     return "$rc"
 )
 
-_bak "$@"
-__bak_rc=$?
+if _bak "$@"; then
+    __bak_rc=0
+else
+    __bak_rc=$?
+fi
 unset -f _bak
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __bak_rc; return $__bak_rc"

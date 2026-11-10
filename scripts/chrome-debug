@@ -1292,8 +1292,11 @@ EOF
     return $?
 )
 
-_chrome_debug "$@"
-__chrome_debug_rc=$?
+if _chrome_debug "$@"; then
+    __chrome_debug_rc=0
+else
+    __chrome_debug_rc=$?
+fi
 unset -f _chrome_debug
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __chrome_debug_rc; return $__chrome_debug_rc"

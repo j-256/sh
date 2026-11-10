@@ -254,8 +254,11 @@ EOF
     fi
 )
 
-_git_backup "$@"
-__git_backup_rc=$?
+if _git_backup "$@"; then
+    __git_backup_rc=0
+else
+    __git_backup_rc=$?
+fi
 unset -f _git_backup
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __git_backup_rc; return $__git_backup_rc"

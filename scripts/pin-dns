@@ -245,7 +245,7 @@ _pin_dns() (
     # SC2329: invoked indirectly via the trap below, not by name
     # shellcheck disable=SC2064,SC2086,SC2329
     _cleanup_tmp() { [ -n "$_tmpfiles" ] && rm -f $_tmpfiles; }
-    trap _cleanup_tmp EXIT
+    trap '_cleanup_tmp || :' EXIT
 
     _print_help() {
         # Keep this closely aligned with the header comment
@@ -2085,8 +2085,11 @@ EOF
     return "$curl_rc"
 )
 
-_pin_dns "$@"
-__pin_dns_rc=$?
+if _pin_dns "$@"; then
+    __pin_dns_rc=0
+else
+    __pin_dns_rc=$?
+fi
 unset -f _pin_dns
 # Propagate exit status whether executed or sourced
 # Use BASH_SOURCE vs $0 instead of a `return || exit` chain so we don't lose $__pin_dns_rc

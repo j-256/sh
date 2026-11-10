@@ -145,8 +145,11 @@ EOF
     /bin/bash -c "$payload" flaky-server -- "${args[@]}"
 )
 
-_slow_server "$@"
-__slow_server_rc=$?
+if _slow_server "$@"; then
+    __slow_server_rc=0
+else
+    __slow_server_rc=$?
+fi
 unset -f _slow_server
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __slow_server_rc; return $__slow_server_rc"

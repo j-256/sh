@@ -434,8 +434,11 @@ sys.exit(2)
 PY
 )
 
-_find_cc_tool_output "$@"
-__find_cc_tool_output_rc=$?
+if _find_cc_tool_output "$@"; then
+    __find_cc_tool_output_rc=0
+else
+    __find_cc_tool_output_rc=$?
+fi
 unset -f _find_cc_tool_output
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __find_cc_tool_output_rc; return $__find_cc_tool_output_rc"

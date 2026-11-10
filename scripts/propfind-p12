@@ -169,8 +169,11 @@ EOF
         --data-raw '<?xml version="1.0" encoding="utf-8" ?><D:propfind xmlns:D="DAV:"><D:allprop/></D:propfind>'
 )
 
-_propfind_p12 "$@"
-__propfind_p12_rc=$?
+if _propfind_p12 "$@"; then
+    __propfind_p12_rc=0
+else
+    __propfind_p12_rc=$?
+fi
 unset -f _propfind_p12
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __propfind_p12_rc; return $__propfind_p12_rc"

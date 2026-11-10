@@ -166,8 +166,11 @@ EOF
     return 0
 )
 
-_test_runner "$@"
-__test_runner_rc=$?
+if _test_runner "$@"; then
+    __test_runner_rc=0
+else
+    __test_runner_rc=$?
+fi
 unset -f _test_runner
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __test_runner_rc; return $__test_runner_rc"

@@ -120,8 +120,11 @@ EOF
     printf "%s$delimiter%s" "$code_verifier" "$code_challenge"
 )
 
-_pkce "$@"
-__pkce_rc=$?
+if _pkce "$@"; then
+    __pkce_rc=0
+else
+    __pkce_rc=$?
+fi
 unset -f _pkce
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __pkce_rc; return $__pkce_rc"

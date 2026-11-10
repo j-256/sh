@@ -358,8 +358,11 @@ EOF
     echo "$password"
 )
 
-_genpw "$@"
-__genpw_rc=$?
+if _genpw "$@"; then
+    __genpw_rc=0
+else
+    __genpw_rc=$?
+fi
 unset -f _genpw
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __genpw_rc; return $__genpw_rc"

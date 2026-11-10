@@ -128,8 +128,11 @@ EOF
     echo "$result"
 )
 
-_inflate "$@"
-__inflate_rc=$?
+if _inflate "$@"; then
+    __inflate_rc=0
+else
+    __inflate_rc=$?
+fi
 unset -f _inflate
 if [ -n "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
     eval "unset __inflate_rc; return $__inflate_rc"

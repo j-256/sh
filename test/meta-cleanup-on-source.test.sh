@@ -37,7 +37,8 @@ _has_help_handler() {
 # leak line per category, prefixed FUNCS: or VARS:
 _collect_leaks() {
     local script="$1"
-    /bin/bash <<EOF
+    local mode="$2"
+    /bin/bash "$mode" <<EOF
 funcs_before=\$(declare -F | awk '{print \$3}' | sort)
 vars_before=\$(compgen -v | sort)
 . '$script' --help >/dev/null 2>&1
@@ -67,23 +68,29 @@ test_no_leaks_on_source() {
             continue
         fi
 
-        local result
-        local funcs
-        local vars
-        result="$(_collect_leaks "$script")"
-        # Filter out the helper's own variables that get recorded as "after"
-        # because they were declared inside the EOF heredoc subshell
-        funcs="$(echo "$result" | sed -n '/^FUNCS:/,/^VARS:/p' | sed '1d;$d')"
-        vars="$(echo "$result" | sed -n '/^VARS:/,$p' | sed '1d' | grep -vE '^(funcs_before|funcs_after|vars_before|vars_after)$')"
+        local mode
+        for mode in +e -e; do
+            local result
+            local funcs
+            local vars
+            if ! result="$(_collect_leaks "$script" "$mode")"; then
+                _fail "$name: source with $mode exited before namespace inspection"
+                continue
+            fi
+            # Filter out the helper's own variables that get recorded as "after"
+            # because they were declared inside the EOF heredoc subshell
+            funcs="$(echo "$result" | sed -n '/^FUNCS:/,/^VARS:/p' | sed '1d;$d')"
+            vars="$(echo "$result" | sed -n '/^VARS:/,$p' | sed '1d' | grep -vE '^(funcs_before|funcs_after|vars_before|vars_after)$')"
 
-        if [ -z "$funcs" ] && [ -z "$vars" ]; then
-            _ok "$name: no leaks on source"
-        else
-            local msg="$name leaked:"
-            [ -n "$funcs" ] && msg="$msg funcs=[$(printf '%s' "$funcs" | tr '\n' ' ')]"
-            [ -n "$vars" ] && msg="$msg vars=[$(printf '%s' "$vars" | tr '\n' ' ')]"
-            _fail "$msg"
-        fi
+            if [ -z "$funcs" ] && [ -z "$vars" ]; then
+                _ok "$name: no leaks on source with $mode"
+            else
+                local msg="$name leaked with $mode:"
+                [ -n "$funcs" ] && msg="$msg funcs=[$(printf '%s' "$funcs" | tr '\n' ' ')]"
+                [ -n "$vars" ] && msg="$msg vars=[$(printf '%s' "$vars" | tr '\n' ' ')]"
+                _fail "$msg"
+            fi
+        done
     done
 }
 
