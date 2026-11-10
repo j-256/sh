@@ -32,6 +32,7 @@ fi
 exit 1       # free
 SHIM
     chmod +x "$SHIM_DIR/nc"
+    write_ps_shim
 }
 
 # Minimal .mcp.json fixture with two chrome-devtools entries (9222, 9223).
