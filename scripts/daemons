@@ -441,7 +441,13 @@ EOF
             jq -c \
                 --arg event "$event" --arg since "$since_ts" \
                 'select(($event=="" or .event==$event) and ($since=="" or .ts>=$since))' "$f"
-        done | { [ "$jqexpr" = "." ] && cat || jq "$jqexpr"; }
+        done | {
+            if [ "$jqexpr" = "." ]; then
+                cat
+            else
+                jq "$jqexpr"
+            fi
+        }
     }
 
     # Render JSONL from stdin: one header line per record + indented extra detail lines
@@ -516,7 +522,7 @@ EOF
             esac
         fi
         case "$p" in
-            "~/"*) p="$HOME/${p#\~/}" ;;
+            \~/*) p="$HOME/${p#\~/}" ;;
         esac
         printf '%s\n' "$p"
     }
