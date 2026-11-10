@@ -761,6 +761,277 @@ test_close_refuses_tracked_ds_store_changes() {
     assert_file_exists "tracked metadata remains" "$worktree/.DS_Store"
 }
 
+inject_finder_race() {
+    export WT_FINDER_RACE="$1"
+    export WT_REAL_GIT
+    WT_REAL_GIT="$(command -v git)"
+    export WT_REMOVE_ADMIN
+    WT_REMOVE_ADMIN="$(git -C "$worktree" rev-parse --path-format=absolute --git-dir)"
+    cat > "$SHIM_DIR/git" <<'SHIM'
+#!/bin/bash
+if [ "$1" = -C ] && [ "$3" = status ] && [ "${WT_FINDER_RACE:-}" = status-failed ] && [ -f "$TEST_DIR/race-injected" ]; then
+    exit 128
+fi
+if [ "$1" = worktree ] && [ "$2" = remove ]; then
+    printf '%s\n' "$*" >> "$TEST_DIR/remove.calls"
+    worktree="$3"
+    if [ -f "$TEST_DIR/race-injected" ] && [ "$WT_FINDER_RACE" != repeated ]; then
+        exec "$WT_REAL_GIT" "$@"
+    fi
+    : > "$TEST_DIR/race-injected"
+    case "$WT_FINDER_RACE" in
+        sweep)
+            if [ -e "$worktree/.DS_Store" ] || [ -e "$worktree/nested space/.DS_Store" ] || [ -e "$worktree/ignored/.DS_Store" ]; then
+                exit 1
+            fi
+            exec "$WT_REAL_GIT" "$@" ;;
+        late|repeated)
+            printf 'late Finder metadata\n' > "$worktree/.DS_Store"
+            exec "$WT_REAL_GIT" "$@" ;;
+        tracked)
+            printf 'concurrent tracked metadata edit\n' > "$worktree/.DS_Store"
+            exit 1 ;;
+        symlink)
+            ln -s "$TEST_DIR/keep" "$worktree/.DS_Store"
+            exit 1 ;;
+        directory)
+            mkdir "$worktree/.DS_Store"
+            printf 'keep\n' > "$worktree/.DS_Store/notes.txt"
+            exit 1 ;;
+        replaced-link|replaced-admin|replaced-common|status-failed|primary-moved|locked)
+            printf 'late metadata\n' > "$worktree/.DS_Store"
+            case "$WT_FINDER_RACE" in
+                replaced-link)
+                    mv "$worktree/.git" "$TEST_DIR/original-link"
+                    cp "$TEST_DIR/original-link" "$worktree/.git" ;;
+                replaced-admin)
+                    mv "$WT_REMOVE_ADMIN" "$WT_REMOVE_ADMIN.original"
+                    cp -RP "$WT_REMOVE_ADMIN.original" "$WT_REMOVE_ADMIN" ;;
+                replaced-common)
+                    common="$("$WT_REAL_GIT" rev-parse --path-format=absolute --git-common-dir)" || exit 1
+                    mv "$common" "$common.original"
+                    cp -RP "$common.original" "$common"
+                    rm -rf "$WT_REMOVE_ADMIN"
+                    rm "$worktree/.git" ;;
+                primary-moved)
+                    "$WT_REAL_GIT" -c user.name='WT Test' -c user.email='wt@example.invalid' commit --allow-empty -qm concurrent -- base.txt ;;
+                locked) "$WT_REAL_GIT" worktree lock "$worktree" ;;
+            esac
+            exit 1 ;;
+    esac
+    # Emulate Git deleting tracked content before ENOTEMPTY and registry removal
+    rm "$worktree/base.txt"
+    [ "$WT_FINDER_RACE" = partial-tracked ] || rm "$worktree/.gitignore"
+    mkdir -p "$worktree/nested space/deeper" "$worktree/ignored"
+    printf 'Finder metadata\n' > "$worktree/.DS_Store"
+    printf 'Finder metadata\n' > "$worktree/nested space/deeper/.DS_Store"
+    printf 'Finder metadata\n' > "$worktree/ignored/.DS_Store"
+    case "$WT_FINDER_RACE" in
+        unknown) printf 'new user data\n' > "$worktree/notes.txt" ;;
+        ignored-unknown) printf 'generated or user data\n' > "$worktree/ignored/notes.txt" ;;
+        partial-admin) rm "$WT_REMOVE_ADMIN/index" ;;
+        retained-admin) ;;
+        *) rm -rf "$WT_REMOVE_ADMIN"; rm "$worktree/.git" ;;
+    esac
+    printf 'error: failed to delete worktree: Directory not empty\n' >&2
+    exit 1
+fi
+exec "$WT_REAL_GIT" "$@"
+SHIM
+    chmod +x "$SHIM_DIR/git"
+}
+
+test_close_sweeps_ordinary_nested_and_ignored_metadata_before_git_removal() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" task/sweep)" || { fixture_setup_failed; return 1; }
+    mkdir -p "$worktree/nested space" "$worktree/ignored"
+    printf 'Finder metadata\n' > "$worktree/.DS_Store"
+    printf 'Finder metadata\n' > "$worktree/nested space/.DS_Store"
+    printf 'Finder metadata\n' > "$worktree/ignored/.DS_Store"
+    inject_finder_race sweep
+    run_wt_from "$repo" close task/sweep
+    assert_rc "all regular Finder metadata is swept before Git" 0
+    assert_path_absent "ordinary metadata cleanup removes the checkout" "$worktree"
+    assert_eq "ordinary metadata needs no retry" "$(wc -l < "$TEST_DIR/remove.calls" | tr -d ' ')" 1
+}
+
+test_close_recovery_rechecks_identity_heads_locks_and_inspection() {
+    local mode
+    for mode in replaced-link replaced-admin replaced-common status-failed primary-moved locked; do
+        local repo; repo="$(init_repo "$TEST_DIR/$mode")"
+        local worktree; worktree="$(start_task "$repo" "task/$mode")" || { fixture_setup_failed; return 1; }
+        inject_finder_race "$mode"
+        run_wt_from "$repo" close "task/$mode"
+        assert_rc "$mode blocks retry" 1
+        assert_eq "$mode makes no second removal attempt" "$(wc -l < "$TEST_DIR/remove.calls" | tr -d ' ')" 1
+        assert_file_exists "$mode preserves late metadata" "$worktree/.DS_Store"
+        assert_file_exists "$mode preserves tracked content" "$worktree/base.txt"
+        git -C "$repo" show-ref --verify --quiet "refs/heads/task/$mode"
+        assert_eq "$mode preserves the task branch" "$?" 0
+        if [ "$mode" = replaced-common ]; then
+            assert_path_absent "replacement common directory gets no restored admin" "$WT_REMOVE_ADMIN"
+            assert_path_absent "replacement common directory gets no restored link" "$worktree/.git"
+        fi
+        rm "$SHIM_DIR/git" "$TEST_DIR/race-injected" "$TEST_DIR/remove.calls"
+    done
+}
+
+test_close_preserves_arrivals_during_final_residue_rmdir() {
+    local mode
+    for mode in metadata unknown replacement-link replacement-directory; do
+        local repo; repo="$(init_repo "$TEST_DIR/$mode")"
+        local worktree; worktree="$(start_task "$repo" "task/$mode")" || { fixture_setup_failed; return 1; }
+        inject_finder_race residue
+        export WT_RMDIR_WORKTREE="$worktree"
+        export WT_RMDIR_MODE="$mode"
+        cat > "$SHIM_DIR/rmdir" <<'SHIM'
+#!/bin/bash
+if [ "$1" = "$WT_RMDIR_WORKTREE" ]; then
+    if [ "$WT_RMDIR_MODE" = replacement-directory ]; then
+        /bin/rmdir "$@" || exit $?
+        mkdir -p "$1/ignored"
+        printf 'gitdir: %s\n' "$WT_REMOVE_ADMIN" > "$1/.git"
+        printf 'base\n' > "$1/base.txt"
+        printf 'ignored/\n' > "$1/.gitignore"
+        printf 'replacement data\n' > "$1/ignored/keep.txt"
+        exit 0
+    elif [ "$WT_RMDIR_MODE" = metadata ]; then
+        printf 'late Finder metadata\n' > "$1/.DS_Store"
+    elif [ "$WT_RMDIR_MODE" = unknown ]; then
+        printf 'late user data\n' > "$1/notes.txt"
+    else
+        printf 'external replacement\n' > "$1/.git"
+    fi
+fi
+exec /bin/rmdir "$@"
+SHIM
+        chmod +x "$SHIM_DIR/rmdir"
+        run_wt_from "$repo" close "task/$mode"
+        assert_rc "$mode arrival stops residue cleanup" 1
+        assert_dir_exists "$mode retains the original directory" "$worktree"
+        assert_stderr_contains "$mode retains recovery evidence" 'Recovery snapshot retained'
+        if [ "$mode" = replacement-directory ]; then
+            assert_eq "replacement directory data survives" "$(cat "$worktree/ignored/keep.txt")" 'replacement data'
+        elif [ "$mode" != replacement-link ]; then
+            if [ "$mode" = metadata ]; then
+                assert_file_exists "late Finder arrival is retained" "$worktree/.DS_Store"
+            else
+                assert_eq "late user file is retained" "$(cat "$worktree/notes.txt")" 'late user data'
+            fi
+            assert_eq "our removed Git link is restored without overwrite" "$(git -C "$worktree" branch --show-current)" "task/$mode"
+        else
+            assert_eq "replacement Git link is not overwritten" "$(cat "$worktree/.git")" 'external replacement'
+        fi
+        rm "$SHIM_DIR/git" "$SHIM_DIR/rmdir" "$TEST_DIR/race-injected" "$TEST_DIR/remove.calls"
+    done
+}
+
+test_close_retries_metadata_created_after_initial_sweep() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" task/late-finder)" || { fixture_setup_failed; return 1; }
+    inject_finder_race late
+    run_wt_from "$worktree" close
+    assert_rc "late Finder metadata is retried safely" 0
+    assert_path_absent "late metadata worktree is removed" "$worktree"
+    assert_eq "one additional nonforcing removal is attempted" "$(wc -l < "$TEST_DIR/remove.calls" | tr -d ' ')" 2
+    assert_not_contains "retry never forces Git removal" "$(cat "$TEST_DIR/remove.calls")" --force
+}
+
+test_close_finishes_only_finder_residue_after_git_deletes_tracked_files() {
+    local mode
+    for mode in residue retained-admin; do
+        local repo; repo="$(init_repo "$TEST_DIR/$mode")"
+        local worktree; worktree="$(start_task "$repo" "task/$mode")" || { fixture_setup_failed; return 1; }
+        inject_finder_race "$mode"
+        run_wt_from "$repo" close "task/$mode"
+        assert_rc "$mode finishes metadata-only residue" 0
+        assert_path_absent "$mode removes the original directory" "$worktree"
+        assert_path_absent "$mode removes administration" "$WT_REMOVE_ADMIN"
+        git -C "$repo" show-ref --verify --quiet "refs/heads/task/$mode"
+        assert_eq "$mode deletes only the integrated branch" "$?" 1
+        rm "$SHIM_DIR/git" "$TEST_DIR/race-injected" "$TEST_DIR/remove.calls"
+    done
+}
+
+test_close_bounds_repeated_finder_failure() {
+    local repo; repo="$(init_repo)"
+    local worktree; worktree="$(start_task "$repo" task/repeated-finder)" || { fixture_setup_failed; return 1; }
+    inject_finder_race repeated
+    run_wt_from "$repo" close task/repeated-finder
+    assert_rc "repeated metadata creation stops" 1
+    assert_eq "retry count is bounded" "$(wc -l < "$TEST_DIR/remove.calls" | tr -d ' ')" 2
+    assert_eq "bounded failure keeps inspectable registration" "$(git -C "$worktree" branch --show-current)" task/repeated-finder
+    assert_file_exists "bounded failure preserves late residue" "$worktree/.DS_Store"
+    assert_stderr_contains "bounded failure explains the limit" "retry limit"
+}
+
+test_close_does_not_restore_partial_tracked_deletions_or_remove_unknown_residue() {
+    local mode
+    for mode in partial-tracked unknown ignored-unknown partial-admin; do
+        local repo; repo="$(init_repo "$TEST_DIR/$mode")"
+        local worktree; worktree="$(start_task "$repo" "task/$mode")" || { fixture_setup_failed; return 1; }
+        inject_finder_race "$mode"
+        run_wt_from "$repo" close "task/$mode"
+        assert_rc "$mode refuses automatic recovery" 1
+        assert_path_absent "$mode never restores deleted tracked content" "$worktree/base.txt"
+        assert_file_exists "$mode preserves metadata with unclassified residue" "$worktree/.DS_Store"
+        assert_eq "$mode does not retry" "$(wc -l < "$TEST_DIR/remove.calls" | tr -d ' ')" 1
+        case "$mode" in
+            unknown) assert_eq "unknown user data remains" "$(cat "$worktree/notes.txt")" 'new user data' ;;
+            ignored-unknown) assert_file_exists "ignored unknown residue remains" "$worktree/ignored/notes.txt" ;;
+            partial-admin) assert_stderr_contains "partial registration retains snapshot" "Recovery snapshot retained" ;;
+        esac
+        rm "$SHIM_DIR/git" "$TEST_DIR/race-injected" "$TEST_DIR/remove.calls"
+    done
+}
+
+test_close_preserves_late_tracked_metadata_and_special_paths() {
+    local mode
+    for mode in tracked symlink directory; do
+        local repo; repo="$(init_repo "$TEST_DIR/$mode")"
+        [ "$mode" != tracked ] || commit_path "$repo" .DS_Store original metadata
+        local worktree; worktree="$(start_task "$repo" "task/$mode")" || { fixture_setup_failed; return 1; }
+        printf 'keep\n' > "$TEST_DIR/keep"
+        inject_finder_race "$mode"
+        run_wt_from "$repo" close "task/$mode"
+        assert_rc "$mode metadata refuses recovery" 1
+        assert_eq "$mode does not retry removal" "$(wc -l < "$TEST_DIR/remove.calls" | tr -d ' ')" 1
+        case "$mode" in
+            tracked) assert_eq "late tracked edit remains" "$(cat "$worktree/.DS_Store")" 'concurrent tracked metadata edit' ;;
+            symlink) assert_eq "late metadata symlink remains" "$(readlink "$worktree/.DS_Store")" "$TEST_DIR/keep" ;;
+            directory) assert_file_exists "metadata directory content remains" "$worktree/.DS_Store/notes.txt" ;;
+        esac
+        rm "$SHIM_DIR/git" "$TEST_DIR/race-injected" "$TEST_DIR/remove.calls"
+    done
+}
+
+test_close_refuses_initial_metadata_symlinks_and_directories() {
+    local mode
+    for mode in symlink ignored-symlink directory ignored-directory empty-directory; do
+        local repo; repo="$(init_repo "$TEST_DIR/$mode")"
+        local worktree; worktree="$(start_task "$repo" "task/$mode")" || { fixture_setup_failed; return 1; }
+        local path="$worktree/.DS_Store"
+        case "$mode" in ignored-*)
+            mkdir "$worktree/ignored"
+            path="$worktree/ignored/.DS_Store"
+        ;; esac
+        case "$mode" in *directory)
+            mkdir "$path"
+            [ "$mode" = empty-directory ] || printf 'keep\n' > "$path/notes.txt"
+            ;;
+        *)
+            printf 'keep\n' > "$TEST_DIR/keep"
+            ln -s "$TEST_DIR/keep" "$path"
+            ;;
+        esac
+        run_wt_from "$repo" close "task/$mode"
+        assert_rc "$mode metadata refuses initial cleanup" 1
+        assert_dir_exists "$mode worktree remains" "$worktree"
+        case "$mode" in *directory) assert_dir_exists "$mode is preserved" "$path" ;;
+            *) assert_eq "$mode metadata link is preserved" "$(readlink "$path")" "$TEST_DIR/keep" ;; esac
+    done
+}
+
 test_close_removes_ignored_files_with_worktree() {
     local repo; repo="$(init_repo)"
     local worktree; worktree="$(start_task "$repo" task/ignored)" || { fixture_setup_failed; return 1; }
