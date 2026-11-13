@@ -6,17 +6,19 @@ Find repositories whose remotes disagree, whose local branches have unpublished 
 
 Repository refs, objects, index, configuration, and working files are preserved. Any missing history needed for commit counts is fetched into private temporary storage and removed on exit.
 
+The `SYNC` column separates integration-branch synchronization from branch and tag housekeeping: `SYNCED`, `PULL`, `PUSH`, `DIVERGED`, or `UNKNOWN`. Policy scopes can also report `LOCAL`, `PINNED`, or `DIFFERS`. A repository can have synchronized source and still have a `REFS` or `REVIEW` finding. These labels describe differences and do not authorize a mutation.
+
 ## Quick start
 
 Check repositories in the current directory. The default report gives each repository one row, with incomplete audits first:
 
 ```bash
 $ git-remote-audit
-STATE   REPOSITORY  REMOTES    LOCAL / OTHER REFS
-ERROR   ./archive   unknown    main not checked; unavailable: origin
-REVIEW  ./worker    match (2)  main: ahead 1 vs mirror, origin; dirty worktree
-REFS    ./website   match (2)  main matches; 3 branch-name gaps
-OK      ./library   single     main matches
+STATE   REPOSITORY  SYNC     REMOTES    LOCAL / OTHER REFS
+ERROR   ./archive   UNKNOWN  unknown    main not checked; unavailable: origin
+REVIEW  ./worker    PUSH     match (2)  main: ahead 1 vs mirror, origin; dirty worktree
+REFS    ./website   SYNCED   match (2)  main matches; 3 branch-name gaps
+OK      ./library   SYNCED   single     main matches
 
 Summary: 4 repositories, 1 matching, 1 review, 1 refs-only, 1 incomplete
 1 remote query failed
@@ -25,6 +27,8 @@ Details for one repo: git-remote-audit -v <repository>
 ```
 
 The directory itself and its immediate child repository roots are checked. Every branch and tag is audited in both output modes. A completed audit with findings exits with status `4`; an incomplete audit exits with `1`.
+
+The scan root is labeled with its directory name, such as `website`, and nested repositories retain paths relative to that root. Summary rows, explanations, and diagnostics use the same labels without expanding every entry into a long absolute path.
 
 ## Common examples
 
@@ -47,6 +51,14 @@ $ git-remote-audit -v ~/projects/website
 ```
 
 Verbose output includes every missing or differing ref, object IDs for differing tags and remote refs, and matching refs. Use it on a repository from the summary to decide which differences need action.
+
+**Explain branch housekeeping without matching-tag noise:**
+
+```bash
+$ git-remote-audit --explain ~/projects/website
+```
+
+Focused explanations identify local-only branches, associated worktrees, remote-only branches, and branches already contained in the integration history. An exact tree match with an integration ancestor is reported separately from ancestry containment, so rewritten commits do not automatically imply unfinished file changes. Dirty or unreadable associated worktrees are explicitly marked for preservation. Cleanup candidates still require review of ignored contents and retention requirements; the audit never deletes them. Other branches are marked for review without assuming whether their changes were rebased, squashed, or superseded.
 
 **Get full details recursively:**
 
@@ -97,6 +109,35 @@ A failed remote query or unavailable commit count makes the audit incomplete and
 
 Diagnostics identify the repository, remote, failed operation, and Git exit status where available. Raw Git transport errors are withheld because they can contain credential-bearing URLs. To investigate a query failure, run `git ls-remote <remote>` inside that repository. For unavailable history, inspect whether the clone is shallow and retry after resolving transport errors or concurrent remote changes.
 
+## Repository expectations
+
+Use `--policy policy.json` to audit a declared integration branch even when a task branch is checked out, map differently named local and remote branches, or describe independent remotes. JSON parsing conditionally requires Python 3; ordinary audits and help do not.
+
+```json
+{
+  "version": 1,
+  "repositories": [
+    {
+      "path": "/home/projects/website",
+      "localBranch": "main",
+      "remote": "origin",
+      "remoteBranch": "source",
+      "mirrors": ["origin", "mirror"],
+      "independent": ["upstream"],
+      "sourceOnly": true
+    }
+  ]
+}
+```
+
+`path` is required and absolute. `remote` defaults to `origin`; omitted branch names use that remote's live default branch. `mirrors` defaults to the selected source remote and compares the selected remote branch on each named mirror. `independent` names intentionally different remotes; they remain queried, and access failures still make the audit incomplete. Their parity and upstream integration are outside this source audit, which does not establish whether a fork needs rebasing onto an independent upstream. Other configured remotes retain ordinary ref comparison and are labeled unclassified rather than silently assumed to mirror the source.
+
+`sourceOnly` excludes generated publication refs and tags and explicitly reports that publication refs were not checked. `localOnly` expects a repository without remotes. `pin` accepts a full commit ID and checks a submodule against its parent's committed gitlink; detached HEAD at that pin is expected. These scoped checks do not certify excluded publication output or submodule remote parity.
+
+Adapters can supply a `problems` array of preflight diagnostics and an informational `note`. A preflight problem makes that repository incomplete before querying its remotes. The adapter must establish repository URL identity; policy itself does not declare or validate remote URLs. Unlisted repositories retain ordinary audit behavior, and absent policy paths do not create an inventory or recovery check.
+
+All fields other than `path` are optional. Booleans default to false, `problems` defaults to an empty array, and `note` defaults to an empty string. Unknown or duplicate keys, duplicate paths, invalid branch names, overlapping remote roles, control characters, and policy files larger than 2 MiB are rejected. Paths with spaces are supported. `mirrors` and `independent` contain unique remote names, and the selected source remote cannot be independent.
+
 ---
 
 ## Reference
@@ -108,6 +149,8 @@ Diagnostics identify the repository, remote, failed operation, and Git exit stat
 | `directory` | Directory to scan; defaults to the current directory |
 | `-r, --recursive` | Discover repositories at every depth |
 | `-v, --verbose` | Show the complete per-ref report, including matching refs |
+| `-e, --explain` | Explain differing branches, worktrees, and cleanup candidates |
+| `-p, --policy FILE` | Read generic repository expectations from JSON |
 | `-h, --help` | Show complete usage and behavior |
 | `--` | Treat remaining arguments as positional, including a directory starting with `-` |
 
@@ -137,6 +180,7 @@ Inherited Git repository-location variables are cleared so one caller's `GIT_DIR
 
 - Bash 3.2 or newer
 - Git with `--no-lazy-fetch` support
+- Python 3, only when using `--policy`
 
 ### Scope and limitations
 

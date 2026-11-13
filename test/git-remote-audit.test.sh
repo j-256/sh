@@ -590,4 +590,191 @@ test_compact_numeric_remote_names_remain_visible() {
     assert_stdout_contains 'numeric matching remotes are individually named' 'matches 0, 1'
 }
 
+write_policy() {
+    local peers=',"mirror"'
+    if [ "$#" -ge 2 ]; then peers="$2"; fi
+    cat > "$TEST_DIR/policy.json" <<EOF
+{"version":1,"repositories":[{"path":"$TEST_DIR/scan/project","localBranch":"main","remote":"origin","remoteBranch":"${1:-main}","mirrors":["origin"$peers],"independent":${3:-[]},"sourceOnly":${4:-false},"localOnly":false,"problems":[],"note":""}]}
+EOF
+}
+
+test_policy_maps_source_branch_without_publishing_generated_refs() {
+    make_pair || return
+    fixture_git -C "$TEST_DIR/remote-a" branch -m main source
+    fixture_git -C "$TEST_DIR/remote-b" branch -m main source
+    fixture_git -C "$TEST_DIR/remote-a" branch main source
+    fixture_git -C "$TEST_DIR/remote-b" branch main source
+    local generated_a; generated_a="$(printf 'Generated A\n' | fixture_git -C "$TEST_DIR/remote-a" commit-tree 'source^{tree}' -p source)"
+    local generated_b; generated_b="$(printf 'Generated B\n' | fixture_git -C "$TEST_DIR/remote-b" commit-tree 'source^{tree}' -p source)"
+    fixture_git -C "$TEST_DIR/remote-a" update-ref refs/heads/main "$generated_a"
+    fixture_git -C "$TEST_DIR/remote-b" update-ref refs/heads/main "$generated_b"
+    fixture_git -C "$TEST_DIR/remote-a" tag release "$generated_a"
+    fixture_git -C "$TEST_DIR/remote-b" tag release "$generated_b"
+    write_policy source ',"mirror"' '[]' true
+    local before; before="$(fingerprint "$TEST_DIR/scan/project/.git")"
+    run_script -ep "$TEST_DIR/policy.json" "$TEST_DIR/scan/project"
+    assert_rc 'source mapping succeeds independently of generated names' 0
+    assert_stdout_contains 'synchronization is a separate column' 'SYNC'
+    assert_stdout_contains 'source mapping is visible' 'source'
+    assert_stdout_contains 'generated refs have explicit coverage limits' 'publication refs not checked'
+    assert_eq 'policy audit preserves repository metadata' "$(fingerprint "$TEST_DIR/scan/project/.git")" "$before"
+}
+
+test_policy_independent_remote_differences_do_not_hide_access_failures() {
+    make_pair || return
+    commit_change "$TEST_DIR/source" upstream || return
+    publish_fixture "$TEST_DIR/remote-b" "$TEST_DIR/source" || return
+    write_policy main '' '["mirror"]'
+    run_script --policy="$TEST_DIR/policy.json" --explain "$TEST_DIR/scan/project"
+    assert_rc 'explicit independent remote may contain different commits' 0
+    assert_stdout_contains 'independent role remains visible' 'independent: mirror'
+    fixture_git -C "$TEST_DIR/scan/project" remote set-url mirror "$TEST_DIR/unavailable"
+    run_script -p "$TEST_DIR/policy.json" "$TEST_DIR/scan/project"
+    assert_rc 'independent remote access failure remains incomplete' 1
+    assert_stdout_contains 'failed independent remote is named' 'unavailable: mirror'
+}
+
+test_policy_verifies_integration_branch_when_task_is_checked_out() {
+    make_pair || return
+    fixture_git -C "$TEST_DIR/scan/project" checkout -qb task
+    commit_change "$TEST_DIR/scan/project" task || return
+    write_policy
+    run_script -ep "$TEST_DIR/policy.json" "$TEST_DIR/scan/project"
+    assert_rc 'topic ref remains a housekeeping finding' 4
+    assert_stdout_contains 'declared integration branch is compared' 'main matches'
+    assert_stdout_contains 'topic branch is explained' 'LOCAL task'
+    assert_stdout_contains 'synchronized integration is explicit' 'SYNCED'
+}
+
+test_explain_names_integrated_and_equivalent_branches_without_matching_tags() {
+    make_pair || return
+    local repo="$TEST_DIR/scan/project"
+    fixture_git -C "$repo" branch completed
+    local original; original="$(fixture_git -C "$repo" rev-parse HEAD)"
+    local replay; replay="$(printf 'Replayed commit\n' | fixture_git -C "$repo" commit-tree "$original^{tree}")"
+    fixture_git -C "$repo" update-ref refs/heads/replayed "$replay"
+    fixture_git -C "$repo" tag matching
+    fixture_git -C "$TEST_DIR/remote-a" tag matching "$original"
+    fixture_git -C "$TEST_DIR/remote-b" tag matching "$original"
+    run_script --explain "$repo"
+    assert_rc 'branch housekeeping remains a finding' 4
+    assert_stdout_contains 'contained local branch is identified' 'LOCAL completed: integrated'
+    assert_stdout_contains 'rewritten equivalent content is identified' 'LOCAL replayed: equivalent tree'
+    assert_stdout_not_contains 'matching tags do not bury explanations' 'tag matching: match'
+}
+
+test_policy_rejects_unknown_fields_and_missing_values() {
+    make_pair || return
+    printf '%s\n' '{"version":1,"repositories":[],"unexpected":true}' > "$TEST_DIR/policy.json"
+    run_script -p "$TEST_DIR/policy.json" "$TEST_DIR/scan/project"
+    assert_rc 'unknown policy fields are usage errors' 2
+    assert_stderr_contains 'invalid policy has an actionable diagnostic' 'Invalid policy'
+    run_script --policy=
+    assert_rc 'empty policy value is invalid' 2
+    run_script -p
+    assert_rc 'missing policy value is invalid' 2
+}
+
+test_policy_reports_missing_mirrors_and_preserves_unclassified_matches() {
+    make_pair || return
+    write_policy main ''
+    run_script -p "$TEST_DIR/policy.json" "$TEST_DIR/scan/project"
+    assert_rc 'unclassified but matching remote creates no invented failure' 0
+    assert_stdout_contains 'undeclared remote relationship is visible' 'unclassified remote: mirror'
+    fixture_git -C "$TEST_DIR/scan/project" remote remove mirror
+    write_policy
+    run_script -p "$TEST_DIR/policy.json" "$TEST_DIR/scan/project"
+    assert_rc 'absent required mirror cannot pass' 1
+    assert_stderr_contains 'missing mirror names the unmet expectation' 'mirror'
+}
+
+test_policy_local_only_and_submodule_pins_are_distinct_from_branch_sync() {
+    mkdir -p "$TEST_DIR/scan"
+    new_repo "$TEST_DIR/scan/project" || return
+    cat > "$TEST_DIR/policy.json" <<EOF
+{"version":1,"repositories":[{"path":"$TEST_DIR/scan/project","localOnly":true,"mirrors":[]}]}
+EOF
+    run_script -p "$TEST_DIR/policy.json" "$TEST_DIR/scan/project"
+    assert_rc 'declared local-only repository is expected' 0
+    assert_stdout_contains 'local-only scope is explicit' 'local-only (expected)'
+    local pin; pin="$(fixture_git -C "$TEST_DIR/scan/project" rev-parse HEAD)"
+    fixture_git -C "$TEST_DIR/scan/project" checkout -q --detach
+    cat > "$TEST_DIR/policy.json" <<EOF
+{"version":1,"repositories":[{"path":"$TEST_DIR/scan/project","pin":"$pin","mirrors":[]}]}
+EOF
+    run_script -ep "$TEST_DIR/policy.json" "$TEST_DIR/scan/project"
+    assert_rc 'detached submodule at its declared pin succeeds' 0
+    assert_stdout_contains 'pin scope remains explicit' 'PINNED'
+    commit_change "$TEST_DIR/scan/project" moved || return
+    run_script -p "$TEST_DIR/policy.json" "$TEST_DIR/scan/project"
+    assert_rc 'wrong submodule pin is a finding' 4
+    assert_stdout_contains 'pin mismatch is actionable' 'differs from committed gitlink'
+}
+
+test_policy_preflight_failure_prevents_remote_inspection() {
+    make_pair || return
+    cat > "$TEST_DIR/policy.json" <<EOF
+{"version":1,"repositories":[{"path":"$TEST_DIR/scan/project","problems":["Repository identity differs"]}]}
+EOF
+    fixture_git -C "$TEST_DIR/scan/project" remote set-url origin "$TEST_DIR/unavailable"
+    run_script -ep "$TEST_DIR/policy.json" "$TEST_DIR/scan/project"
+    assert_rc 'identity preflight failure is incomplete' 1
+    assert_stderr_contains 'identity failure survives the report' 'Repository identity differs'
+    assert_stderr_not_contains 'wrong repository is not queried' 'Failed to query remote'
+}
+
+test_explain_preserves_dirty_worktrees_even_when_branch_is_integrated() {
+    make_pair || return
+    fixture_git -C "$TEST_DIR/scan/project" branch completed
+    fixture_git -C "$TEST_DIR/scan/project" worktree add -q "$TEST_DIR/task" completed
+    printf 'Uncommitted work\n' > "$TEST_DIR/task/private-input"
+    run_script -e "$TEST_DIR/scan/project"
+    assert_rc 'dirty associated work remains a review finding' 4
+    assert_stdout_contains 'integrated branch with dirty worktree is preserved' 'LOCAL completed: worktree dirty; preserve'
+    assert_file_exists 'associated worktree input remains intact' "$TEST_DIR/task/private-input"
+}
+
+test_policy_annotated_tags_do_not_create_peeled_name_gaps() {
+    make_pair || return
+    fixture_git -C "$TEST_DIR/source" tag -a release -m Release
+    publish_fixture "$TEST_DIR/remote-a" "$TEST_DIR/source" || return
+    publish_fixture "$TEST_DIR/remote-b" "$TEST_DIR/source" || return
+    fixture_git -C "$TEST_DIR/scan/project" fetch -q --tags origin
+    write_policy
+    run_script -p "$TEST_DIR/policy.json" "$TEST_DIR/scan/project"
+    assert_rc 'matching annotated tags remain synchronized under policy' 0
+    assert_stdout_not_contains 'peeled pseudo-refs are not real tag gaps' 'tag-name gap'
+    fixture_git -C "$TEST_DIR/remote-b" tag -fa release -m Changed > /dev/null
+    run_script -vp "$TEST_DIR/policy.json" "$TEST_DIR/scan/project"
+    assert_rc 'annotated tag object changes remain findings' 4
+    assert_stdout_contains 'policy verbose mode prints differing tags' 'tag release:'
+    assert_stdout_contains 'policy verbose mode retains object IDs' 'remote='
+}
+
+test_combined_verbose_explain_reports_dirty_matching_branch_as_finding() {
+    make_pair || return
+    local repo="$TEST_DIR/scan/project"
+    fixture_git -C "$repo" branch completed
+    fixture_git -C "$TEST_DIR/remote-a" branch completed main
+    fixture_git -C "$TEST_DIR/remote-b" branch completed main
+    fixture_git -C "$repo" worktree add -q "$TEST_DIR/task" completed
+    printf 'Uncommitted work\n' > "$TEST_DIR/task/private-input"
+    run_script -ve "$repo"
+    assert_rc 'dirty associated worktree is a finding even when all refs match' 4
+    assert_stdout_contains 'verbose plus explain does not drop branch explanations' 'LOCAL completed: worktree dirty; preserve'
+}
+
+test_local_only_policy_preserves_detached_work_findings() {
+    mkdir -p "$TEST_DIR/scan"
+    new_repo "$TEST_DIR/scan/project" || return
+    fixture_git -C "$TEST_DIR/scan/project" checkout -q --detach
+    commit_change "$TEST_DIR/scan/project" detached || return
+    cat > "$TEST_DIR/policy.json" <<EOF
+{"version":1,"repositories":[{"path":"$TEST_DIR/scan/project","localOnly":true,"mirrors":[]}]}
+EOF
+    run_script -p "$TEST_DIR/policy.json" "$TEST_DIR/scan/project"
+    assert_rc 'local-only expectation does not hide detached work' 4
+    assert_stdout_contains 'detached work stays visible' 'detached HEAD'
+}
+
 run_tests "$@"

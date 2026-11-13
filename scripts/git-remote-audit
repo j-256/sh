@@ -2,11 +2,13 @@
 # git-remote-audit - Compare live Git remote branches and tags with local refs
 #
 # Usage:
-#   git-remote-audit [-r] [-v] [directory]
+#   git-remote-audit [-r] [-v] [-e] [-p policy.json] [directory]
 #
 # Options:
 #   -r, --recursive  Discover repositories at every depth
 #   -v, --verbose    Show the complete per-ref report, including matches
+#   -e, --explain    Explain differing branches and associated worktrees
+#   -p, --policy FILE  Read generic repository expectations from JSON
 #   -h, --help       Show help
 #
 # Dependencies:
@@ -45,6 +47,10 @@ DESCRIPTION
   It shows remote parity and the checked-out branch independently. Other
   differences are counted by unique ref within each category. Use -v on
   one repository to inspect its complete ref inventory, including matches.
+  The scan root uses its directory name; nested repositories use relative
+  paths so the table stays compact.
+  SYNC reports SYNCED, PULL, PUSH, DIVERGED, or UNKNOWN separately from
+  housekeeping. Policy can also report LOCAL, PINNED, or DIFFERS.
 
   Checks the directory itself and its immediate child repository roots.
   The directory defaults to the current directory. Recursive mode also
@@ -58,6 +64,8 @@ DESCRIPTION
 OPTIONS
   -r, --recursive  Discover repositories at every depth
   -v, --verbose    Show the complete per-ref report, including matches
+  -e, --explain    Show focused differences and branch/worktree explanations
+  -p, --policy ${s}FILE${r}  Read repository expectations from JSON
   -h, --help       Show this help
   --              Treat remaining arguments as positional
 ENVIRONMENT
@@ -66,6 +74,23 @@ ENVIRONMENT
   CLICOLOR_FORCE  Enable help styling even when stdout is redirected
 DEPENDENCIES
   Git with --no-lazy-fetch support
+  Python 3 (required only for --policy)
+FILES
+  Policy: {"version":1,"repositories":[{"path":"/absolute/project",...}]}
+  Each repository requires path and permits localBranch, remote (default
+  origin), remoteBranch, mirrors and independent (remote-name arrays),
+  sourceOnly and localOnly (booleans), pin (commit ID), problems (string
+  array), and note (string). Omitted branches use the live remote default
+  branch. Mirrors compare the selected source branch; independent remotes
+  are still queried. sourceOnly excludes generated publication refs and
+  tags with an explicit coverage note. localOnly expects no remotes.
+  pin checks a detached submodule against its parent's committed gitlink.
+  problems report adapter preflight failures before remote queries.
+  Policy files are limited to 2 MiB. Paths and strings cannot contain control
+  characters. Unknown or duplicate
+  keys, overlapping roles, duplicate paths, and invalid refs are rejected.
+  A policy does not establish remote URL identity; its producer owns that
+  check. Unlisted repositories retain ordinary audit behavior.
 EXAMPLES
   $SCRIPT_NAME
   $SCRIPT_NAME ~/projects
@@ -105,6 +130,123 @@ EOF
     _error() { printf '[ERR][%s] %s\n' "$SCRIPT_NAME" "$*" >&2; }
     _info() { printf '[INF][%s] %s\n' "$SCRIPT_NAME" "$*" >&2; }
     _display() { printf '%q' "$1"; }
+
+    _repo_display() {
+        if [ "$repo" = . ]; then _display "$scan_label"
+        else _display "$repo"; fi
+    }
+
+    _load_policy() {
+        [ -n "$policy_file" ] || return 0
+        command -v python3 >/dev/null 2>&1 || { _error 'python3 is required'; return 3; }
+        if ! python3 - "$policy_file" > "$scratch_root/policy" <<'PY'
+import json
+import os
+import re
+import subprocess
+import sys
+
+POLICY_VERSION = 1
+POLICY_MAX_BYTES = 2 * 1024 * 1024
+
+def pairs(items):
+    value = {}
+    for key, item in items:
+        if key in value:
+            raise ValueError()
+        value[key] = item
+    return value
+
+def text(value):
+    return isinstance(value, str) and all(ord(char) >= 32 and ord(char) != 127 for char in value)
+
+try:
+    with open(sys.argv[1], 'rb') as stream:
+        raw = stream.read(POLICY_MAX_BYTES + 1)
+    if len(raw) > POLICY_MAX_BYTES:
+        raise ValueError()
+    data = json.loads(raw, object_pairs_hook=pairs)
+    if not isinstance(data, dict) or set(data) != {'version', 'repositories'} or type(data['version']) is not int or data['version'] != POLICY_VERSION or not isinstance(data['repositories'], list):
+        raise ValueError()
+    seen = set()
+    allowed = {'path', 'localBranch', 'remote', 'remoteBranch', 'mirrors', 'independent', 'sourceOnly', 'localOnly', 'pin', 'problems', 'note'}
+    remote_pattern = re.compile(r'[A-Za-z0-9][A-Za-z0-9_-]*(?:[.][A-Za-z0-9_-]+)*')
+    for row in data['repositories']:
+        if not isinstance(row, dict) or set(row) - allowed or not text(row.get('path')) or not os.path.isabs(row['path']):
+            raise ValueError()
+        identity = os.path.realpath(row['path'])
+        if identity in seen:
+            raise ValueError()
+        seen.add(identity)
+        remote = row.get('remote', 'origin')
+        roles = [row.get('mirrors', [remote]), row.get('independent', [])]
+        if not text(remote) or not remote_pattern.fullmatch(remote):
+            raise ValueError()
+        for names in roles:
+            if not isinstance(names, list) or any(not text(name) or not remote_pattern.fullmatch(name) for name in names) or len(names) != len(set(names)):
+                raise ValueError()
+        if set(roles[0]) & set(roles[1]) or remote in roles[1]:
+            raise ValueError()
+        branches = [row.get('localBranch', ''), row.get('remoteBranch', '')]
+        for branch in branches:
+            if not text(branch) or (branch and (branch.startswith('-') or subprocess.run(['git', 'check-ref-format', '--branch', branch], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode)):
+                raise ValueError()
+        flags = [row.get('sourceOnly', False), row.get('localOnly', False)]
+        if any(type(flag) is not bool for flag in flags):
+            raise ValueError()
+        pin = row.get('pin', '')
+        if not text(pin) or (pin and not re.fullmatch(r'(?:[0-9a-f]{40}|[0-9a-f]{64})', pin)):
+            raise ValueError()
+        problems = row.get('problems', [])
+        note = row.get('note', '')
+        if not isinstance(problems, list) or any(not text(item) for item in problems) or not text(note):
+            raise ValueError()
+        values = [row['path'], *branches, remote, ','.join(roles[0]), ','.join(roles[1]), *(str(int(flag)) for flag in flags), pin, '; '.join(problems), note]
+        print('\t'.join(value if value else '-' for value in values))
+except (ValueError, OSError, TypeError, KeyError, RecursionError):
+    sys.exit(2)
+PY
+        then
+            _error "Invalid policy; check its schema and values. Run \`$SCRIPT_NAME -h\` for usage"
+            return 2
+        fi
+        local path
+        local local_branch
+        local remote_branch
+        local remote
+        local mirrors
+        local independent
+        local source_only
+        local local_only
+        local pin
+        local problems
+        local note
+        while IFS=$'\t' read -r path local_branch remote_branch remote mirrors independent source_only local_only pin problems note; do
+            policy_paths+=("$path")
+            policy_locals+=("$local_branch")
+            policy_branches+=("$remote_branch")
+            policy_remotes+=("$remote")
+            policy_mirrors+=("$mirrors")
+            policy_independent+=("$independent")
+            policy_sources+=("$source_only")
+            policy_local_only+=("$local_only")
+            policy_pins+=("$pin")
+            policy_problems+=("$problems")
+            policy_notes+=("$note")
+        done < "$scratch_root/policy"
+    }
+
+    _select_policy() {
+        local index=0
+        while [ "$index" -lt "${#policy_paths[@]}" ]; do
+            if [ "$repo" -ef "${policy_paths[$index]}" ]; then repo_policy=$index; return; fi
+            index=$((index + 1))
+        done
+    }
+
+    _snapshot_value() {
+        awk -F '\t' -v ref="$2" '$1 == ref { print $2; found = 1; exit } END { if (!found) print "-" }' "$1"
+    }
 
     _expand_short_opts() {
         # $1 = string of short-opt letters that take a value (e.g. "nXHd"); "" for flag-only scripts
@@ -186,7 +328,7 @@ EOF
     _repo_error() {
         repo_error=1
         if [ -z "$repo_problem" ]; then repo_problem="${1%%;*}"; fi
-        _error "Repository $(_display "$repo"): $*"
+        _error "Repository $(_repo_display): $*"
     }
 
     _remote_unavailable() {
@@ -209,6 +351,8 @@ EOF
     }
 
     _head_summary() {
+        if [ "$repo_local_only" -eq 1 ]; then printf '%s local-only (expected)' "$repo_head"; return; fi
+        if [ "$repo_pin" != - ]; then printf '%s' "$repo_pin_summary"; return; fi
         if [ "$repo_head_state" = detached ]; then printf 'detached HEAD'; return; fi
         if [ -z "$repo_head" ]; then printf 'repository unavailable'; return; fi
         if [ ! -s "$repo_scratch/head-states" ]; then
@@ -300,11 +444,30 @@ EOF
             summary="$summary; no remotes"
         fi
         if [ -n "$other_refs" ]; then summary="$summary; $other_refs"; fi
+        if [ -n "$repo_note" ]; then summary="$summary; $repo_note"; fi
         if [ "$repo_error" -eq 1 ]; then rank="$RANK_ERROR"; state=ERROR
         elif [ "$repo_review" -eq 1 ]; then rank="$RANK_REVIEW"; state=REVIEW
         elif [ "$repo_finding" -eq 1 ]; then rank="$RANK_REFS"; state=REFS; fi
-        printf '%s\t%s\t%s\t%s\t%s\n' "$rank" "$state" "$(_display "$repo")" \
-            "$repo_remote_state" "$summary" >> "$scratch_root/summary"
+        local sync
+        if [ "$repo_error" -eq 1 ]; then sync=UNKNOWN
+        elif [ "$repo_local_only" -eq 1 ]; then sync=LOCAL
+        elif [ "$repo_pin" != - ]; then sync="$repo_pin_state"
+        else
+            sync="$(awk -F '\t' '
+                /unknown|not checked|missing/ { unknown = 1 }
+                /ahead [1-9]/ { ahead = 1 }
+                /behind [1-9]/ { behind = 1 }
+                END {
+                    if (unknown || !NR) print "UNKNOWN"
+                    else if (ahead && behind) print "DIVERGED"
+                    else if (ahead) print "PUSH"
+                    else if (behind) print "PULL"
+                    else print "SYNCED"
+                }
+            ' "$repo_scratch/head-states")"
+        fi
+        printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$rank" "$state" "$(_repo_display)" \
+            "$repo_remote_state" "$summary" "$sync" >> "$scratch_root/summary"
     }
 
     _query_failure_summary() {
@@ -325,16 +488,16 @@ EOF
             BEGIN { state_width = length("STATE"); repo_width = length("REPOSITORY"); remote_width = length("REMOTES") }
             {
                 counts[$1]++
-                state[NR] = $2; repo[NR] = $3; remote[NR] = $4; detail[NR] = $5
+                state[NR] = $2; repo[NR] = $3; remote[NR] = $4; detail[NR] = $5; sync[NR] = $6
                 if (length($2) > state_width) state_width = length($2)
                 if (length($3) > repo_width) repo_width = length($3)
                 if (length($4) > remote_width) remote_width = length($4)
             }
             END {
                 if (NR) {
-                    printf "%-*s  %-*s  %-*s  %s\n", state_width, "STATE", repo_width, "REPOSITORY", remote_width, "REMOTES", "LOCAL / OTHER REFS"
+                    printf "%-*s  %-*s  %-8s  %-*s  %s\n", state_width, "STATE", repo_width, "REPOSITORY", "SYNC", remote_width, "REMOTES", "LOCAL / OTHER REFS"
                     for (i = 1; i <= NR; i++)
-                        printf "%-*s  %-*s  %-*s  %s\n", state_width, state[i], repo_width, repo[i], remote_width, remote[i], detail[i]
+                        printf "%-*s  %-*s  %-8s  %-*s  %s\n", state_width, state[i], repo_width, repo[i], sync[i], remote_width, remote[i], detail[i]
                     printf "\n"
                 }
                 printf "Summary: %d repositor%s, %d matching, %d review, %d refs-only, %d incomplete\n", repositories,
@@ -349,6 +512,245 @@ EOF
         _query_failure_summary
         printf 'REFS = names differ only; shared refs match\n'
         printf 'Details for one repo: %s -v <repository>\n' "$SCRIPT_NAME"
+        if [ "$explain" -eq 1 ]; then cat "$scratch_root/explanations"; fi
+    }
+
+    _apply_policy() {
+        local source_remote="${policy_remotes[$repo_policy]}"
+        local source_branch="${policy_branches[$repo_policy]}"
+        local local_branch="${policy_locals[$repo_policy]}"
+        local mirrors="${policy_mirrors[$repo_policy]}"
+        local independent="${policy_independent[$repo_policy]}"
+        local source_only="${policy_sources[$repo_policy]}"
+        local index=0
+        local source_index=-1
+        local remote
+        local left
+        local right
+        local left_ref
+        local right_ref
+        local ref
+        local counts
+        local ahead
+        local behind
+        local state
+        local peers=''
+        local available=,
+        local expected
+        local expected_roles=()
+        repo_review=0
+        repo_finding=0
+        case "$repo_working_state" in dirty|unknown) repo_review=1; repo_finding=1 ;; esac
+        repo_local_only="${policy_local_only[$repo_policy]}"
+        repo_pin="${policy_pins[$repo_policy]}"
+        repo_note="${policy_notes[$repo_policy]}"
+        if [ "$repo_note" = - ]; then repo_note=''; fi
+        if [ "$repo_pin" = - ] && [ "$repo_head_state" = detached ]; then
+            repo_note="${repo_note:+$repo_note; }checkout has detached HEAD"
+            repo_review=1
+            repo_finding=1
+        fi
+        if [ "$repo_local_only" -eq 1 ]; then
+            if [ "${#remotes[@]}" -ne 0 ]; then _repo_error 'Local-only policy has configured remotes'; fi
+            repo_remote_state=none
+            return
+        fi
+        if [ "$repo_pin" != - ]; then
+            repo_remote_state=pin
+            if [ "$(_git "$repo" rev-parse --verify HEAD 2>/dev/null)" = "$repo_pin" ]; then
+                repo_pin_summary='pinned submodule matches committed gitlink'
+                repo_pin_state=PINNED
+            else
+                repo_pin_summary='submodule differs from committed gitlink'
+                repo_pin_state=DIFFERS
+                repo_review=1
+                repo_finding=1
+            fi
+            repo_note='submodule remote refs are outside pin audit'
+            return
+        fi
+        while [ "$index" -lt "${#remotes[@]}" ]; do
+            if [ "${remotes[$index]}" = "$source_remote" ]; then source_index=$index; fi
+            available="$available${remotes[$index]},"
+            index=$((index + 1))
+        done
+        IFS=, read -r -a expected_roles <<< "$mirrors,$independent"
+        for expected in "${expected_roles[@]}"; do
+            case "$expected" in ''|-) continue ;; esac
+            case "$available" in *",$expected,"*) ;; *) _repo_error "Declared remote '$expected' is missing" ;; esac
+        done
+        if [ "$source_index" -lt 0 ]; then _repo_error "Declared source remote '$source_remote' is missing"; return; fi
+        if [ "$source_branch" = - ]; then
+            source_branch="$(cat "$repo_scratch/default-$source_index")"
+            source_branch="${source_branch#refs/heads/}"
+        fi
+        if [ -z "$source_branch" ]; then _repo_error 'Remote default branch unavailable; declare the source branch explicitly'; return; fi
+        if [ "$local_branch" = - ]; then local_branch="$source_branch"; fi
+        repo_head="$local_branch"
+        repo_head_state=branch
+        left="$(_snapshot_value "$repo_scratch/local" "refs/heads/$local_branch")"
+        index=0
+        while [ "$index" -lt "${#remotes[@]}" ]; do
+            remote="${remotes[$index]}"
+            case ",$independent," in
+                *",$remote,"*)
+                    repo_note="${repo_note:+$repo_note; }independent: $remote (upstream integration not checked)"
+                    index=$((index + 1))
+                    continue
+                    ;;
+            esac
+            if [ "$remote" != "$source_remote" ]; then
+                case ",$mirrors," in
+                    *",$remote,"*) ;;
+                    *)
+                        repo_note="${repo_note:+$repo_note; }unclassified remote: $remote"
+                        if [ "${remote_ok[$index]}" -eq 1 ]; then
+                            _compare_local "$remote" "$repo_scratch/remote-$index"
+                            if [ "${remote_ok[$source_index]}" -eq 1 ] && _ref_pairs "$repo_scratch/remote-$source_index" "$repo_scratch/remote-$index" > "$repo_scratch/unclassified-refs"; then
+                                while IFS=$'\t' read -r ref left_ref right_ref; do
+                                    [ "$left_ref" != "$right_ref" ] || continue
+                                    repo_finding=1
+                                    _record_difference "$ref" "$left_ref" "$right_ref"
+                                done < "$repo_scratch/unclassified-refs"
+                            fi
+                        fi
+                        index=$((index + 1))
+                        continue
+                        ;;
+                esac
+            fi
+            peers="${peers:+$peers, }$remote/$source_branch"
+            if [ "${remote_ok[$index]}" -ne 1 ]; then
+                printf '%s\thistory unknown\n' "$remote" >> "$repo_scratch/head-states"
+                index=$((index + 1))
+                continue
+            fi
+            right="$(_snapshot_value "$repo_scratch/remote-$index" "refs/heads/$source_branch")"
+            if [ "$left" = - ]; then state='missing locally'
+            elif [ "$right" = - ]; then state='missing on remote'
+            elif [ "$left" = "$right" ]; then state=match
+            else
+                printf 'refs/heads/%s\t%s\t%s\n' "$source_branch" "$left" "$right" > "$repo_scratch/policy-pair"
+                _prepare_history "$remote" "$repo_scratch/policy-pair"
+                if [ "$shallow" = true ] || ! counts="$(_object_git rev-list --left-right --count "$left...$right" -- 2>"$repo_scratch/error")"; then
+                    state='history unknown'
+                    _repo_error "Source ancestry unavailable for '$remote'"
+                else
+                    read -r ahead behind <<< "$counts"
+                    if [ "$ahead" -eq 0 ]; then state="behind $behind"
+                    elif [ "$behind" -eq 0 ]; then state="ahead $ahead"
+                    else state="diverged (ahead $ahead, behind $behind)"; fi
+                fi
+            fi
+            printf '%s\t%s\n' "$remote" "$state" >> "$repo_scratch/head-states"
+            printf '  Source %s -> %s/%s: %s\n' "$local_branch" "$remote" "$source_branch" "$state"
+            if [ "$state" != match ]; then
+                repo_review=1
+                repo_finding=1
+                _record_difference "refs/heads/$local_branch" "$left" "$right"
+            fi
+            if ! _ref_pairs "$repo_scratch/local" "$repo_scratch/remote-$index" > "$repo_scratch/policy-refs"; then
+                _repo_error "Failed to compare remaining refs for '$remote'"
+                index=$((index + 1))
+                continue
+            fi
+            while IFS=$'\t' read -r ref left_ref right_ref; do
+                case "$ref" in "refs/heads/$local_branch"|"refs/heads/$source_branch") continue ;; esac
+                if [ "$source_only" -eq 1 ]; then
+                    case "$ref" in refs/tags/*) continue ;; esac
+                    [ "$left_ref" != - ] || continue
+                fi
+                if [ "$left_ref" = "$right_ref" ]; then
+                    if [ "$verbose" -eq 1 ]; then printf '    %s: match [%s]\n' "$(_ref_label "$ref")" "$remote"; fi
+                    continue
+                fi
+                repo_finding=1
+                _record_difference "$ref" "$left_ref" "$right_ref"
+                if [ "$verbose" -eq 1 ]; then
+                    if [ "$left_ref" = - ]; then state='missing locally'
+                    elif [ "$right_ref" = - ]; then state='missing on remote'
+                    else state="differs (local=${left_ref:0:OID_WIDTH}, remote=${right_ref:0:OID_WIDTH})"; fi
+                    printf '    %s: %s [%s]\n' "$(_ref_label "$ref")" "$state" "$remote"
+                fi
+            done < "$repo_scratch/policy-refs"
+            index=$((index + 1))
+        done
+        repo_remote_state=policy
+        repo_note="${repo_note:+$repo_note; }source: $peers"
+        if [ "$source_only" -eq 1 ]; then repo_note="$repo_note; publication refs not checked"; fi
+    }
+
+    _explain_repository() {
+        local ref
+        local oid
+        local path
+        local head
+        local tree
+        local ancestor
+        local detail
+        local index=0
+        local remote
+        printf '\nRepository: %s\n' "$(_repo_display)"
+        if [ "$repo_error" -eq 1 ]; then printf '  ERROR %s\n' "$repo_problem"; fi
+        if [ -n "$repo_note" ]; then printf '  POLICY %s\n' "$repo_note"; fi
+        [ "$repo_pin" = - ] || return 0
+        head="$(_git "$repo" rev-parse --verify "refs/heads/$repo_head" 2>/dev/null)" || head=''
+        : > "$repo_scratch/trees"
+        if [ -n "$head" ]; then
+            _git "$repo" log --format='%T%x09%H' "$head" -- > "$repo_scratch/trees" 2>"$repo_scratch/error" || _repo_error 'Cannot inspect integration trees'
+        fi
+        _git "$repo" for-each-ref --format='%(refname)%09%(objectname)%09%(worktreepath)' refs/heads/ > "$repo_scratch/branches" 2>"$repo_scratch/error" || { _repo_error 'Cannot inspect branch worktrees'; return; }
+        while IFS=$'\t' read -r ref oid path; do
+            [ "$ref" != "refs/heads/$repo_head" ] || continue
+            detail='ancestry unavailable; review'
+            if [ -n "$head" ]; then
+                if _git "$repo" merge-base --is-ancestor "$oid" "$head" 2>/dev/null; then
+                    detail='integrated; cleanup candidate'
+                else
+                    tree="$(_git "$repo" rev-parse "$oid^{tree}" 2>/dev/null)" || tree=''
+                    ancestor="$(awk -F '\t' -v tree="$tree" '$1 == tree { print $2; exit }' "$repo_scratch/trees")"
+                    if [ -n "$ancestor" ]; then detail="equivalent tree at ${ancestor:0:OID_WIDTH}; cleanup candidate"
+                    else detail='commits absent by ancestry; review'; fi
+                fi
+            fi
+            if [ -n "$path" ]; then
+                if ! _git "$path" status --porcelain=v1 -z --untracked-files=normal > "$repo_scratch/associated-status" 2>"$repo_scratch/error"; then
+                    detail='worktree status unavailable; preserve'
+                    _repo_error 'Cannot inspect an associated worktree'
+                elif [ -s "$repo_scratch/associated-status" ]; then
+                    detail='worktree dirty; preserve'
+                    repo_review=1
+                    repo_finding=1
+                    repo_note="${repo_note:+$repo_note; }associated worktree dirty"
+                fi
+            fi
+            printf '  LOCAL %s: %s' "${ref#refs/heads/}" "$detail"
+            if [ -n "$path" ]; then printf '; worktree: %s' "$(_display "$path")"; fi
+            printf '\n'
+        done < "$repo_scratch/branches"
+        while [ "$index" -lt "${#remotes[@]}" ]; do
+            remote="${remotes[$index]}"
+            if [ "$repo_policy" -ge 0 ]; then
+                case ",${policy_independent[$repo_policy]}," in *",$remote,"*) index=$((index + 1)); continue ;; esac
+                if [ "${policy_sources[$repo_policy]}" -eq 1 ]; then index=$((index + 1)); continue; fi
+            fi
+            if [ "${remote_ok[$index]}" -eq 1 ]; then
+                while IFS=$'\t' read -r ref oid; do
+                    case "$ref" in refs/heads/*) ;; *) continue ;; esac
+                    [ "$ref" != "refs/heads/$repo_head" ] || continue
+                    local value; value="$(_snapshot_value "$repo_scratch/local" "$ref")"
+                    [ "$value" != "$oid" ] || continue
+                    if [ "$value" = - ]; then detail='absent locally; review'
+                    else detail='differs from local branch; review'; fi
+                    if [ -n "$head" ] && _object_git merge-base --is-ancestor "$oid" "$head" 2>/dev/null; then detail='integrated; cleanup candidate'; fi
+                    printf '  REMOTE %s/%s: %s\n' "$remote" "${ref#refs/heads/}" "$detail"
+                done < "$repo_scratch/remote-$index"
+            fi
+            index=$((index + 1))
+        done
+        if [ -f "$repo_scratch/ref-findings" ]; then
+            awk -F '\t' '$1 ~ /^refs\/tags\// && $2 == "value" && !seen[$1]++ { sub(/^refs\/tags\//, "", $1); print "  TAG " $1 ": differing values; use --verbose for object IDs" }' "$repo_scratch/ref-findings"
+        fi
     }
 
     _prepare_history() {
@@ -368,7 +770,7 @@ EOF
             fi
         done < "$pairs"
         [ -s "$repo_scratch/wants" ] || return 0
-        _info "Reading missing history from remote '$remote' in $(_display "$repo")"
+        _info "Reading missing history from remote '$remote' in $(_repo_display)"
         # Concrete source-only refspecs and an empty refmap prevent any ref update
         _object_git fetch --quiet --no-tags --no-prune --no-prune-tags \
             --no-write-fetch-head --no-auto-maintenance --no-recurse-submodules \
@@ -578,6 +980,7 @@ EOF
         done < "$repo_scratch/remotes"
         if [ "${#remotes[@]}" -eq 0 ]; then
             repo_remote_state=none
+            if [ "$repo_policy" -ge 0 ]; then _apply_policy; return; fi
             repo_review=1
             printf '  Remotes: none\n'
             repo_finding=1
@@ -590,15 +993,24 @@ EOF
         fi
         alternate="$(_quote_alternate "$objects_path")"
         for remote in "${remotes[@]}"; do
-            _git "$repo" ls-remote --refs -- "$remote" 'refs/heads/*' 'refs/tags/*' \
-                > "$repo_scratch/advertisement" 2>"$repo_scratch/error"
+            : > "$repo_scratch/default-$index"
+            if [ "$repo_policy" -ge 0 ]; then
+                _git "$repo" ls-remote --symref -- "$remote" HEAD 'refs/heads/*' 'refs/tags/*' \
+                    > "$repo_scratch/advertisement" 2>"$repo_scratch/error"
+            else
+                _git "$repo" ls-remote --refs -- "$remote" 'refs/heads/*' 'refs/tags/*' \
+                    > "$repo_scratch/advertisement" 2>"$repo_scratch/error"
+            fi
             result=$?
             remote_ok+=(0)
             if [ "$result" -ne 0 ]; then
                 _remote_unavailable "$remote"
                 _repo_error "Failed to query remote '$remote' (Git exit $result); check connectivity and authentication"
-            elif awk '
+            elif awk -v policy="$repo_policy" -v defaults="$repo_scratch/default-$index" '
+                policy >= 0 && $1 == "ref:" && NF == 3 && $2 ~ /^refs\/heads\// && $3 == "HEAD" { print $2 > defaults; next }
                 NF != 2 || $1 !~ /^[0-9a-f]+$/ || (length($1) != 40 && length($1) != 64) { exit 1 }
+                policy >= 0 && $2 == "HEAD" { next }
+                policy >= 0 && $2 ~ /^refs\/tags\/.*\^\{\}$/ { next }
                 $2 !~ /^refs\/(heads|tags)\// { exit 1 }
                 { printf "%s\t%s\n", $2, $1 }
             ' "$repo_scratch/advertisement" > "$repo_scratch/remote-$index"; then
@@ -610,6 +1022,7 @@ EOF
             fi
             index=$((index + 1))
         done
+        if [ "$repo_policy" -ge 0 ]; then _apply_policy; return; fi
         _compare_remotes
         index=0
         for remote in "${remotes[@]}"; do
@@ -632,6 +1045,12 @@ EOF
         local repo_head_state=unknown
         local repo_working_state=unknown
         local repo_remote_state=unknown
+        local repo_policy=-1
+        local repo_local_only=0
+        local repo_pin=-
+        local repo_pin_summary=''
+        local repo_pin_state=UNKNOWN
+        local repo_note=''
         local failed_remotes=''
         local repo_scratch="$scratch_root/$repositories"
         local alternate
@@ -640,12 +1059,20 @@ EOF
         local remote_ok=()
         local reachable=0
         repositories=$((repositories + 1))
-        if [ "$verbose" -eq 1 ]; then printf 'Repository: %s\n' "$(_display "$repo")"; fi
+        _select_policy
+        if [ "$verbose" -eq 1 ]; then printf 'Repository: %s\n' "$(_repo_display)"; fi
         if mkdir -p "$repo_scratch/objects"; then
             : > "$repo_scratch/ref-findings"
             : > "$repo_scratch/head-states"
-            if [ "$verbose" -eq 1 ]; then _inspect_repository
+            if [ "$repo_policy" -ge 0 ] && [ "${policy_problems[$repo_policy]}" != - ]; then
+                _repo_error "${policy_problems[$repo_policy]}"
+            elif [ "$verbose" -eq 1 ]; then _inspect_repository
             else _inspect_repository > /dev/null; fi
+            if [ "$verbose" -eq 1 ] && [ "$repo_policy" -ge 0 ]; then
+                printf '  Scope: %s\n' "$(_head_summary)"
+                if [ -n "$repo_note" ]; then printf '  Policy: %s\n' "$repo_note"; fi
+            fi
+            if [ "$explain" -eq 1 ]; then _explain_repository >> "$scratch_root/explanations"; fi
         else
             _repo_error 'Failed to create temporary object storage'
         fi
@@ -682,14 +1109,35 @@ EOF
 
     local recursive=0
     local verbose=0
+    local explain=0
+    local policy_file=''
+    local policy_paths=()
+    local policy_locals=()
+    local policy_branches=()
+    local policy_remotes=()
+    local policy_mirrors=()
+    local policy_independent=()
+    local policy_sources=()
+    local policy_local_only=()
+    local policy_pins=()
+    local policy_problems=()
+    local policy_notes=()
     local positional=()
-    _expand_short_opts "" "$@"
+    _expand_short_opts "p" "$@"
     set -- "${_EXPANDED[@]}"; unset _EXPANDED
     while [ $# -gt 0 ]; do
         case "$1" in
             -h|--help) _show_help; return 0 ;;
             -r|--recursive) recursive=1; shift ;;
             -v|--verbose) verbose=1; shift ;;
+            -e|--explain) explain=1; shift ;;
+            --policy=*) set -- --policy "${1#--policy=}" "${@:2}" ;;
+            -p|--policy)
+                [ "$#" -ge 2 ] && [ -n "$2" ] || { _error "Must provide a policy file. Run \`$SCRIPT_NAME -h\` for usage"; return 2; }
+                policy_file="$2"
+                case "$policy_file" in /*) ;; *) policy_file="$PWD/$policy_file" ;; esac
+                shift 2
+                ;;
             --) shift; while [ $# -gt 0 ]; do positional+=("$1"); shift; done ;;
             -*) _error "Unknown argument '$1'. Run \`$SCRIPT_NAME -h\` for usage"; return 2 ;;
             *) positional+=("$1"); shift ;;
@@ -709,6 +1157,8 @@ EOF
         _error "Cannot access directory $(_display "$directory"). Run \`$SCRIPT_NAME -h\` for usage"
         return 2
     fi
+    local scan_label="${PWD##*/}"
+    if [ -z "$scan_label" ]; then scan_label=/; fi
 
     unset GIT_DIR GIT_COMMON_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY
     unset GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_NAMESPACE GIT_PREFIX GIT_SHALLOW_FILE
@@ -729,6 +1179,8 @@ EOF
     local scan_errors=0
     local remote_query_failures=0
     : > "$scratch_root/summary"
+    : > "$scratch_root/explanations"
+    _load_policy || return $?
     _scan . 0
     local repository_unit=repositories
     local error_unit=errors
@@ -737,6 +1189,7 @@ EOF
     if [ "$verbose" -eq 1 ]; then
         printf 'Summary: %s %s, %s with findings, %s %s\n' "$repositories" "$repository_unit" "$findings" "$errors" "$error_unit"
         _query_failure_summary
+        if [ "$explain" -eq 1 ]; then cat "$scratch_root/explanations"; fi
     else
         _render_summary
     fi
