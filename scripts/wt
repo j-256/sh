@@ -1124,7 +1124,7 @@ EOF
         printf 'RELATION            %s\n' "$relation"
         printf 'LINEAR_HISTORY      %s\n' "$linear_history"
         printf 'TASK_MERGE_COMMIT   %s\n' "${task_merge:-none}"
-        printf 'NEXT                 %s\n' "$next"
+        printf 'NEXT                %s\n' "$next"
     }
 
     _sync() {

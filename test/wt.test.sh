@@ -743,7 +743,7 @@ test_close_removes_ds_store_but_refuses_other_untracked_files() {
     rm "$worktree/nested/notes.txt"
     run_wt_from "$worktree" status
     assert_stdout_contains "metadata alone is clean for close" "CLEAN               yes"
-    assert_stdout_contains "metadata permits close" "NEXT                 wt close task/ds-store"
+    assert_stdout_contains "metadata permits close" "NEXT                wt close task/ds-store"
 
     run_wt_from "$repo" close task/ds-store
     assert_rc "metadata only close exits 0" 0
@@ -1041,7 +1041,7 @@ test_close_removes_ignored_files_with_worktree() {
     run_wt_from "$worktree" status
     assert_rc "ignored status exits 0" 0
     assert_stdout_contains "ignored files are reported" "IGNORED_FILES       yes"
-    assert_stdout_contains "ignored files do not block close" "NEXT                 wt close task/ignored"
+    assert_stdout_contains "ignored files do not block close" "NEXT                wt close task/ignored"
 
     run_wt_from "$repo" close task/ignored
     assert_rc "ignored close exits 0" 0
